@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-2xl">
+    <div class="flex items-center mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-file-excel mr-2"></i>Cargar Inventario desde Excel</h1>
+    </div>
+
+    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">Instrucciones</h2>
+        <p class="text-sm text-gray-600 mb-4">
+            Para cargar tus productos, tu archivo de Excel debe tener el siguiente formato de columnas, sin encabezados:
+        </p>
+        <ul class="list-disc list-inside text-sm text-gray-600 space-y-1">
+            <li><strong>Columna 1:</strong> Código de Barras (Obligatorio)</li>
+            <li><strong>Columna 2:</strong> Nombre del Producto</li>
+            <li><strong>Columna 3:</strong> Costo</li>
+            <li><strong>Columna 4:</strong> Precio de Venta</li>
+            <li><strong>Columna 5:</strong> Existencia (Stock)</li>
+            <li><strong>Columna 6:</strong> URL de la Imagen (Opcional)</li>
+        </ul>
+        <p class="text-xs text-gray-500 mt-4">
+            * Se recomienda usar el formato .xlsx.
+        </p>
+    </div>
+
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <form action="{{ url_for('cargar_excel') }}" method="POST" enctype="multipart/form-data">
+            <div class="mb-4">
+                <label for="file" class="block text-gray-700 text-sm font-bold mb-2">Selecciona un archivo de Excel:</label>
+                <input type="file" name="file" id="file" required
+                       class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none">
+            </div>
+            <button type="submit" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
+                <i class="fas fa-upload mr-2"></i>Cargar Productos
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nota de Entrega #{{ order.id }}</title>
+    <style>
+        @page {
+            size: 80mm auto;
+            margin: 0;
+        }
+
+        body {
+            width: 80mm;
+            margin: 0;
+            padding: 5mm;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 10px;
+            color: #000;
+        }
+        
+        .header, .footer {
+            text-align: center;
+            margin-bottom: 5mm;
+        }
+
+        .header img {
+            max-width: 50mm;
+            height: auto;
+            margin-bottom: 2mm;
+        }
+
+        .info {
+            border-top: 1px dashed #000;
+            border-bottom: 1px dashed #000;
+            padding: 3mm 0;
+            margin-bottom: 3mm;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 3mm;
+        }
+
+        table th, table td {
+            text-align: left;
+            padding: 1px 0;
+        }
+        
+        .totals {
+            text-align: right;
+            border-top: 1px dashed #000;
+            padding-top: 3mm;
+        }
+
+        .totals .total-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1mm;
+        }
+
+        .totals .grand-total {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        /* Ocultar el botón de imprimir en la versión impresa */
+        @media print {
+            .no-print {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Encabezado de la empresa -->
+    <div class="header">
+        {% if company_info.logo_url %}
+            <img src="{{ company_info.logo_url }}" alt="Logo de la empresa" onerror="this.style.display='none'">
+        {% endif %}
+        <h3>{{ company_info.name }}</h3>
+        <p>RIF: {{ company_info.rif }}</p>
+        <p>{{ company_info.address }}</p>
+        <p>Tel: {{ company_info.phone_numbers }}</p>
+    </div>
+
+    <!-- Título del documento -->
+    <h2 class="text-center font-bold" style="text-align: center; font-weight: bold; font-size: 1.2em;">NOTA DE ENTREGA</h2>
+
+    <!-- Información del cliente y orden -->
+    <div class="info">
+        <p><strong>Fecha:</strong> {{ order.date_created.strftime('%d/%m/%Y %H:%M') }}</p>
+        <p><strong>N° de Orden:</strong> {{ order.id }}</p>
+        <p><strong>Cliente:</strong> {{ order.client.name }}</p>
+    </div>
+
+    <!-- Tabla de productos -->
+    <table>
+        <thead>
+            <tr>
+                <th>Cant.</th>
+                <th>Descripción</th>
+                <th>Precio</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in order.items %}
+            <tr>
+                <td>{{ item.quantity }}</td>
+                <td>{{ item.product.name }}</td>
+                <td>{{ "%.2f"|format(item.price) }}</td>
+                <td>{{ "%.2f"|format(item.price * item.quantity) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Totales -->
+    <div class="totals">
+        <div class="total-item">
+            <span>Subtotal:</span>
+            <span>${{ "%.2f"|format(subtotal) }}</span>
+        </div>
+        <div class="total-item">
+            <span>IVA (16%):</span>
+            <span>${{ "%.2f"|format(iva) }}</span>
+        </div>
+        <div class="total-item grand-total">
+            <span>Total:</span>
+            <span>${{ "%.2f"|format(order.total_amount) }}</span>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>¡Gracias por su compra!</p>
+    </div>
+
+    <div class="no-print" style="text-align: center; margin-top: 15mm;">
+        <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px;">Imprimir Nota de Entrega</button>
+    </div>
+</body>
+</html>

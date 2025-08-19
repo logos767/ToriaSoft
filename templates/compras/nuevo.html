@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-4xl">
+    <div class="flex items-center mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-plus-circle mr-2"></i>Crear Nueva Compra</h1>
+    </div>
+
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <form method="POST" action="{{ url_for('new_purchase') }}">
+            <!-- Información de la compra -->
+            <div class="mb-6">
+                <h2 class="text-xl font-semibold text-gray-700 mb-2">Información de la Compra</h2>
+                <label for="provider_id" class="block text-gray-700 font-bold mb-2">Proveedor:</label>
+                <select id="provider_id" name="provider_id" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {% for provider in providers %}
+                        <option value="{{ provider.id }}">{{ provider.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Lista de productos -->
+            <div id="product-list-purchase" class="mb-6">
+                <h2 class="text-xl font-semibold text-gray-700 mb-2">Productos</h2>
+                <div class="space-y-4">
+                    <!-- Fila de ejemplo para clonar -->
+                    <div class="product-item-purchase flex items-center space-x-4 border p-4 rounded-lg bg-gray-50">
+                        <select name="product_id[]" required class="flex-1 shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 product-select-purchase">
+                            {% for product in products %}
+                                <option value="{{ product.id }}" data-cost-usd="{{ product.cost_usd }}">{{ product.name }} (Stock: {{ product.stock }})</option>
+                            {% endfor %}
+                        </select>
+                        <input type="number" name="quantity[]" placeholder="Cantidad" min="1" required class="w-24 shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 quantity-input-purchase">
+                        
+                        <div class="flex flex-col">
+                            <label class="text-sm text-gray-500">USD</label>
+                            <input type="number" name="cost_usd[]" placeholder="Costo USD" step="0.01" min="0" required class="w-24 shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 cost-usd-input">
+                        </div>
+                        <div class="flex flex-col">
+                            <label class="text-sm text-gray-500">Bs</label>
+                            <span class="cost-ves-display w-24 text-center font-bold text-gray-800">0.00</span>
+                        </div>
+                        
+                        <button type="button" class="bg-red-500 text-white p-2 rounded remove-product-btn-purchase hover:bg-red-600 transition-colors"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <button type="button" id="add-product-btn-purchase" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
+                        <i class="fas fa-plus mr-2"></i>Agregar Otro Producto
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end">
+                <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
+                    <i class="fas fa-save mr-2"></i>Crear Compra
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const productList = document.querySelector('#product-list-purchase .space-y-4');
+        const addProductBtn = document.getElementById('add-product-btn-purchase');
+        let currentRate = {{ current_rate }};
+
+        // Función para actualizar el costo en Bolívares
+        function updateCostVes(costUsdInput) {
+            const costUsd = parseFloat(costUsdInput.value) || 0;
+            const costVesDisplay = costUsdInput.closest('.product-item-purchase').querySelector('.cost-ves-display');
+            const costVes = (costUsd * currentRate).toFixed(2);
+            costVesDisplay.textContent = costVes;
+        }
+
+        // Función para inicializar los costos y el stock
+        function initializeProductItem(productItem) {
+            const selectElement = productItem.querySelector('.product-select-purchase');
+            const selectedOption = selectElement.options[selectElement.selectedIndex];
+            const costUsdInput = productItem.querySelector('.cost-usd-input');
+            
+            costUsdInput.value = selectedOption.dataset.costUsd;
+            updateCostVes(costUsdInput);
+        }
+
+        // Event listener para actualizar el costo en Bs al cambiar el producto
+        productList.addEventListener('change', function(event) {
+            if (event.target.classList.contains('product-select-purchase')) {
+                initializeProductItem(event.target.closest('.product-item-purchase'));
+            }
+        });
+        
+        // Event listener para recalcular el costo en Bs cuando se edita el costo USD
+        productList.addEventListener('input', function(event) {
+            if (event.target.classList.contains('cost-usd-input')) {
+                updateCostVes(event.target);
+            }
+        });
+
+        // Inicializar el primer producto
+        document.querySelectorAll('.product-item-purchase').forEach(initializeProductItem);
+
+        // Event listener para agregar un nuevo producto
+        addProductBtn.addEventListener('click', function() {
+            const firstProductItem = productList.querySelector('.product-item-purchase');
+            const newProductItem = firstProductItem.cloneNode(true);
+            
+            // Limpiar valores del nuevo clon
+            newProductItem.querySelector('.product-select-purchase').selectedIndex = 0;
+            newProductItem.querySelector('.quantity-input-purchase').value = '';
+            newProductItem.querySelector('.cost-usd-input').value = '';
+            newProductItem.querySelector('.cost-ves-display').textContent = '0.00';
+
+            // Habilitar el botón de eliminar
+            const removeBtn = newProductItem.querySelector('.remove-product-btn-purchase');
+            removeBtn.disabled = false;
+            removeBtn.style.display = 'inline-block';
+
+            productList.appendChild(newProductItem);
+        });
+
+        // Event listener para eliminar una fila de producto
+        productList.addEventListener('click', function(event) {
+            if (event.target.classList.contains('remove-product-btn-purchase') || event.target.closest('.remove-product-btn-purchase')) {
+                const productItem = event.target.closest('.product-item-purchase');
+                if (productList.childElementCount > 1) {
+                    productItem.remove();
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

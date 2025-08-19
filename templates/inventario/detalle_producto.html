@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-4xl">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-box mr-2"></i>Detalles del Producto</h1>
+        <a href="{{ url_for('inventory_list') }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver al inventario</a>
+    </div>
+
+    <div class="bg-white p-8 rounded-lg shadow-md flex flex-col md:flex-row items-start md:space-x-8">
+        <!-- Imagen del producto y códigos de identificación -->
+        <div class="w-full md:w-1/3 mb-6 md:mb-0 space-y-4">
+            {% if product.image_url %}
+            <div class="bg-gray-100 p-4 rounded-lg shadow-inner">
+                <img src="{{ product.image_url }}" alt="{{ product.name }}" class="w-full h-auto object-cover rounded-lg shadow-lg">
+            </div>
+            {% endif %}
+
+            <!-- Código de barras -->
+            <div class="bg-gray-100 p-4 rounded-lg shadow-inner flex flex-col items-center">
+                <p class="font-semibold text-sm mb-2">Código de Barras:</p>
+                <svg id="barcode" class="w-full"></svg>
+            </div>
+
+            <!-- Código QR -->
+            <div class="bg-gray-100 p-4 rounded-lg shadow-inner flex flex-col items-center">
+                <p class="font-semibold text-sm mb-2">Código QR:</p>
+                <div id="qrcode" class="p-2 bg-white rounded-lg"></div>
+            </div>
+        </div>
+
+        <!-- Detalles del producto -->
+        <div class="flex-1">
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">{{ product.name }}</h2>
+            <p class="text-gray-600 mb-4">{{ product.description }}</p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-gray-700">
+                <div>
+                    <p class="font-semibold">Costo:</p>
+                    <p class="font-bold text-green-700">${{ "%.2f"|format(product.cost_usd) }}</p>
+                </div>
+                <div>
+                    <p class="font-semibold">Precio:</p>
+                    <p class="font-bold text-blue-700">Bs. {{ "%.2f"|format(product.price_usd * current_rate) }}</p>
+                </div>
+                <div>
+                    <p class="font-semibold">Existencias:</p>
+                    <p>{{ product.stock }}</p>
+                </div>
+                <div>
+                    <p class="font-semibold">Tamaño:</p>
+                    <p>{{ product.size or 'N/A' }}</p>
+                </div>
+                <div>
+                    <p class="font-semibold">Color:</p>
+                    <p>{{ product.color or 'N/A' }}</p>
+                </div>
+                <div>
+                    <p class="font-semibold">SKU:</p>
+                    <p>{{ product.sku or 'N/A' }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scripts para generar códigos de barras y QR -->
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', (event) => {
+        // Generar el código de barras a partir del campo product.barcode
+        const barcodeValue = "{{ product.barcode }}";
+        if (barcodeValue) {
+            try {
+                JsBarcode("#barcode", barcodeValue, {
+                    format: "CODE128", // Formato común de código de barras
+                    displayValue: true,
+                    fontSize: 16,
+                    height: 80
+                });
+            } catch (e) {
+                console.error("Error al generar el código de barras:", e);
+                document.getElementById('barcode').outerHTML = '<p class="text-red-500">Error al cargar el código de barras.</p>';
+            }
+        } else {
+            document.getElementById('barcode').outerHTML = '<p class="text-gray-500">No hay código de barras disponible.</p>';
+        }
+
+        // Generar el código QR a partir de la URL del producto
+        const qrValue = window.location.href;
+        const qrcodeElement = document.getElementById("qrcode");
+        if (qrcodeElement) {
+            new QRCode(qrcodeElement, {
+                text: qrValue,
+                width: 128,
+                height: 128,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+        }
+    });
+</script>
+
+{% endblock %}

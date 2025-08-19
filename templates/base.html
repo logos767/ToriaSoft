@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - ToriaSoft</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="flex h-screen bg-gray-200">
+        <!-- Sidebar -->
+        <div class="sidebar bg-gray-800 text-gray-100 w-64 space-y-6 py-7 px-2 absolute inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition duration-200 ease-in-out">
+            <!-- Título de la App -->
+            <a href="{{ url_for('dashboard') }}" class="text-white flex items-center space-x-2 px-4">
+                <i class="fas fa-store text-2xl"></i>
+                <span class="text-2xl font-extrabold">ToriaSoft</span>
+            </a>
+
+            <!-- Tasa de Cambio -->
+            <div class="px-4 py-2 text-center bg-gray-700 rounded-lg mx-2">
+                <p class="text-xs font-semibold uppercase">Tasa de Cambio</p>
+                <p class="text-lg font-bold">1 USDT = Bs. {{ "%.2f"|format(current_rate) }}</p>
+            </div>
+
+            <!-- Navegación -->
+            <nav>
+                <a href="{{ url_for('dashboard') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
+                    <i class="fas fa-tachometer-alt mr-2"></i> Dashboard
+                </a>
+                <a href="{{ url_for('inventory_list') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
+                    <i class="fas fa-boxes mr-2"></i> Inventario
+                </a>
+                <a href="{{ url_for('client_list') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
+                    <i class="fas fa-users mr-2"></i> Clientes
+                </a>
+                <a href="{{ url_for('provider_list') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
+                    <i class="fas fa-truck mr-2"></i> Proveedores
+                </a>
+                <a href="{{ url_for('purchase_list') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
+                    <i class="fas fa-shopping-basket mr-2"></i> Compras
+                </a>
+                <a href="{{ url_for('order_list') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
+                    <i class="fas fa-shopping-cart mr-2"></i> Órdenes
+                </a>
+                <a href="{{ url_for('movement_list') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
+                    <i class="fas fa-exchange-alt mr-2"></i> Movimientos
+                </a>
+                <a href="{{ url_for('estadisticas') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
+                    <i class="fas fa-chart-line mr-2"></i> Estadísticas
+                </a>
+                {% if current_user.role == 'administrador' %}
+                <a href="{{ url_for('company_settings') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
+                    <i class="fas fa-cogs mr-2"></i> Configuración de Empresa
+                </a>
+                {% endif %}
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- Header -->
+            <header class="flex justify-between items-center p-4 bg-white shadow-md">
+                <div class="flex items-center">
+                    <h1 class="text-xl font-semibold text-gray-800">{{ title }}</h1>
+                </div>
+                <div>
+                    <a href="{{ url_for('logout') }}" class="text-red-500 hover:text-red-700">
+                        <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+                    </a>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-4">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="mb-4">
+                            {% for category, message in messages %}
+                                <div class="p-3 rounded-lg text-white {% if category == 'success' %}bg-green-500{% elif category == 'danger' %}bg-red-500{% else %}bg-gray-500{% endif %}">
+                                    {{ message }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+</body>
+</html>
