@@ -4,6 +4,7 @@ import logging
 from flask import Flask
 from extensions import db, login_manager, bcrypt
 from apscheduler.schedulers.background import BackgroundScheduler
+from sqlalchemy import inspect
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -52,9 +53,9 @@ def load_user(user_id):
 def create_db_and_initial_data():
     """Crea la base de datos y carga los datos iniciales."""
     with app.app_context():
-        # **Este es el cambio clave**
-        # Revisa si la tabla 'user' ya existe para evitar errores en futuras migraciones
-        if not db.engine.has_table('user'):
+        # Usa inspect para verificar la existencia de la tabla
+        inspector = inspect(db.engine)
+        if not inspector.has_table('user'):
             db.create_all()
             # Cargar usuarios predeterminados
             if not User.query.filter_by(username='admin').first():
