@@ -1,6 +1,6 @@
 import requests
 from flask import render_template, url_for, flash, redirect, request, jsonify, session
-from app import app, db, bcrypt, scheduler
+from app import app, db, bcrypt
 from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, ExchangeRate
 from flask_login import login_user, current_user, logout_user, login_required
 from sqlalchemy.exc import IntegrityError
@@ -51,8 +51,8 @@ def update_exchange_rate_job():
         app.logger.error("No se pudo obtener la tasa de cambio. Se mantendrá la última conocida.")
 
 # Programar la tarea de actualización
+from app import scheduler
 scheduler.add_job(id='update_rate', func=update_exchange_rate_job, trigger='cron', hour=18)
-scheduler.start()
 
 # Helper para obtener la tasa de cambio actual
 def get_current_exchange_rate():

@@ -5,6 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from flask_login import LoginManager, UserMixin
 from datetime import datetime
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # Se crea la instancia de la aplicación Flask
 app = Flask(__name__)
@@ -20,6 +21,10 @@ bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 login_manager.login_message_category = 'info'
+
+# Inicializar el scheduler
+scheduler = BackgroundScheduler()
+scheduler.start()
 
 @login_manager.user_loader
 def load_user(user_id):
