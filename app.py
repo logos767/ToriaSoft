@@ -3,8 +3,7 @@ import secrets
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
-from flask_login import LoginManager, UserMixin
-from datetime import datetime
+from flask_login import LoginManager
 from apscheduler.schedulers.background import BackgroundScheduler
 
 # Se crea la instancia de la aplicación Flask
@@ -26,108 +25,14 @@ login_manager.login_message_category = 'info'
 scheduler = BackgroundScheduler()
 scheduler.start()
 
+# Importar modelos y rutas después de crear las instancias de db y app
+from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, ExchangeRate
+from routes import *
+
 @login_manager.user_loader
 def load_user(user_id):
     """Carga un usuario por su ID para Flask-Login."""
     return User.query.get(int(user_id))
-
-# --- Modelos de la Base de Datos ---
-
-class User(db.Model, UserMixin):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(20), unique=True, nullable=False)
-    password = db.Column(db.String(60), nullable=False)
-    is_admin = db.Column(db.Boolean, default=False)
-
-    def __repr__(self):
-        return f"User('{self.username}', Admin: {self.is_admin})"
-
-class Product(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    description = db.Column(db.Text, nullable=True)
-    barcode = db.Column(db.String(50), unique=True, nullable=False)
-    qr_code = db.Column(db.String(50), unique=True, nullable=False)
-    image_url = db.Column(db.String(200), nullable=True)
-    size = db.Column(db.String(10), nullable=False)
-    color = db.Column(db.String(20), nullable=False)
-    cost = db.Column(db.Float, nullable=False)
-    price = db.Column(db.Float, nullable=False)
-    stock = db.Column(db.Integer, default=0, nullable=False)
-
-    def __repr__(self):
-        return f"Product('{self.name}', '{self.barcode}')"
-
-class Client(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    phone = db.Column(db.String(20), nullable=True)
-    address = db.Column(db.String(200), nullable=True)
-
-    def __repr__(self):
-        return f"Client('{self.name}', '{self.email}')"
-
-class Provider(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    contact = db.Column(db.String(100), nullable=True)
-    phone = db.Column(db.String(20), nullable=True)
-
-    def __repr__(self):
-        return f"Provider('{self.name}')"
-
-class Order(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
-    date_created = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    status = db.Column(db.String(20), nullable=False)
-    total_amount = db.Column(db.Float, nullable=False)
-
-    client = db.relationship('Client', backref=db.backref('orders', lazy=True))
-
-    def __repr__(self):
-        return f"Order('{self.id}', '{self.status}')"
-
-class OrderItem(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
-    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
-    quantity = db.Column(db.Integer, nullable=False)
-    price = db.Column(db.Float, nullable=False)
-
-    order = db.relationship('Order', backref=db.backref('items', lazy=True))
-    product = db.relationship('Product', backref=db.backref('order_items', lazy=True))
-
-class Purchase(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'), nullable=False)
-    date_created = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    total_cost = db.Column(db.Float, nullable=False)
-
-    provider = db.relationship('Provider', backref=db.backref('purchases', lazy=True))
-
-class PurchaseItem(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    purchase_id = db.Column(db.Integer, db.ForeignKey('purchase.id'), nullable=False)
-    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
-    quantity = db.Column(db.Integer, nullable=False)
-    cost = db.Column(db.Float, nullable=False)
-
-    purchase = db.relationship('Purchase', backref=db.backref('items', lazy=True))
-    product = db.relationship('Product', backref=db.backref('purchase_items', lazy=True))
-
-class Reception(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    purchase_id = db.Column(db.Integer, db.ForeignKey('purchase.id'), nullable=False)
-    date_received = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    status = db.Column(db.String(20), nullable=False, default='Pendiente')
-
-    purchase = db.relationship('Purchase', backref=db.backref('receptions', lazy=True))
-
-
-# Importar las rutas después de crear las instancias de db y app para evitar errores de importación circular
-from routes import *
 
 def create_db_and_initial_data():
     """Crea la base de datos y carga los datos iniciales."""
