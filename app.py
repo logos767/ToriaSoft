@@ -58,13 +58,13 @@ def create_db_and_initial_data():
         # Cargar usuarios predeterminados
         if not User.query.filter_by(username='admin').first():
             hashed_password = bcrypt.generate_password_hash('admin123').decode('utf-8')
-            admin_user = User(username='admin', password=hashed_password, is_admin=True)
+            admin_user = User(username='admin', password=hashed_password, role='administrador')
             db.session.add(admin_user)
             db.session.commit()
 
         if not User.query.filter_by(username='limited').first():
             hashed_password = bcrypt.generate_password_hash('limited123').decode('utf-8')
-            limited_user = User(username='limited', password=hashed_password, is_admin=False)
+            limited_user = User(username='limited', password=hashed_password, role='empleado')
             db.session.add(limited_user)
             db.session.commit()
 
