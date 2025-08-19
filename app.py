@@ -52,20 +52,16 @@ def load_user(user_id):
 def create_db_and_initial_data():
     """Crea la base de datos y carga los datos iniciales."""
     with app.app_context():
-        db.create_all()
-
-        # Cargar usuarios predeterminados
-        if not User.query.filter_by(username='admin').first():
-            hashed_password = bcrypt.generate_password_hash('admin123').decode('utf-8')
-            admin_user = User(username='admin', password=hashed_password, role='administrador')
-            db.session.add(admin_user)
-            db.session.commit()
-
-        if not User.query.filter_by(username='limited').first():
-            hashed_password = bcrypt.generate_password_hash('limited123').decode('utf-8')
-            limited_user = User(username='limited', password=hashed_password, role='empleado')
-            db.session.add(limited_user)
-            db.session.commit()
+        # **Este es el cambio clave**
+        # Revisa si la tabla 'user' ya existe para evitar errores en futuras migraciones
+        if not db.engine.has_table('user'):
+            db.create_all()
+            # Cargar usuarios predeterminados
+            if not User.query.filter_by(username='admin').first():
+                hashed_password = bcrypt.generate_password_hash('admin123').decode('utf-8')
+                admin_user = User(username='admin', password=hashed_password, role='administrador')
+                db.session.add(admin_user)
+                db.session.commit()
 
         # Cargar clientes de prueba
         if not Client.query.first():
@@ -99,7 +95,8 @@ def create_db_and_initial_data():
             db.session.bulk_save_objects(products)
             db.session.commit()
 
+# **Llamada a la función fuera del if __name__ == '__main__':**
+create_db_and_initial_data()
 
 if __name__ == '__main__':
-    create_db_and_initial_data()
     app.run(debug=True)
