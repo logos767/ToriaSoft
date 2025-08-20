@@ -86,9 +86,8 @@ scheduler.add_job(id='update_rate', func=update_exchange_rate_job, trigger='cron
 
 # Helper para obtener la tasa de cambio actual
 def get_current_exchange_rate():
-    eturn rate.rate if rate else 0.0
- autenticant_us  e ST n .rr0iro de sesión fallido. Por favor, verifica tu nombre de usuario y contraseña.', 'danger')
-    return render_template('login.html', title='Iniciar Sesión')
+    rate = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
+    return rate.rate if rate else 0.0
 
 @app.route('/logout')
 def logout():
