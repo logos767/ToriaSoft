@@ -10,28 +10,58 @@ import os
 
 # Función para obtener la tasa de cambio
 def obtener_tasa_p2p_binance():
-    """Obtiene la tasa de compra de USDT en VES desde el mercado P2P de Binance."""
+    """Obtiene la tasa de cambio USDT/VES desde el mercado P2P de Binance."""
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
+    
+    # Configuración correcta para obtener el precio de venta de USDT en VES
     payload = {
-        "page": 1,
-        "rows": 1,
-        "payTypes": [],
         "asset": "USDT",
-        "tradeType": "BUY",
         "fiat": "VES",
-        "publisherType": None
+        "tradeType": "SELL",  # Cambiado a SELL para obtener precios de venta
+        "merchantCheck": False,
+        "page": 1,
+        "rows": 20,  # Aumentado para obtener más muestras
+        "publisherType": None,
+        "payTypes": []
     }
-    headers = {"Content-Type": "application/json"}
+    
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+    
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        response = requests.post(url, json=payload, headers=headers, timeout=15)
         response.raise_for_status()
+        
         data = response.json()
-        if data.get('code') == '000000' and data.get('data'):
-            return float(data['data'][0]['adv']['price'])
-        app.logger.warning(f"Respuesta de Binance P2P no exitosa: {data.get('message')}")
+        
+        # Verificar que la respuesta tenga la estructura esperada
+        if data.get('code') == '000000' and data.get('data') and len(data.get('data', [])) > 0:
+            # Filtrar anuncios válidos y obtener precios
+            prices = []
+            for adv in data['data']:
+                if 'adv' in adv and 'price' in adv['adv']:
+                    try:
+                        price = float(adv['adv']['price'])
+                        prices.append(price)
+                    except (ValueError, TypeError):
+                        continue
+            
+            if prices:
+                # Ordenar precios y tomar el promedio de los 5 mejores
+                prices.sort()
+                avg_price = sum(prices[:5]) / min(5, len(prices))
+                return round(avg_price, 2)
+        
+        app.logger.warning(f"Respuesta de Binance P2P no exitosa: {data.get('message', 'Sin mensaje')}")
         return None
+        
     except requests.exceptions.RequestException as e:
-        app.logger.error(f"Error al obtener la tasa P2P de Binance: {e}")
+        app.logger.error(f"Error de red al obtener tasa P2P de Binance: {e}")
+        return None
+    except (KeyError, IndexError, ValueError) as e:
+        app.logger.error(f"Error procesando datos de Binance P2P: {e}")
         return None
 
 # Función para actualizar la tasa de cambio en la base de datos
