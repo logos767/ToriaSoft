@@ -674,3 +674,52 @@ def company_settings():
             if company_info:
                 # Actualizar información existente
                 company_info.name = name
+                company_info.rif = rif
+                company_info.address = address
+                company_info.phone_numbers = phone_numbers
+                company_info.logo_url = logo_url
+                db.session.commit()
+                flash('Información de la empresa actualizada exitosamente!', 'success')
+            else:
+                # Crear nueva información
+                new_info = CompanyInfo(name=name, rif=rif, address=address, phone_numbers=phone_numbers, logo_url=logo_url)
+                db.session.add(new_info)
+                db.session.commit()
+                flash('Información de la empresa guardada exitosamente!', 'success')
+            
+            return redirect(url_for('company_settings'))
+        except IntegrityError:
+            db.session.rollback()
+            flash('Error: El RIF ya se encuentra registrado.', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error al guardar la información: {str(e)}', 'danger')
+
+    return render_template('configuracion/empresa.html', title='Configuración de Empresa', company_info=company_info)
+
+
+@app.route('/ordenes/imprimir/<int:order_id>')
+@login_required
+def print_delivery_note(order_id):
+    """
+    Genera y muestra una nota de entrega en formato de recibo para imprimir.
+    """
+    order = Order.query.get_or_404(order_id)
+    company_info = CompanyInfo.query.first()
+    
+    # Calcular subtotal, IVA y total con un IVA del 16%
+    iva_rate = 0.16
+    subtotal = order.total_amount / (1 + iva_rate)
+    iva = order.total_amount - subtotal
+    
+    return render_template('ordenes/imprimir_nota.html', 
+                           order=order,
+                           company_info=company_info,
+                           subtotal=subtotal,
+                           iva=iva)
+
+# Nueva ruta de API para obtener la tasa de cambio actual
+@app.route('/api/exchange_rate')
+def api_exchange_rate():
+    rate = get_current_exchange_rate()
+    return jsonify(rate=rate)
