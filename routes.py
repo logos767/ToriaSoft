@@ -167,7 +167,7 @@ def new_product():
         except (ValueError, IntegrityError) as e:
             db.session.rollback()
             flash(f'Error al crear el producto: {str(e)}', 'danger')
-    return render_template('inventario/nuevo.html', title='Nuevo Producto')
+    return render_template('inventario/nuevo.html', title='Nuevo Producto', current_rate=get_current_exchange_rate())
 
 # Rutas de clientes
 @app.route('/clientes/lista')
@@ -175,7 +175,8 @@ def new_product():
 def client_list():
     """Muestra la lista de clientes."""
     clients = Client.query.all()
-    return render_template('clientes/lista.html', title='Lista de Clientes', clients=clients)
+    current_rate = get_current_exchange_rate()
+    return render_template('clientes/lista.html', title='Lista de Clientes', clients=clients, current_rate=current_rate)
 
 @app.route('/clientes/nuevo', methods=['GET', 'POST'])
 @login_required
@@ -195,7 +196,7 @@ def new_client():
         except IntegrityError:
             db.session.rollback()
             flash('Error: El email ya está registrado.', 'danger')
-    return render_template('clientes/nuevo.html', title='Nuevo Cliente')
+    return render_template('clientes/nuevo.html', title='Nuevo Cliente', current_rate=get_current_exchange_rate())
 
 # Rutas de proveedores
 @app.route('/proveedores/lista')
@@ -203,7 +204,8 @@ def new_client():
 def provider_list():
     """Muestra la lista de proveedores."""
     providers = Provider.query.all()
-    return render_template('proveedores/lista.html', title='Lista de Proveedores', providers=providers)
+    current_rate = get_current_exchange_rate()
+    return render_template('proveedores/lista.html', title='Lista de Proveedores', providers=providers, current_rate=current_rate)
 
 @app.route('/proveedores/nuevo', methods=['GET', 'POST'])
 @login_required
@@ -222,7 +224,7 @@ def new_provider():
         except IntegrityError:
             db.session.rollback()
             flash('Error: Hubo un problema al crear el proveedor.', 'danger')
-    return render_template('proveedores/nuevo.html', title='Nuevo Proveedor')
+    return render_template('proveedores/nuevo.html', title='Nuevo Proveedor', current_rate=get_current_exchange_rate())
 
 # Rutas de compras
 @app.route('/compras/lista')
@@ -230,14 +232,16 @@ def new_provider():
 def purchase_list():
     """Muestra la lista de compras."""
     purchases = Purchase.query.all()
-    return render_template('compras/lista.html', title='Lista de Compras', purchases=purchases)
+    current_rate = get_current_exchange_rate()
+    return render_template('compras/lista.html', title='Lista de Compras', purchases=purchases, current_rate=current_rate)
 
 @app.route('/compras/detalle/<int:purchase_id>')
 @login_required
 def purchase_detail(purchase_id):
     """Muestra los detalles de una compra específica."""
     purchase = Purchase.query.get_or_404(purchase_id)
-    return render_template('compras/detalle_compra.html', title=f'Compra #{purchase.id}', purchase=purchase)
+    current_rate = get_current_exchange_rate()
+    return render_template('compras/detalle_compra.html', title=f'Compra #{purchase.id}', purchase=purchase, current_rate=current_rate)
 
 @app.route('/compras/nuevo', methods=['GET', 'POST'])
 @login_required
@@ -291,13 +295,15 @@ def new_purchase():
 def reception_list():
     """Muestra la lista de recepciones."""
     receptions = Reception.query.all()
-    return render_template('recepciones/lista.html', title='Lista de Recepciones', receptions=receptions)
+    current_rate = get_current_exchange_rate()
+    return render_template('recepciones/lista.html', title='Lista de Recepciones', receptions=receptions, current_rate=current_rate)
 
 @app.route('/recepciones/nueva/<int:purchase_id>', methods=['GET', 'POST'])
 @login_required
 def new_reception(purchase_id):
     """Maneja el formulario para una nueva recepción y actualiza el stock."""
     purchase = Purchase.query.get_or_404(purchase_id)
+    current_rate = get_current_exchange_rate()
     if request.method == 'POST':
         try:
             new_reception = Reception(purchase_id=purchase.id, status='Completada')
@@ -328,7 +334,7 @@ def new_reception(purchase_id):
             db.session.rollback()
             flash(f'Error al procesar la recepción: {str(e)}', 'danger')
 
-    return render_template('recepciones/nueva.html', title='Nueva Recepción', purchase=purchase)
+    return render_template('recepciones/nueva.html', title='Nueva Recepción', purchase=purchase, current_rate=current_rate)
 
 
 # Rutas de órdenes
@@ -337,7 +343,8 @@ def new_reception(purchase_id):
 def order_list():
     """Muestra la lista de órdenes."""
     orders = Order.query.all()
-    return render_template('ordenes/lista.html', title='Lista de Órdenes', orders=orders)
+    current_rate = get_current_exchange_rate()
+    return render_template('ordenes/lista.html', title='Lista de Órdenes', orders=orders, current_rate=current_rate)
 
 @app.route('/ordenes/detalle/<int:order_id>')
 @login_required
@@ -348,10 +355,12 @@ def order_detail(order_id):
     """
     order = Order.query.get_or_404(order_id)
     company_info = CompanyInfo.query.first()
+    current_rate = get_current_exchange_rate()
     return render_template('ordenes/detalle_orden.html', 
                            title=f'Orden #{order.id}', 
                            order=order,
-                           company_info=company_info)
+                           company_info=company_info,
+                           current_rate=current_rate)
 
 @app.route('/ordenes/nuevo', methods=['GET', 'POST'])
 @login_required
@@ -598,7 +607,7 @@ def cargar_excel():
             if os.path.exists(filepath):
                 os.remove(filepath)
     
-    return render_template('inventario/cargar_excel.html', title='Cargar Inventario desde Excel')
+    return render_template('inventario/cargar_excel.html', title='Cargar Inventario desde Excel', current_rate=get_current_exchange_rate())
 
 @app.route('/inventario/cargar_excel_confirmar', methods=['GET', 'POST'])
 @login_required
@@ -665,53 +674,3 @@ def company_settings():
             if company_info:
                 # Actualizar información existente
                 company_info.name = name
-                company_info.rif = rif
-                company_info.address = address
-                company_info.phone_numbers = phone_numbers
-                company_info.logo_url = logo_url
-                db.session.commit()
-                flash('Información de la empresa actualizada exitosamente!', 'success')
-            else:
-                # Crear nueva información
-                new_info = CompanyInfo(name=name, rif=rif, address=address, phone_numbers=phone_numbers, logo_url=logo_url)
-                db.session.add(new_info)
-                db.session.commit()
-                flash('Información de la empresa guardada exitosamente!', 'success')
-            
-            return redirect(url_for('company_settings'))
-        except IntegrityError:
-            db.session.rollback()
-            flash('Error: El RIF ya se encuentra registrado.', 'danger')
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Ocurrió un error al guardar la información: {str(e)}', 'danger')
-
-    return render_template('configuracion/empresa.html', title='Configuración de Empresa', company_info=company_info)
-
-
-@app.route('/ordenes/imprimir/<int:order_id>')
-@login_required
-def print_delivery_note(order_id):
-    """
-    Genera y muestra una nota de entrega en formato de recibo para imprimir.
-    """
-    order = Order.query.get_or_404(order_id)
-    company_info = CompanyInfo.query.first()
-    
-    # Calcular subtotal, IVA y total con un IVA del 16%
-    iva_rate = 0.16
-    subtotal = order.total_amount / (1 + iva_rate)
-    iva = order.total_amount - subtotal
-    
-    return render_template('ordenes/imprimir_nota.html', 
-                           order=order,
-                           company_info=company_info,
-                           subtotal=subtotal,
-                           iva=iva)
-
-# Nueva ruta de API para obtener la tasa de cambio actual
-@app.route('/api/exchange_rate')
-def api_exchange_rate():
-    rate = get_current_exchange_rate()
-    return jsonify(rate=rate)
-
