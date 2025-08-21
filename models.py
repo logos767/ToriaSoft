@@ -27,6 +27,11 @@ class Product(db.Model):
     image_url = db.Column(db.String(200), nullable=True)
     size = db.Column(db.String(20), nullable=True)
     color = db.Column(db.String(20), nullable=True)
+    profit_margin = db.Column(db.Float, nullable=False, default=0.20) # Margen de utilidad (ej. 20%)
+    specific_freight_cost = db.Column(db.Float, nullable=False, default=0) # Costo de flete específico por unidad
+    estimated_monthly_sales = db.Column(db.Integer, nullable=False, default=1) # Ventas estimadas para distribuir costos fijos
+    variable_selling_expense_percent = db.Column(db.Float, nullable=False, default=0) # % de gasto de venta (si es diferente al global)
+    variable_marketing_percent = db.Column(db.Float, nullable=False, default=0) # % de marketing (si es diferente al global)
     
     # Relaciones
     order_items = db.relationship('OrderItem', backref='product', lazy=True)
@@ -150,3 +155,11 @@ class ExchangeRate(db.Model):
 
     def __repr__(self):
         return f"ExchangeRate(rate='{self.rate}', date='{self.date_updated}')"
+
+class CostStructure(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    monthly_rent = db.Column(db.Float, default=0)
+    monthly_utilities = db.Column(db.Float, default=0)
+    monthly_fixed_taxes = db.Column(db.Float, default=0)
+    default_sales_commission_percent = db.Column(db.Float, default=0.05) # 5% por defecto
+    default_marketing_percent = db.Column(db.Float, default=0.03) # 3% por defecto

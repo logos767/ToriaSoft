@@ -1,0 +1,83 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page-Title -->
+    <div class="row">
+        <div class="col-sm-12">
+            <div class="page-title-box">
+                <div class="row">
+                    <div class="col">
+                        <h4 class="page-title">Estructura de Costos de Productos</h4>
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                            <li class="breadcrumb-item active">Costos</li>
+                        </ol>
+                    </div>
+                    <div class="col-auto align-self-center">
+                        <a href="{{ url_for('cost_structure_config') }}" class="btn btn-primary"><i class="fas fa-cog"></i> Configurar Costos Generales</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title">Resumen de Costos y Precios de Venta</h4>
+                    <p class="text-muted mb-0">Esta tabla muestra el desglose de costos y el precio de venta final calculado para cada producto.</p>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Costo Compra (USD)</th>
+                                    <th>Flete (USD)</th>
+                                    <th>Costo Fijo (USD)</th>
+                                    <th>Gasto Venta (USD)</th>
+                                    <th>Gasto Mkt (USD)</th>
+                                    <th>Utilidad (USD)</th>
+                                    <th>Precio Venta (USD)</th>
+                                    <th>Precio Venta (VES)</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for data in products_data %}
+                                <tr>
+                                    <td>{{ data.product.name }}</td>
+                                    <td>${{ "%.2f"|format(data.product.cost_usd) }}</td>
+                                    <td>${{ "%.2f"|format(data.product.specific_freight_cost) }}</td>
+                                    <td>${{ "%.2f"|format(data.fixed_cost_per_unit) }}</td>
+                                    <td>${{ "%.2f"|format(data.sales_expense) }}</td>
+                                    <td>${{ "%.2f"|format(data.marketing_expense) }}</td>
+                                    <td>${{ "%.2f"|format(data.profit) }}</td>
+                                    <td><strong>${{ "%.2f"|format(data.selling_price) }}</strong></td>
+                                    <td><strong>Bs. {{ "%.2f"|format(data.selling_price * current_rate) }}</strong></td>
+                                    <td>
+                                        {% if data.error %}
+                                            <span class="badge badge-danger">{{ data.error }}</span>
+                                        {% endif %}
+                                        <a href="{{ url_for('edit_product_cost', product_id=data.product.id) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-edit"></i> Editar
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="10" class="text-center">No hay productos para mostrar.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,7 +1,7 @@
 import requests
 from flask import render_template, url_for, flash, redirect, request, jsonify, session
 from app import app, db, bcrypt
-from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo
+from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure
 from flask_login import login_user, current_user, logout_user, login_required
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, extract
@@ -746,6 +746,167 @@ def company_settings():
 
     return render_template('configuracion/empresa.html', title='Configuración de Empresa', company_info=company_info)
 
+# Rutas de Estructura de Costos
+@app.route('/costos/lista')
+@login_required
+def cost_list():
+    """Muestra la tabla resumen de la estructura de costos de los productos."""
+    if current_user.role != 'administrador':
+        flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    cost_structure = CostStructure.query.first()
+    if not cost_structure:
+        # Si no hay configuración, redirigir para crearla primero.
+        flash('Por favor, configure la estructura de costos generales primero.', 'info')
+        return redirect(url_for('cost_structure_config'))
+
+    products = Product.query.all()
+    
+    # Calcular el total de ventas estimadas para distribuir los costos fijos
+    total_estimated_sales = db.session.query(func.sum(Product.estimated_monthly_sales)).scalar() or 1
+    if total_estimated_sales == 0:
+        total_estimated_sales = 1 # Evitar división por cero
+
+    total_fixed_costs = (cost_structure.monthly_rent or 0) + \
+                        (cost_structure.monthly_utilities or 0) + \
+                        (cost_structure.monthly_fixed_taxes or 0)
+    
+    fixed_cost_per_unit = total_fixed_costs / total_estimated_sales
+
+    products_with_costs = []
+    for product in products:
+        # Usar costos variables específicos del producto si existen, si no, los por defecto.
+        var_sales_exp_pct = product.variable_selling_expense_percent if product.variable_selling_expense_percent > 0 else cost_structure.default_sales_commission_percent
+        var_marketing_pct = product.variable_marketing_percent if product.variable_marketing_percent > 0 else cost_structure.default_marketing_percent
+
+        # Costo base = Costo de compra + Flete específico + Costo Fijo por unidad
+        base_cost = (product.cost_usd or 0) + \
+                    (product.specific_freight_cost or 0) + \
+                    fixed_cost_per_unit
+
+        # Denominador para la fórmula del precio de venta
+        # P = base_cost / (1 - %gastos_var - %utilidad)
+        denominator = 1 - (var_sales_exp_pct or 0) - (var_marketing_pct or 0) - (product.profit_margin or 0)
+
+        if denominator <= 0:
+            # Si los porcentajes suman 100% o más, el precio es infinito o negativo. Marcar como error.
+            selling_price = 0
+            profit = 0
+            sales_expense = 0
+            marketing_expense = 0
+            error = "La suma de porcentajes de utilidad y gastos variables supera el 100%."
+        else:
+            selling_price = base_cost / denominator
+            profit = selling_price * (product.profit_margin or 0)
+            sales_expense = selling_price * (var_sales_exp_pct or 0)
+            marketing_expense = selling_price * (var_marketing_pct or 0)
+            error = None
+
+        products_with_costs.append({
+            'product': product,
+            'fixed_cost_per_unit': fixed_cost_per_unit,
+            'sales_expense': sales_expense,
+            'marketing_expense': marketing_expense,
+            'profit': profit,
+            'selling_price': selling_price,
+            'error': error
+        })
+
+    return render_template('costos/lista.html',
+                           title='Estructura de Costos',
+                           products_data=products_with_costs,
+                           current_rate=get_current_exchange_rate() or 0.0)
+
+
+@app.route('/costos/configuracion', methods=['GET', 'POST'])
+@login_required
+def cost_structure_config():
+    """Permite configurar los costos fijos y variables por defecto."""
+    if current_user.role != 'administrador':
+        flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Siempre trabajamos con la primera (y única) fila de configuración
+    cost_structure = CostStructure.query.first()
+    if not cost_structure:
+        cost_structure = CostStructure()
+        db.session.add(cost_structure)
+        db.session.commit()
+
+    if request.method == 'POST':
+        try:
+            cost_structure.monthly_rent = float(request.form.get('monthly_rent', 0))
+            cost_structure.monthly_utilities = float(request.form.get('monthly_utilities', 0))
+            cost_structure.monthly_fixed_taxes = float(request.form.get('monthly_fixed_taxes', 0))
+            # Los porcentajes se guardan como decimales (ej. 5% -> 0.05)
+            cost_structure.default_sales_commission_percent = float(request.form.get('default_sales_commission_percent', 0)) / 100
+            cost_structure.default_marketing_percent = float(request.form.get('default_marketing_percent', 0)) / 100
+            
+            db.session.commit()
+            flash('Configuración de costos guardada exitosamente.', 'success')
+            return redirect(url_for('cost_list'))
+        except (ValueError, TypeError) as e:
+            db.session.rollback()
+            flash(f'Error al guardar la configuración. Verifique que los valores sean números. Error: {e}', 'danger')
+
+    return render_template('costos/configuracion.html',
+                           title='Configurar Costos Generales',
+                           cost_structure=cost_structure,
+                           current_rate=get_current_exchange_rate() or 0.0)
+
+
+@app.route('/costos/editar/<int:product_id>', methods=['GET', 'POST'])
+@login_required
+def edit_product_cost(product_id):
+    """Edita la estructura de costos y utilidad para un producto específico."""
+    if current_user.role != 'administrador':
+        flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    product = Product.query.get_or_404(product_id)
+
+    if request.method == 'POST':
+        try:
+            # Actualizar los campos del producto desde el formulario
+            product.profit_margin = float(request.form.get('profit_margin', 0)) / 100
+            product.specific_freight_cost = float(request.form.get('specific_freight_cost', 0))
+            product.estimated_monthly_sales = int(request.form.get('estimated_monthly_sales', 1))
+            product.variable_selling_expense_percent = float(request.form.get('variable_selling_expense_percent', 0)) / 100
+            product.variable_marketing_percent = float(request.form.get('variable_marketing_percent', 0)) / 100
+
+            # --- Recalcular y actualizar el precio de venta del producto ---
+            cost_structure = CostStructure.query.first()
+            if not cost_structure:
+                flash('La configuración de costos generales no existe. No se puede calcular el precio.', 'danger')
+                return redirect(url_for('cost_structure_config'))
+
+            # Se necesita recalcular el costo fijo por unidad con los datos actualizados
+            total_estimated_sales = db.session.query(func.sum(Product.estimated_monthly_sales)).scalar() or 1
+            if total_estimated_sales == 0: total_estimated_sales = 1
+
+            total_fixed_costs = (cost_structure.monthly_rent or 0) + (cost_structure.monthly_utilities or 0) + (cost_structure.monthly_fixed_taxes or 0)
+            fixed_cost_per_unit = total_fixed_costs / total_estimated_sales
+            base_cost = (product.cost_usd or 0) + product.specific_freight_cost + fixed_cost_per_unit
+            denominator = 1 - product.variable_selling_expense_percent - product.variable_marketing_percent - product.profit_margin
+            if denominator <= 0:
+                raise ValueError("La suma de porcentajes de utilidad y gastos variables no puede ser 100% o más.")
+            new_selling_price = base_cost / denominator
+            product.price_usd = round(new_selling_price, 2) # Actualizar el precio de venta final
+            db.session.commit()
+            flash(f'Costos y precio del producto "{product.name}" actualizados exitosamente.', 'success')
+            return redirect(url_for('cost_list'))
+        except ValueError as e:
+            db.session.rollback()
+            flash(f'Error al actualizar el producto: {e}', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error inesperado: {e}', 'danger')
+
+    return render_template('costos/editar.html',
+                           title=f'Editar Costos de {product.name}',
+                           product=product,
+                           current_rate=get_current_exchange_rate() or 0.0)
 
 @app.route('/ordenes/imprimir/<int:order_id>')
 @login_required
