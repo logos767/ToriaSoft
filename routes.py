@@ -1,8 +1,7 @@
-import requests
 from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, session, current_app
 from app import db, bcrypt, socketio # 'app' ya no es necesario para los decoradores de ruta
 from flask_socketio import join_room
-from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification
+from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate
 from flask_login import login_user, current_user, logout_user, login_required
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, extract
@@ -12,94 +11,20 @@ import os
 # 1. Crear una instancia de Blueprint. Este es el objeto que app.py está buscando.
 routes_blueprint = Blueprint('main', __name__)
 
-# Función para obtener la tasa de cambio
-def obtener_tasa_p2p_binance():
-    """
-    Obtiene la tasa de cambio USDT/VES desde el mercado P2P de Binance.
-    Filtra los anuncios para obtener un precio más representativo.
-    """
-    url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
-    
-    # Payload para buscar vendedores de USDT en VES.
-    # Buscamos el precio al que la gente VENDE USDT, que es el precio de compra para nosotros.
-    payload = {
-        "asset": "USDT",
-        "fiat": "VES",
-        "tradeType": "SELL",
-        "merchantCheck": False, # Incluir anuncios de no comerciantes
-        "page": 1,
-        "rows": 20, # Obtener una muestra de 20 anuncios
-        "payTypes": [], # Sin filtro por método de pago
-        "countries": [] # Sin filtro por país
-    }
-    
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
-    
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=10)
-        response.raise_for_status() # Lanza una excepción para errores HTTP (4xx o 5xx)
-        
-        data = response.json()
-        
-        # Binance devuelve '000000' en el código cuando la solicitud es exitosa
-        if data.get('code') != '000000' or not data.get('data'):
-            current_app.logger.warning(f"La API de Binance P2P no devolvió datos exitosos. Mensaje: {data.get('message', 'N/A')}")
-            return None
-            
-        prices = []
-        for item in data['data']:
-            adv = item.get('adv')
-            if not adv:
-                continue
-            
-            # Extraer datos relevantes y asegurarse de que sean válidos
-            try:
-                price = float(adv.get('price'))
-                # Filtrar anuncios con muy poco disponible para evitar distorsiones
-                available_amount = float(adv.get('surplusAmount', 0))
-                
-                # Considerar solo anuncios con más de 50 USDT disponibles
-                if available_amount > 50:
-                    prices.append(price)
-            except (ValueError, TypeError, KeyError) as e:
-                current_app.logger.debug(f"Omitiendo anuncio P2P por datos inválidos: {adv}. Error: {e}")
-                continue
-        
-        if not prices:
-            current_app.logger.warning("No se encontraron anuncios de P2P válidos para calcular la tasa.")
-            return None
-        
-        # Ordenar precios de menor a mayor y calcular el promedio de los 5 más bajos
-        prices.sort()
-        # Usar min() para manejar casos con menos de 5 precios
-        sample_size = min(5, len(prices)) 
-        avg_price = sum(prices[:sample_size]) / sample_size
-        
-        return round(avg_price, 2)
-        
-    except requests.exceptions.Timeout:
-        current_app.logger.error("Timeout al intentar conectar con la API de Binance P2P.")
-        return None
-    except requests.exceptions.RequestException as e:
-        current_app.logger.error(f"Error de red al obtener tasa P2P de Binance: {e}")
-        return None
-    except Exception as e:
-        current_app.logger.error(f"Error inesperado procesando datos de Binance P2P: {e}")
-        return None
-
 # Helper para obtener la tasa de cambio actual
 def get_current_exchange_rate():
     """
-    Obtiene la tasa de cambio directamente desde la API de Binance.
-    Devuelve el valor de la tasa como float, o None si no se encuentra.
-    ADVERTENCIA: Llamar a esta función en cada solicitud puede ser lento
-    y podría causar que Binance bloquee la IP. Se recomienda implementar
-    un sistema de caché.
+    Obtiene la tasa de cambio más reciente desde la base de datos.
+    Esta tasa es actualizada por una tarea en segundo plano.
     """
-    return obtener_tasa_p2p_binance()
+    try:
+        # Usar .with_for_update() puede ser útil en escenarios de alta concurrencia, pero no es estrictamente necesario aquí.
+        rate_entry = ExchangeRate.query.first()
+        if rate_entry:
+            return rate_entry.rate
+    except Exception as e:
+        current_app.logger.error(f"Error al obtener la tasa de cambio de la base de datos: {e}")
+    return None
 
 # --- Funciones del Sistema de Notificaciones ---
 
