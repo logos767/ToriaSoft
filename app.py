@@ -41,6 +41,8 @@ login_manager.login_message_category = 'info'
 scheduler = BackgroundScheduler()
 scheduler.start()
 
+socketio = SocketIO(app, async_mode='eventlet')
+
 # Importar modelos y rutas después de crear las instancias de db y app
 from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, ExchangeRate
 from routes import *
