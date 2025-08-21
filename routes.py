@@ -190,7 +190,7 @@ def inventory_list():
     """
     products = Product.query.all()
     user_role = current_user.role if current_user.is_authenticated else 'invitado'
-    current_rate = get_current_exchange_rate()
+    current_rate = get_current_exchange_rate() or 0.0
     return render_template('inventario/lista.html',
                            title='Lista de Inventario',
                            products=products,
@@ -202,7 +202,7 @@ def inventory_list():
 def inventory_stock():
     """Muestra el estado de existencias de los productos."""
     products = Product.query.all()
-    current_rate = get_current_exchange_rate()
+    current_rate = get_current_exchange_rate() or 0.0
     return render_template('inventario/existencias.html', title='Existencias', products=products, current_rate=current_rate)
 
 @app.route('/inventario/producto/<int:product_id>')
@@ -210,7 +210,7 @@ def inventory_stock():
 def product_detail(product_id):
     """Muestra los detalles de un producto específico, incluyendo código de barras y QR."""
     product = Product.query.get_or_404(product_id)
-    current_rate = get_current_exchange_rate()
+    current_rate = get_current_exchange_rate() or 0.0
     return render_template('inventario/detalle_producto.html', title=product.name, product=product, current_rate=current_rate)
 
 @app.route('/inventario/nuevo', methods=['GET', 'POST'])
@@ -240,7 +240,7 @@ def new_product():
         except (ValueError, IntegrityError) as e:
             db.session.rollback()
             flash(f'Error al crear el producto: {str(e)}', 'danger')
-    return render_template('inventario/nuevo.html', title='Nuevo Producto', current_rate=get_current_exchange_rate())
+    return render_template('inventario/nuevo.html', title='Nuevo Producto', current_rate=get_current_exchange_rate() or 0.0)
 
 # Rutas de clientes
 @app.route('/clientes/lista')
@@ -248,7 +248,7 @@ def new_product():
 def client_list():
     """Muestra la lista de clientes."""
     clients = Client.query.all()
-    current_rate = get_current_exchange_rate()
+    current_rate = get_current_exchange_rate() or 0.0
     return render_template('clientes/lista.html', title='Lista de Clientes', clients=clients, current_rate=current_rate)
 
 @app.route('/clientes/nuevo', methods=['GET', 'POST'])
@@ -269,7 +269,7 @@ def new_client():
         except IntegrityError:
             db.session.rollback()
             flash('Error: El email ya está registrado.', 'danger')
-    return render_template('clientes/nuevo.html', title='Nuevo Cliente', current_rate=get_current_exchange_rate())
+    return render_template('clientes/nuevo.html', title='Nuevo Cliente', current_rate=get_current_exchange_rate() or 0.0)
 
 # Rutas de proveedores
 @app.route('/proveedores/lista')
@@ -277,7 +277,7 @@ def new_client():
 def provider_list():
     """Muestra la lista de proveedores."""
     providers = Provider.query.all()
-    current_rate = get_current_exchange_rate()
+    current_rate = get_current_exchange_rate() or 0.0
     return render_template('proveedores/lista.html', title='Lista de Proveedores', providers=providers, current_rate=current_rate)
 
 @app.route('/proveedores/nuevo', methods=['GET', 'POST'])
@@ -297,7 +297,7 @@ def new_provider():
         except IntegrityError:
             db.session.rollback()
             flash('Error: Hubo un problema al crear el proveedor.', 'danger')
-    return render_template('proveedores/nuevo.html', title='Nuevo Proveedor', current_rate=get_current_exchange_rate())
+    return render_template('proveedores/nuevo.html', title='Nuevo Proveedor', current_rate=get_current_exchange_rate() or 0.0)
 
 # Rutas de compras
 @app.route('/compras/lista')
@@ -305,7 +305,7 @@ def new_provider():
 def purchase_list():
     """Muestra la lista de compras."""
     purchases = Purchase.query.all()
-    current_rate = get_current_exchange_rate()
+    current_rate = get_current_exchange_rate() or 0.0
     return render_template('compras/lista.html', title='Lista de Compras', purchases=purchases, current_rate=current_rate)
 
 @app.route('/compras/detalle/<int:purchase_id>')
@@ -313,7 +313,7 @@ def purchase_list():
 def purchase_detail(purchase_id):
     """Muestra los detalles de una compra específica."""
     purchase = Purchase.query.get_or_404(purchase_id)
-    current_rate = get_current_exchange_rate()
+    current_rate = get_current_exchange_rate() or 0.0
     return render_template('compras/detalle_compra.html', title=f'Compra #{purchase.id}', purchase=purchase, current_rate=current_rate)
 
 @app.route('/compras/nuevo', methods=['GET', 'POST'])
@@ -323,6 +323,11 @@ def new_purchase():
     providers = Provider.query.all()
     products = Product.query.all()
     current_rate = get_current_exchange_rate()
+
+    if current_rate is None:
+        flash('No se ha podido obtener la tasa de cambio. No se pueden crear compras en este momento.', 'danger')
+        return redirect(url_for('purchase_list'))
+
     if request.method == 'POST':
         try:
             provider_id = request.form.get('provider_id')
@@ -368,7 +373,7 @@ def new_purchase():
 def reception_list():
     """Muestra la lista de recepciones."""
     receptions = Reception.query.all()
-    current_rate = get_current_exchange_rate()
+    current_rate = get_current_exchange_rate() or 0.0
     return render_template('recepciones/lista.html', title='Lista de Recepciones', receptions=receptions, current_rate=current_rate)
 
 @app.route('/recepciones/nueva/<int:purchase_id>', methods=['GET', 'POST'])
@@ -376,7 +381,7 @@ def reception_list():
 def new_reception(purchase_id):
     """Maneja el formulario para una nueva recepción y actualiza el stock."""
     purchase = Purchase.query.get_or_404(purchase_id)
-    current_rate = get_current_exchange_rate()
+    current_rate = get_current_exchange_rate() or 0.0
     if request.method == 'POST':
         try:
             new_reception = Reception(purchase_id=purchase.id, status='Completada')
@@ -416,7 +421,7 @@ def new_reception(purchase_id):
 def order_list():
     """Muestra la lista de órdenes."""
     orders = Order.query.all()
-    current_rate = get_current_exchange_rate()
+    current_rate = get_current_exchange_rate() or 0.0
     return render_template('ordenes/lista.html', title='Lista de Órdenes', orders=orders, current_rate=current_rate)
 
 @app.route('/ordenes/detalle/<int:order_id>')
@@ -428,7 +433,7 @@ def order_detail(order_id):
     """
     order = Order.query.get_or_404(order_id)
     company_info = CompanyInfo.query.first()
-    current_rate = get_current_exchange_rate()
+    current_rate = get_current_exchange_rate() or 0.0
     return render_template('ordenes/detalle_orden.html', 
                            title=f'Orden #{order.id}', 
                            order=order,
@@ -442,6 +447,10 @@ def new_order():
     clients = Client.query.all()
     products = Product.query.all()
     current_rate = get_current_exchange_rate()
+    
+    if current_rate is None:
+        flash('No se ha podido obtener la tasa de cambio. No se pueden crear órdenes en este momento.', 'danger')
+        return redirect(url_for('order_list'))
     
     if request.method == 'POST':
         try:
@@ -519,7 +528,7 @@ def new_order():
 def movement_list():
     """Muestra la lista de movimientos de inventario."""
     movements = Movement.query.order_by(Movement.date.desc()).all()
-    current_rate = get_current_exchange_rate()
+    current_rate = get_current_exchange_rate() or 0.0
     return render_template('movimientos/lista.html', title='Registro de Movimientos', movements=movements, current_rate=current_rate)
 
 
@@ -566,7 +575,7 @@ def estadisticas():
     monthly_sales = {int(s[0]): s[1] for s in sales_by_month}
     sales_data_complete = {'labels': months_names, 'values': [monthly_sales.get(i + 1, 0) for i in range(12)]}
     
-    current_rate = get_current_exchange_rate()
+    current_rate = get_current_exchange_rate() or 0.0
 
     return render_template('estadisticas.html',
                            title='Estadísticas Gerenciales',
@@ -680,7 +689,7 @@ def cargar_excel():
             if os.path.exists(filepath):
                 os.remove(filepath)
     
-    return render_template('inventario/cargar_excel.html', title='Cargar Inventario desde Excel', current_rate=get_current_exchange_rate())
+    return render_template('inventario/cargar_excel.html', title='Cargar Inventario desde Excel', current_rate=get_current_exchange_rate() or 0.0)
 
 @app.route('/inventario/cargar_excel_confirmar', methods=['GET', 'POST'])
 @login_required
@@ -693,7 +702,7 @@ def cargar_excel_confirmar():
         return redirect(url_for('inventory_list'))
         
     pending_updates = session.get('pending_updates', [])
-    current_rate = get_current_exchange_rate()
+    current_rate = get_current_exchange_rate() or 0.0
 
     if request.method == 'POST':
         # El usuario ha confirmado, procesar las actualizaciones
