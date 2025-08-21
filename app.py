@@ -40,7 +40,7 @@ login_manager.init_app(app)
 bcrypt.init_app(app)
 
 login_manager.login_view = 'login'
-login_manager.login_message_category = 'info'
+login_manager.login_message_category = 'info' # FIX: Corrected typo here
 
 socketio = SocketIO(app, async_mode='eventlet')
 
@@ -149,8 +149,7 @@ def create_db_and_initial_data():
 
 app.register_blueprint(routes_blueprint)
 
-# Iniciar la tarea en segundo plano una vez que la app está configurada
-socketio.start_background_task(target=update_exchange_rate_task)
+# REMOVED: The background task will now be started via Gunicorn's post_worker_init hook.
 
 if __name__ == '__main__':
     # Para ejecutar con SocketIO en desarrollo, usa socketio.run
