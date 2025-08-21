@@ -107,19 +107,25 @@ def handle_connect():
 # Rutas de autenticación
 @routes_blueprint.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('main.dashboard'))
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        user = User.query.filter_by(username=username).first()
-        if user and bcrypt.check_password_hash(user.password, password):
-            login_user(user)
-            next_page = request.args.get('next')
-            return redirect(next_page) if next_page else redirect(url_for('main.dashboard'))
-        else:
-            flash('Inicio de sesión fallido. Por favor, verifica tu nombre de usuario y contraseña.', 'danger')
-    return render_template('login.html', title='Iniciar Sesión')
+    # This try...finally is a workaround for a "cannot notify on un-acquired lock"
+    # RuntimeError during request teardown, which can happen with async workers (gevent)
+    # and SQLAlchemy's connection pool.
+    try:
+        if current_user.is_authenticated:
+            return redirect(url_for('main.dashboard'))
+        if request.method == 'POST':
+            username = request.form.get('username')
+            password = request.form.get('password')
+            user = User.query.filter_by(username=username).first()
+            if user and bcrypt.check_password_hash(user.password, password):
+                login_user(user)
+                next_page = request.args.get('next')
+                return redirect(next_page) if next_page else redirect(url_for('main.dashboard'))
+            else:
+                flash('Inicio de sesión fallido. Por favor, verifica tu nombre de usuario y contraseña.', 'danger')
+        return render_template('login.html', title='Iniciar Sesión')
+    finally:
+        db.session.remove()
 
 
 @routes_blueprint.route('/logout')
