@@ -1,6 +1,7 @@
 import requests
 from flask import render_template, url_for, flash, redirect, request, jsonify, session
-from app import app, db, bcrypt
+from app import app, db, bcrypt, socketio
+from flask_socketio import join_room
 from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification
 from flask_login import login_user, current_user, logout_user, login_required
 from sqlalchemy.exc import IntegrityError
@@ -106,6 +107,9 @@ def create_notification_for_admins(message, link):
     try:
         # Asume que el modelo User tiene un campo 'role'
         admins = User.query.filter_by(role='administrador').all()
+        if not admins:
+            return
+
         for admin in admins:
             notification = Notification(
                 user_id=admin.id,
@@ -113,9 +117,19 @@ def create_notification_for_admins(message, link):
                 link=link
             )
             db.session.add(notification)
+            db.session.flush() # Para obtener los datos generados por la DB (como created_at)
+
+            # Emitir evento de WebSocket a la sala específica del administrador
+            socketio.emit('new_notification', {
+                'message': notification.message,
+                'link': notification.link,
+                'created_at': notification.created_at.strftime('%d/%m %H:%M')
+            }, room=f'user_{admin.id}')
+
     except Exception as e:
         # Usar logger para registrar el error sin detener el flujo principal
         app.logger.error(f"Error al crear notificaciones para administradores: {e}")
+        db.session.rollback() # Revertir si algo falla
 
 @app.context_processor
 def inject_notifications():
@@ -150,6 +164,15 @@ def mark_notifications_as_read():
         db.session.rollback()
         app.logger.error(f"Error al marcar notificaciones como leídas para el usuario {current_user.id}: {e}")
         return jsonify(success=False, message='Error interno del servidor'), 500
+
+@socketio.on('connect')
+def handle_connect():
+    """
+    Cuando un usuario se conecta, lo une a una sala con su ID.
+    Esto permite enviarle notificaciones de forma privada.
+    """
+    if current_user.is_authenticated:
+        join_room(f'user_{current_user.id}')
 
 # Rutas de autenticación
 @app.route('/login', methods=['GET', 'POST'])
