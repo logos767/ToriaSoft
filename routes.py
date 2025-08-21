@@ -1,6 +1,6 @@
 import requests
-from flask import render_template, url_for, flash, redirect, request, jsonify, session
-from app import app, db, bcrypt, socketio
+from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, session
+from app import db, bcrypt, socketio # 'app' ya no es necesario para los decoradores de ruta
 from flask_socketio import join_room
 from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification
 from flask_login import login_user, current_user, logout_user, login_required
@@ -8,6 +8,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, extract
 import openpyxl
 import os
+
+# 1. Crear una instancia de Blueprint. Este es el objeto que app.py está buscando.
+routes_blueprint = Blueprint('main', __name__)
 
 # Función para obtener la tasa de cambio
 def obtener_tasa_p2p_binance():
@@ -151,7 +154,7 @@ def inject_notifications():
         app.logger.error(f"Error al obtener notificaciones para el usuario {current_user.id}: {e}")
         return dict(unread_notifications=[], unread_notification_count=0)
 
-@app.route('/notifications/mark-as-read', methods=['POST'])
+@routes_blueprint.route('/notifications/mark-as-read', methods=['POST'])
 @login_required
 def mark_notifications_as_read():
     if current_user.role != 'administrador':
@@ -175,7 +178,7 @@ def handle_connect():
         join_room(f'user_{current_user.id}')
 
 # Rutas de autenticación
-@app.route('/login', methods=['GET', 'POST'])
+@routes_blueprint.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
@@ -192,14 +195,14 @@ def login():
     return render_template('login.html', title='Iniciar Sesión')
 
 
-@app.route('/logout')
+@routes_blueprint.route('/logout')
 def logout():
     logout_user()
     return redirect(url_for('login'))
 
 # Rutas principales
-@app.route('/')
-@app.route('/dashboard')
+@routes_blueprint.route('/')
+@routes_blueprint.route('/dashboard')
 @login_required
 def dashboard():
     """Muestra la página principal con información de dashboard."""
@@ -225,7 +228,7 @@ def dashboard():
                            current_rate=current_rate)
 
 # Rutas de productos (Inventario)
-@app.route('/inventario/lista')
+@routes_blueprint.route('/inventario/lista')
 @login_required
 def inventory_list():
     """
@@ -241,7 +244,7 @@ def inventory_list():
                            user_role=user_role,
                            current_rate=current_rate)
 
-@app.route('/inventario/existencias')
+@routes_blueprint.route('/inventario/existencias')
 @login_required
 def inventory_stock():
     """Muestra el estado de existencias de los productos."""
@@ -249,7 +252,7 @@ def inventory_stock():
     current_rate = get_current_exchange_rate() or 0.0
     return render_template('inventario/existencias.html', title='Existencias', products=products, current_rate=current_rate)
 
-@app.route('/inventario/producto/<int:product_id>')
+@routes_blueprint.route('/inventario/producto/<int:product_id>')
 @login_required
 def product_detail(product_id):
     """Muestra los detalles de un producto específico, incluyendo código de barras y QR."""
@@ -257,7 +260,7 @@ def product_detail(product_id):
     current_rate = get_current_exchange_rate() or 0.0
     return render_template('inventario/detalle_producto.html', title=product.name, product=product, current_rate=current_rate)
 
-@app.route('/inventario/nuevo', methods=['GET', 'POST'])
+@routes_blueprint.route('/inventario/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_product():
     """Maneja el formulario para crear un nuevo producto."""
@@ -287,7 +290,7 @@ def new_product():
     return render_template('inventario/nuevo.html', title='Nuevo Producto', current_rate=get_current_exchange_rate() or 0.0)
 
 # Rutas de clientes
-@app.route('/clientes/lista')
+@routes_blueprint.route('/clientes/lista')
 @login_required
 def client_list():
     """Muestra la lista de clientes."""
@@ -295,7 +298,7 @@ def client_list():
     current_rate = get_current_exchange_rate() or 0.0
     return render_template('clientes/lista.html', title='Lista de Clientes', clients=clients, current_rate=current_rate)
 
-@app.route('/clientes/nuevo', methods=['GET', 'POST'])
+@routes_blueprint.route('/clientes/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_client():
     """Maneja el formulario para crear un nuevo cliente."""
@@ -316,7 +319,7 @@ def new_client():
     return render_template('clientes/nuevo.html', title='Nuevo Cliente', current_rate=get_current_exchange_rate() or 0.0)
 
 # Rutas de proveedores
-@app.route('/proveedores/lista')
+@routes_blueprint.route('/proveedores/lista')
 @login_required
 def provider_list():
     """Muestra la lista de proveedores."""
@@ -324,7 +327,7 @@ def provider_list():
     current_rate = get_current_exchange_rate() or 0.0
     return render_template('proveedores/lista.html', title='Lista de Proveedores', providers=providers, current_rate=current_rate)
 
-@app.route('/proveedores/nuevo', methods=['GET', 'POST'])
+@routes_blueprint.route('/proveedores/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_provider():
     """Maneja el formulario para crear un nuevo proveedor."""
@@ -344,7 +347,7 @@ def new_provider():
     return render_template('proveedores/nuevo.html', title='Nuevo Proveedor', current_rate=get_current_exchange_rate() or 0.0)
 
 # Rutas de compras
-@app.route('/compras/lista')
+@routes_blueprint.route('/compras/lista')
 @login_required
 def purchase_list():
     """Muestra la lista de compras."""
@@ -352,7 +355,7 @@ def purchase_list():
     current_rate = get_current_exchange_rate() or 0.0
     return render_template('compras/lista.html', title='Lista de Compras', purchases=purchases, current_rate=current_rate)
 
-@app.route('/compras/detalle/<int:purchase_id>')
+@routes_blueprint.route('/compras/detalle/<int:purchase_id>')
 @login_required
 def purchase_detail(purchase_id):
     """Muestra los detalles de una compra específica."""
@@ -360,7 +363,7 @@ def purchase_detail(purchase_id):
     current_rate = get_current_exchange_rate() or 0.0
     return render_template('compras/detalle_compra.html', title=f'Compra #{purchase.id}', purchase=purchase, current_rate=current_rate)
 
-@app.route('/compras/nuevo', methods=['GET', 'POST'])
+@routes_blueprint.route('/compras/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_purchase():
     """Maneja el formulario para crear una nueva compra."""
@@ -418,7 +421,7 @@ def new_purchase():
     return render_template('compras/nuevo.html', title='Nueva Compra', providers=providers, products=products, current_rate=current_rate)
 
 # Rutas de recepciones
-@app.route('/recepciones/lista')
+@routes_blueprint.route('/recepciones/lista')
 @login_required
 def reception_list():
     """Muestra la lista de recepciones."""
@@ -426,7 +429,7 @@ def reception_list():
     current_rate = get_current_exchange_rate() or 0.0
     return render_template('recepciones/lista.html', title='Lista de Recepciones', receptions=receptions, current_rate=current_rate)
 
-@app.route('/recepciones/nueva/<int:purchase_id>', methods=['GET', 'POST'])
+@routes_blueprint.route('/recepciones/nueva/<int:purchase_id>', methods=['GET', 'POST'])
 @login_required
 def new_reception(purchase_id):
     """Maneja el formulario para una nueva recepción y actualiza el stock."""
@@ -472,7 +475,7 @@ def new_reception(purchase_id):
 
 
 # Rutas de órdenes
-@app.route('/ordenes/lista')
+@routes_blueprint.route('/ordenes/lista')
 @login_required
 def order_list():
     """Muestra la lista de órdenes."""
@@ -480,7 +483,7 @@ def order_list():
     current_rate = get_current_exchange_rate() or 0.0
     return render_template('ordenes/lista.html', title='Lista de Órdenes', orders=orders, current_rate=current_rate)
 
-@app.route('/ordenes/detalle/<int:order_id>')
+@routes_blueprint.route('/ordenes/detalle/<int:order_id>')
 @login_required
 def order_detail(order_id):
     """
@@ -496,7 +499,7 @@ def order_detail(order_id):
                            company_info=company_info,
                            current_rate=current_rate)
 
-@app.route('/ordenes/nuevo', methods=['GET', 'POST'])
+@routes_blueprint.route('/ordenes/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_order():
     """Maneja el formulario para crear una nueva orden de venta."""
@@ -585,7 +588,7 @@ def new_order():
 
 
 # Nueva ruta para movimientos de inventario
-@app.route('/movimientos/lista')
+@routes_blueprint.route('/movimientos/lista')
 @login_required
 def movement_list():
     """Muestra la lista de movimientos de inventario."""
@@ -595,7 +598,7 @@ def movement_list():
 
 
 # Nueva ruta para estadísticas (modo gerencial)
-@app.route('/estadisticas')
+@routes_blueprint.route('/estadisticas')
 @login_required
 def estadisticas():
     """Muestra las estadísticas y métricas del negocio con gráficos."""
@@ -648,7 +651,7 @@ def estadisticas():
                            current_rate=current_rate)
 
 # Nueva ruta para cargar productos desde un archivo de Excel
-@app.route('/inventario/cargar_excel', methods=['GET', 'POST'])
+@routes_blueprint.route('/inventario/cargar_excel', methods=['GET', 'POST'])
 @login_required
 def cargar_excel():
     """
@@ -753,7 +756,7 @@ def cargar_excel():
     
     return render_template('inventario/cargar_excel.html', title='Cargar Inventario desde Excel', current_rate=get_current_exchange_rate() or 0.0)
 
-@app.route('/inventario/cargar_excel_confirmar', methods=['GET', 'POST'])
+@routes_blueprint.route('/inventario/cargar_excel_confirmar', methods=['GET', 'POST'])
 @login_required
 def cargar_excel_confirmar():
     """
@@ -795,7 +798,7 @@ def cargar_excel_confirmar():
                            current_rate=current_rate)
 
 # Rutas de configuración de empresa
-@app.route('/configuracion/empresa', methods=['GET', 'POST'])
+@routes_blueprint.route('/configuracion/empresa', methods=['GET', 'POST'])
 @login_required
 def company_settings():
     """
@@ -842,7 +845,7 @@ def company_settings():
     return render_template('configuracion/empresa.html', title='Configuración de Empresa', company_info=company_info, current_rate=get_current_exchange_rate() or 0.0)
 
 # Rutas de Estructura de Costos
-@app.route('/costos/lista')
+@routes_blueprint.route('/costos/lista')
 @login_required
 def cost_list():
     """Muestra la tabla resumen de la estructura de costos de los productos."""
@@ -914,7 +917,7 @@ def cost_list():
                            current_rate=get_current_exchange_rate() or 0.0)
 
 
-@app.route('/costos/configuracion', methods=['GET', 'POST'])
+@routes_blueprint.route('/costos/configuracion', methods=['GET', 'POST'])
 @login_required
 def cost_structure_config():
     """Permite configurar los costos fijos y variables por defecto."""
@@ -951,7 +954,7 @@ def cost_structure_config():
                            current_rate=get_current_exchange_rate() or 0.0)
 
 
-@app.route('/costos/editar/<int:product_id>', methods=['GET', 'POST'])
+@routes_blueprint.route('/costos/editar/<int:product_id>', methods=['GET', 'POST'])
 @login_required
 def edit_product_cost(product_id):
     """Edita la estructura de costos y utilidad para un producto específico."""
@@ -1003,7 +1006,7 @@ def edit_product_cost(product_id):
                            product=product,
                            current_rate=get_current_exchange_rate() or 0.0)
 
-@app.route('/ordenes/imprimir/<int:order_id>')
+@routes_blueprint.route('/ordenes/imprimir/<int:order_id>')
 @login_required
 def print_delivery_note(order_id):
     """
@@ -1024,7 +1027,7 @@ def print_delivery_note(order_id):
                            iva=iva)
 
 # Nueva ruta de API para obtener la tasa de cambio actual
-@app.route('/api/exchange_rate')
+@routes_blueprint.route('/api/exchange_rate')
 def api_exchange_rate():
     rate = get_current_exchange_rate()
     return jsonify(rate=rate)
