@@ -1,15 +1,14 @@
-
-def post_worker_init(worker):
+def when_ready(server):
     """
-    Hook de Gunicorn que se ejecuta después de que un worker ha sido inicializado.
-    Aquí es donde iniciaremos la tarea en segundo plano de SocketIO.
+    Hook de Gunicorn que se ejecuta cuando el servidor maestro está listo.
+    Aquí es donde iniciaremos la tarea en segundo plano de SocketIO,
+    asegurando que se ejecute una sola vez en el proceso principal.
     """
-    # Use Gunicorn's logger for best practice.
-    worker.log.info(f"Worker {worker.pid} initialized. Starting background task.")
+    server.log.info("Server master is ready. Starting background task.")
     
-    # We only need to import the objects we are going to use.
+    # Importar aquí para asegurar que la app esté completamente cargada.
     from app import socketio, update_exchange_rate_task
 
     # Iniciar la tarea en segundo plano
     socketio.start_background_task(target=update_exchange_rate_task)
-    worker.log.info(f"Background task started for worker {worker.pid}.")
+    server.log.info("Background task started in master process.")
