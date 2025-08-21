@@ -49,21 +49,31 @@ def update_exchange_rate_task():
     Tarea en segundo plano para actualizar la tasa de cambio cada hora.
     Utiliza socketio.sleep para ser compatible con eventlet.
     """
-    logger.info("Iniciando tarea de actualización de tasa de cambio en segundo plano.")
+    logger.info("La tarea de actualización de tasa de cambio en segundo plano está lista para iniciarse.")
+    # Añadir un pequeño retraso inicial para asegurar que la app esté completamente iniciada
+    socketio.sleep(10)
     while True:
-        with app.app_context():
-            logger.info("Ejecutando actualización de tasa de cambio...")
-            from utils import obtener_tasa_p2p_binance # Importar aquí para evitar dependencias circulares
-            new_rate = obtener_tasa_p2p_binance()
-            if new_rate:
-                rate_entry = ExchangeRate.query.first()
-                if not rate_entry:
-                    rate_entry = ExchangeRate(rate=new_rate)
-                    db.session.add(rate_entry)
+        try:
+            with app.app_context():
+                logger.info("Ejecutando actualización de tasa de cambio...")
+                from utils import obtener_tasa_p2p_binance # Importar aquí para evitar dependencias circulares
+                new_rate = obtener_tasa_p2p_binance()
+                if new_rate:
+                    rate_entry = ExchangeRate.query.first()
+                    if not rate_entry:
+                        rate_entry = ExchangeRate(rate=new_rate)
+                        db.session.add(rate_entry)
+                    else:
+                        rate_entry.rate = new_rate
+                    db.session.commit()
+                    logger.info(f"Tasa de cambio actualizada a: {new_rate}")
                 else:
-                    rate_entry.rate = new_rate
-                db.session.commit()
-                logger.info(f"Tasa de cambio actualizada a: {new_rate}")
+                    logger.warning("No se obtuvo una nueva tasa de cambio en esta ejecución.")
+        except Exception as e:
+            logger.error(f"Error en la tarea de actualización de tasa de cambio: {e}", exc_info=True)
+            # Asegurarse de revertir la sesión de la base de datos en caso de error
+            with app.app_context():
+                db.session.rollback()
         # Esperar 1 hora (3600 segundos) antes de la siguiente ejecución
         socketio.sleep(3600)
 
