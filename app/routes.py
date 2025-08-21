@@ -305,30 +305,30 @@ def new_purchase():
     if request.method == 'POST':
         try:
             provider_id = request.form.get('provider_id')
-            total_cost = 0
-            
-            new_purchase = Purchase(provider_id=provider_id, total_cost=total_cost)
+            new_purchase = Purchase(provider_id=provider_id, total_cost=0)
             db.session.add(new_purchase)
-            db.session.commit()
+            db.session.flush() # Assigns an ID to new_purchase without committing
             
             # Procesar los productos de la compra
             product_ids = request.form.getlist('product_id[]')
             quantities = request.form.getlist('quantity[]')
             costs_usd = request.form.getlist('cost_usd[]')
 
+            total_cost = 0
             for p_id, q, c_usd in zip(product_ids, quantities, costs_usd):
                 product = Product.query.get(p_id)
-                if product and int(q) > 0:
+                quantity = int(q)
+                if product and quantity > 0:
                     # Guardar el costo en VES al momento de la compra
                     cost_ves = float(c_usd) * current_rate
                     item = PurchaseItem(
                         purchase_id=new_purchase.id,
                         product_id=p_id,
-                        quantity=int(q),
+                        quantity=quantity,
                         cost=cost_ves
                     )
                     db.session.add(item)
-                    total_cost += cost_ves * int(q)
+                    total_cost += cost_ves * quantity
             
             new_purchase.total_cost = total_cost
             
@@ -337,8 +337,8 @@ def new_purchase():
             notification_link = url_for('main.purchase_detail', purchase_id=new_purchase.id)
             create_notification_for_admins(notification_message, notification_link)
 
+            # Commit the entire transaction at once.
             db.session.commit()
-
             flash('Compra creada exitosamente!', 'success')
             return redirect(url_for('main.purchase_list'))
         except (ValueError, IntegrityError) as e:
