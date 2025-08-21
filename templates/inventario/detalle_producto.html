@@ -6,7 +6,9 @@
         <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-box mr-2"></i>Detalles del Producto</h1>
         <a href="{{ url_for('inventory_list') }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver al inventario</a>
     </div>
-
+    {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+    <a href="{{ url_for('edit_product_cost', product_id=product.id) }}" class="btn btn-info btn-sm"><i class="fas fa-calculator mr-2"></i>Editar Costos</a>
+    {% endif %}
     <div class="bg-white p-8 rounded-lg shadow-md flex flex-col md:flex-row items-start md:space-x-8">
         <!-- Imagen del producto y códigos de identificación -->
         <div class="w-full md:w-1/3 mb-6 md:mb-0 space-y-4">
