@@ -45,13 +45,21 @@ login_manager.login_message_category = 'info'
 
 # Inicializar el scheduler
 scheduler = BackgroundScheduler()
-scheduler.start()
+# NO inicies el scheduler aquí. Lo haremos al final del archivo.
 
 socketio = SocketIO(app, async_mode='eventlet')
 
 # Importar modelos y rutas después de crear las instancias de db y app
 from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, ExchangeRate
-from routes import *
+from routes import obtener_tasa_p2p_binance, routes_blueprint
+
+app.register_blueprint(routes_blueprint)
+
+# Configurar e iniciar el scheduler de forma segura
+if not scheduler.running:
+    scheduler.add_job(func=obtener_tasa_p2p_binance, trigger="interval", hours=1)
+    scheduler.start()
+    logger.info("Scheduler iniciado con la tarea de actualización de tasas.")
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -121,5 +129,4 @@ def create_db_and_initial_data():
 
 if __name__ == '__main__':
     # Para ejecutar con SocketIO en desarrollo, usa socketio.run
-    # El comando 'flask run' ya no funcionará para websockets.
     socketio.run(app, debug=True)
