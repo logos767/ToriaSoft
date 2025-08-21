@@ -4,7 +4,7 @@ import secrets
 from dotenv import load_dotenv
 from flask import Flask
 
-# Import extensions from the new extensions file
+# Import extensions
 from .extensions import db, login_manager, bcrypt, socketio
 
 # Load environment variables
@@ -35,6 +35,9 @@ def create_app():
     login_manager.init_app(app)
     socketio.init_app(app)
 
+    # Attach socketio to the app object so we can access it in run.py
+    app.socketio = socketio
+
     login_manager.login_view = 'main.login' # Note: 'main.' prefix from blueprint
     login_manager.login_message_category = 'info'
 
@@ -55,7 +58,6 @@ def create_app():
         register_commands(app)
 
     # --- Start Background Task ---
-    # This is started after the app is fully configured
     from .tasks import update_exchange_rate_task
     socketio.start_background_task(target=update_exchange_rate_task)
     logger.info("Background task for exchange rate has been started.")
