@@ -51,7 +51,7 @@ socketio = SocketIO(app, async_mode='eventlet')
 
 # Importar modelos y rutas después de crear las instancias de db y app
 from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, ExchangeRate
-from routes import obtener_tasa_p2p_binance, routes_blueprint
+from routes import routes_blueprint
 
 app.register_blueprint(routes_blueprint)
 
