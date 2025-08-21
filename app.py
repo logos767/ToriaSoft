@@ -53,22 +53,28 @@ def load_user(user_id):
     """Carga un usuario por su ID para Flask-Login."""
     return User.query.get(int(user_id))
 
+@app.cli.command('init-db')
 def create_db_and_initial_data():
     """Crea la base de datos y carga los datos iniciales."""
     with app.app_context():
         # Usa inspect para verificar la existencia de la tabla
         inspector = inspect(db.engine)
         if not inspector.has_table('user'):
+            logger.info("Creando todas las tablas de la base de datos...")
             db.create_all()
             # Cargar usuarios predeterminados
             if not User.query.filter_by(username='admin').first():
+                logger.info("Creando usuario administrador predeterminado...")
                 hashed_password = bcrypt.generate_password_hash('admin123').decode('utf-8')
                 admin_user = User(username='admin', password=hashed_password, role='administrador')
                 db.session.add(admin_user)
                 db.session.commit()
+        else:
+            logger.info("La tabla 'user' ya existe, omitiendo la creación de tablas.")
 
         # Cargar clientes de prueba
         if not Client.query.first():
+            logger.info("Cargando clientes de prueba...")
             clients = [
                 Client(name='Juan Pérez', email='juan.perez@example.com', phone='555-1234', address='Calle Falsa 123'),
                 Client(name='María López', email='maria.lopez@example.com', phone='555-5678', address='Avenida Siempre Viva 456'),
@@ -76,9 +82,12 @@ def create_db_and_initial_data():
             ]
             db.session.bulk_save_objects(clients)
             db.session.commit()
+        else:
+            logger.info("Ya existen clientes en la base de datos, omitiendo carga.")
 
         # Cargar proveedores de prueba
         if not Provider.query.first():
+            logger.info("Cargando proveedores de prueba...")
             providers = [
                 Provider(name='Provedora Textiles S.A.', contact='Ana Gómez', phone='555-9000'),
                 Provider(name='Moda Mayorista C.A.', contact='Carlos Ruiz', phone='555-9001'),
@@ -86,9 +95,12 @@ def create_db_and_initial_data():
             ]
             db.session.bulk_save_objects(providers)
             db.session.commit()
+        else:
+            logger.info("Ya existen proveedores en la base de datos, omitiendo carga.")
 
         # Cargar productos de prueba
         if not Product.query.first():
+            logger.info("Cargando productos de prueba...")
             products = [
                 Product(name='Franela Algodón Blanca', description='Franela 100% algodón, cuello redondo.', barcode='000123456789', qr_code='QR0001', image_url='https://placehold.co/600x400/fff/000?text=Franela+Blanca', size='M', color='Blanco', cost_usd=5.00, price_usd=15.00, stock=50),
                 Product(name='Pantalón Jeans Azul', description='Jeans de corte recto, tela denim de alta calidad.', barcode='000987654321', qr_code='QR0002', image_url='https://placehold.co/600x400/fff/000?text=Jeans+Azul', size='32', color='Azul', cost_usd=25.00, price_usd=60.00, stock=30),
@@ -98,9 +110,11 @@ def create_db_and_initial_data():
             ]
             db.session.bulk_save_objects(products)
             db.session.commit()
-
-# **Llamada a la función fuera del if __name__ == '__main__':**
-create_db_and_initial_data()
+        else:
+            logger.info("Ya existen productos en la base de datos, omitiendo carga.")
+        logger.info("¡Inicialización de la base de datos completada!")
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Para ejecutar con SocketIO en desarrollo, usa socketio.run
+    # El comando 'flask run' ya no funcionará para websockets.
+    socketio.run(app, debug=True)
