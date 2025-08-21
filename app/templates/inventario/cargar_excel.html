@@ -25,7 +25,7 @@
     </div>
 
     <div class="bg-white p-6 rounded-lg shadow-md">
-        <form action="{{ url_for('cargar_excel') }}" method="POST" enctype="multipart/form-data">
+        <form action="{{ url_for('main.cargar_excel') }}" method="POST" enctype="multipart/form-data">
             <div class="mb-4">
                 <label for="file" class="block text-gray-700 text-sm font-bold mb-2">Selecciona un archivo de Excel:</label>
                 <input type="file" name="file" id="file" required

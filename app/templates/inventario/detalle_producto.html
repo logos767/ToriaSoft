@@ -4,10 +4,10 @@
 <div class="container mx-auto p-4 max-w-4xl">
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-box mr-2"></i>Detalles del Producto</h1>
-        <a href="{{ url_for('inventory_list') }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver al inventario</a>
+        <a href="{{ url_for('main.inventory_list') }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver al inventario</a>
     </div>
     {% if current_user.is_authenticated and current_user.role == 'administrador' %}
-    <a href="{{ url_for('edit_product_cost', product_id=product.id) }}" class="btn btn-info btn-sm"><i class="fas fa-calculator mr-2"></i>Editar Costos</a>
+    <a href="{{ url_for('main.edit_product_cost', product_id=product.id) }}" class="btn btn-info btn-sm"><i class="fas fa-calculator mr-2"></i>Editar Costos</a>
     {% endif %}
     <div class="bg-white p-8 rounded-lg shadow-md flex flex-col md:flex-row items-start md:space-x-8">
         <!-- Imagen del producto y códigos de identificación -->

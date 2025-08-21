@@ -11,12 +11,12 @@
             Al confirmar, las existencias de los productos de esta orden se actualizarán automáticamente en el inventario.
         </p>
         
-        <form method="POST" action="{{ url_for('new_reception', purchase_id=purchase.id) }}">
+        <form method="POST" action="{{ url_for('main.new_reception', purchase_id=purchase.id) }}">
             <div class="flex items-center justify-end">
                 <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
                     <i class="fas fa-check mr-2"></i>Confirmar y Recibir
                 </button>
-                <a href="{{ url_for('purchase_list') }}" class="ml-4 text-red-500 hover:text-red-700">Cancelar</a>
+                <a href="{{ url_for('main.purchase_list') }}" class="ml-4 text-red-500 hover:text-red-700">Cancelar</a>
             </div>
         </form>
     </div>

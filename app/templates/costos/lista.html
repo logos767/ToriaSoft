@@ -10,12 +10,12 @@
                     <div class="col">
                         <h4 class="page-title">Estructura de Costos de Productos</h4>
                         <ol class="breadcrumb">
-                            <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
                             <li class="breadcrumb-item active">Costos</li>
                         </ol>
                     </div>
                     <div class="col-auto align-self-center">
-                        <a href="{{ url_for('cost_structure_config') }}" class="btn btn-primary"><i class="fas fa-cog"></i> Configurar Costos Generales</a>
+                        <a href="{{ url_for('main.cost_structure_config') }}" class="btn btn-primary"><i class="fas fa-cog"></i> Configurar Costos Generales</a>
                     </div>
                 </div>
             </div>
@@ -62,7 +62,7 @@
                                         {% if data.error %}
                                             <span class="badge badge-danger">{{ data.error }}</span>
                                         {% endif %}
-                                        <a href="{{ url_for('edit_product_cost', product_id=data.product.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <a href="{{ url_for('main.edit_product_cost', product_id=data.product.id) }}" class="btn btn-sm btn-outline-primary">
                                             <i class="fas fa-edit"></i> Editar
                                         </a>
                                     </td>

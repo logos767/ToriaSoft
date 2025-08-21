@@ -4,7 +4,7 @@
 <div class="container mx-auto p-4">
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-shopping-basket mr-2"></i>Lista de Compras</h1>
-        <a href="{{ url_for('new_purchase') }}" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
+        <a href="{{ url_for('main.new_purchase') }}" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
             <i class="fas fa-plus mr-2"></i>Nueva Compra
         </a>
     </div>
@@ -33,9 +33,9 @@
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">{{ purchase.status }}</span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <a href="{{ url_for('purchase_detail', purchase_id=purchase.id) }}" class="text-indigo-600 hover:text-indigo-900">Detalles</a>
+                            <a href="{{ url_for('main.purchase_detail', purchase_id=purchase.id) }}" class="text-indigo-600 hover:text-indigo-900">Detalles</a>
                             {% if not purchase.reception %}
-                            <a href="{{ url_for('new_reception', purchase_id=purchase.id) }}" class="ml-4 text-green-600 hover:text-green-900">Recibir</a>
+                            <a href="{{ url_for('main.new_reception', purchase_id=purchase.id) }}" class="ml-4 text-green-600 hover:text-green-900">Recibir</a>
                             {% endif %}
                         </td>
                     </tr>

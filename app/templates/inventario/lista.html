@@ -5,11 +5,11 @@
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-boxes mr-2"></i>Inventario</h1>
         <div class="flex items-center space-x-2">
-            <a href="{{ url_for('new_product') }}" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
+            <a href="{{ url_for('main.new_product') }}" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
                 <i class="fas fa-plus mr-2"></i>Nuevo Producto
             </a>
             {% if user_role == 'administrador' %}
-            <a href="{{ url_for('cargar_excel') }}" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors">
+            <a href="{{ url_for('main.cargar_excel') }}" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors">
                 <i class="fas fa-file-excel mr-2"></i>Cargar Excel
             </a>
             {% endif %}
@@ -49,7 +49,7 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${{ "%.2f"|format(product.cost_usd) }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">Bs. {{ "%.2f"|format(product.price_usd * current_rate) }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <a href="{{ url_for('product_detail', product_id=product.id) }}" class="text-indigo-600 hover:text-indigo-900">Detalles</a>
+                            <a href="{{ url_for('main.product_detail', product_id=product.id) }}" class="text-indigo-600 hover:text-indigo-900">Detalles</a>
                         </td>
                     </tr>
                     {% endfor %}
@@ -81,7 +81,7 @@
                         </div>
                     </div>
                 </div>
-                <a href="{{ url_for('product_detail', product_id=product.id) }}" class="block bg-gray-100 text-center py-2 text-sm font-semibold text-indigo-600 hover:bg-gray-200 transition-colors">
+                <a href="{{ url_for('main.product_detail', product_id=product.id) }}" class="block bg-gray-100 text-center py-2 text-sm font-semibold text-indigo-600 hover:bg-gray-200 transition-colors">
                     Ver Detalles
                 </a>
             </div>

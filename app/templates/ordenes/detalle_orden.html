@@ -5,9 +5,9 @@
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-shopping-cart mr-2"></i>Detalles de Orden #{{ order.id }}</h1>
         <div class="flex space-x-2">
-            <a href="{{ url_for('order_list') }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver a Órdenes</a>
+            <a href="{{ url_for('main.order_list') }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver a Órdenes</a>
             {% if company_info %}
-            <a href="{{ url_for('print_delivery_note', order_id=order.id) }}" target="_blank" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">
+            <a href="{{ url_for('main.print_delivery_note', order_id=order.id) }}" target="_blank" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">
                 <i class="fas fa-print mr-2"></i>Imprimir Recibo/Nota
             </a>
             {% endif %}

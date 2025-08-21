@@ -25,7 +25,7 @@
             $('#notifications-dropdown').on('click', function(e) {
                 let badge = $(this).find('.navbar-badge');
                 if (badge.length > 0 && parseInt(badge.text()) > 0) {
-                    const url = "{{ url_for('mark_notifications_as_read') }}";
+                    const url = "{{ url_for('main.mark_notifications_as_read') }}";
                     $.post(url)
                         .done(function(data) {
                             if (data.success) {
