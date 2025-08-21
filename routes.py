@@ -1,7 +1,7 @@
 import requests
 from flask import render_template, url_for, flash, redirect, request, jsonify, session
 from app import app, db, bcrypt
-from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, ExchangeRate
+from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo
 from flask_login import login_user, current_user, logout_user, login_required
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, extract
@@ -86,49 +86,16 @@ def obtener_tasa_p2p_binance():
         app.logger.error(f"Error inesperado procesando datos de Binance P2P: {e}")
         return None
 
-# Función para actualizar la tasa de cambio en la base de datos
-def update_exchange_rate_job():
-    """
-    Tarea programada para actualizar la tasa de cambio.
-    Utiliza un patrón de 'actualizar o crear' (upsert) para mayor eficiencia.
-    """
-    with app.app_context(): # Asegurarse de estar en el contexto de la aplicación
-        rate_value = obtener_tasa_p2p_binance()
-        
-        if rate_value:
-            # Intentar obtener el registro existente
-            exchange_rate_entry = ExchangeRate.query.first()
-            
-            if exchange_rate_entry:
-                # Si existe, actualizarlo
-                exchange_rate_entry.rate = rate_value
-                app.logger.info(f"Tasa de cambio existente actualizada: 1 USDT = {rate_value} VES")
-            else:
-                # Si no existe, crear uno nuevo
-                exchange_rate_entry = ExchangeRate(rate=rate_value)
-                db.session.add(exchange_rate_entry)
-                app.logger.info(f"Nueva tasa de cambio creada: 1 USDT = {rate_value} VES")
-            
-            try:
-                db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                app.logger.error(f"Error al guardar la tasa de cambio en la BD: {e}")
-        else:
-            app.logger.error("No se pudo obtener la nueva tasa de cambio. Se mantendrá la última conocida.")
-
-# Programar la tarea de actualización
-from app import scheduler
-scheduler.add_job(id='update_rate', func=update_exchange_rate_job, trigger='cron', hour=18)
-
 # Helper para obtener la tasa de cambio actual
 def get_current_exchange_rate():
     """
-    Obtiene la tasa de cambio más reciente de la base de datos.
+    Obtiene la tasa de cambio directamente desde la API de Binance.
     Devuelve el valor de la tasa como float, o None si no se encuentra.
+    ADVERTENCIA: Llamar a esta función en cada solicitud puede ser lento
+    y podría causar que Binance bloquee la IP. Se recomienda implementar
+    un sistema de caché.
     """
-    rate_entry = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
-    return rate_entry.rate if rate_entry else None
+    return obtener_tasa_p2p_binance()
 
 # Rutas de autenticación
 @app.route('/login', methods=['GET', 'POST'])
