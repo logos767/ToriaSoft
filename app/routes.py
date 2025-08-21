@@ -693,16 +693,22 @@ def cargar_excel_confirmar():
     if request.method == 'POST':
         # El usuario ha confirmado, procesar las actualizaciones
         try:
-            for update in pending_updates:
-                product = Product.query.get(update['id'])
-                if product:
-                    product.stock = update['new_stock']
-                    product.cost_usd = update['new_cost_usd']
-                    product.name = update['new_name']
-                    product.price_usd = update['new_price_usd']
-                    product.image_url = update['new_image_url']
-                    db.session.add(product)
-            
+            if pending_updates:
+                # Preparar los datos para una actualización masiva (bulk update)
+                # Esto es mucho más eficiente que actualizar en un bucle.
+                update_mappings = [
+                    {
+                        'id': update['id'],
+                        'stock': update['new_stock'],
+                        'cost_usd': update['new_cost_usd'],
+                        'name': update['new_name'],
+                        'price_usd': update['new_price_usd'],
+                        'image_url': update['new_image_url']
+                    }
+                    for update in pending_updates
+                ]
+                db.session.bulk_update_mappings(Product, update_mappings)
+
             db.session.commit()
             flash(f'Se han actualizado {len(pending_updates)} productos exitosamente.', 'success')
         except Exception as e:
