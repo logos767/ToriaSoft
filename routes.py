@@ -1,5 +1,5 @@
 import requests
-from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, session
+from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, session, current_app
 from app import db, bcrypt, socketio # 'app' ya no es necesario para los decoradores de ruta
 from flask_socketio import join_room
 from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification
@@ -46,7 +46,7 @@ def obtener_tasa_p2p_binance():
         
         # Binance devuelve '000000' en el código cuando la solicitud es exitosa
         if data.get('code') != '000000' or not data.get('data'):
-            app.logger.warning(f"La API de Binance P2P no devolvió datos exitosos. Mensaje: {data.get('message', 'N/A')}")
+            current_app.logger.warning(f"La API de Binance P2P no devolvió datos exitosos. Mensaje: {data.get('message', 'N/A')}")
             return None
             
         prices = []
@@ -65,11 +65,11 @@ def obtener_tasa_p2p_binance():
                 if available_amount > 50:
                     prices.append(price)
             except (ValueError, TypeError, KeyError) as e:
-                app.logger.debug(f"Omitiendo anuncio P2P por datos inválidos: {adv}. Error: {e}")
+                current_app.logger.debug(f"Omitiendo anuncio P2P por datos inválidos: {adv}. Error: {e}")
                 continue
         
         if not prices:
-            app.logger.warning("No se encontraron anuncios de P2P válidos para calcular la tasa.")
+            current_app.logger.warning("No se encontraron anuncios de P2P válidos para calcular la tasa.")
             return None
         
         # Ordenar precios de menor a mayor y calcular el promedio de los 5 más bajos
@@ -81,13 +81,13 @@ def obtener_tasa_p2p_binance():
         return round(avg_price, 2)
         
     except requests.exceptions.Timeout:
-        app.logger.error("Timeout al intentar conectar con la API de Binance P2P.")
+        current_app.logger.error("Timeout al intentar conectar con la API de Binance P2P.")
         return None
     except requests.exceptions.RequestException as e:
-        app.logger.error(f"Error de red al obtener tasa P2P de Binance: {e}")
+        current_app.logger.error(f"Error de red al obtener tasa P2P de Binance: {e}")
         return None
     except Exception as e:
-        app.logger.error(f"Error inesperado procesando datos de Binance P2P: {e}")
+        current_app.logger.error(f"Error inesperado procesando datos de Binance P2P: {e}")
         return None
 
 # Helper para obtener la tasa de cambio actual
@@ -131,10 +131,10 @@ def create_notification_for_admins(message, link):
 
     except Exception as e:
         # Usar logger para registrar el error sin detener el flujo principal
-        app.logger.error(f"Error al crear notificaciones para administradores: {e}")
+        current_app.logger.error(f"Error al crear notificaciones para administradores: {e}")
         db.session.rollback() # Revertir si algo falla
 
-@app.context_processor
+@routes_blueprint.context_processor
 def inject_notifications():
     """
     Hace que las notificaciones no leídas estén disponibles en el contexto de la plantilla
@@ -151,7 +151,7 @@ def inject_notifications():
             unread_notification_count=count
         )
     except Exception as e:
-        app.logger.error(f"Error al obtener notificaciones para el usuario {current_user.id}: {e}")
+        current_app.logger.error(f"Error al obtener notificaciones para el usuario {current_user.id}: {e}")
         return dict(unread_notifications=[], unread_notification_count=0)
 
 @routes_blueprint.route('/notifications/mark-as-read', methods=['POST'])
@@ -165,7 +165,7 @@ def mark_notifications_as_read():
         return jsonify(success=True)
     except Exception as e:
         db.session.rollback()
-        app.logger.error(f"Error al marcar notificaciones como leídas para el usuario {current_user.id}: {e}")
+        current_app.logger.error(f"Error al marcar notificaciones como leídas para el usuario {current_user.id}: {e}")
         return jsonify(success=False, message='Error interno del servidor'), 500
 
 @socketio.on('connect')
