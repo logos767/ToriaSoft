@@ -439,33 +439,30 @@ def new_order():
         return redirect(url_for('main.order_list'))
     
     if request.method == 'POST':
+        client_id = request.form.get('client_id')
+        product_ids = request.form.getlist('product_id[]')
+        quantities = request.form.getlist('quantity[]')
+        prices_usd = request.form.getlist('price_usd[]')
+        
         try:
-            client_id = request.form.get('client_id')
-            total_amount = 0
-            
-            # Verificar el stock de cada producto antes de crear la orden
-            product_ids = request.form.getlist('product_id[]')
-            quantities = request.form.getlist('quantity[]')
-            
-            for p_id, q in zip(product_ids, quantities):
-                product = Product.query.get(p_id)
-                quantity = int(q)
-                if product and quantity > 0:
-                    if product.stock < quantity:
-                        raise ValueError(f'Stock insuficiente para el producto: {product.name}')
-
-            # Si todas las verificaciones de stock son exitosas, se procede a crear la orden
-            new_order = Order(client_id=client_id, status='Pendiente', total_amount=total_amount)
+            # Iniciar la transacción. Todo lo que sigue se ejecutará como una unidad.
+            new_order = Order(client_id=client_id, status='Pendiente', total_amount=0)
             db.session.add(new_order)
-            db.session.commit()
+            db.session.flush() # Asigna un ID a new_order sin comitear la transacción
 
-            # Procesar los productos de la orden y actualizar el stock
-            prices_usd = request.form.getlist('price_usd[]')
-
+            total_amount = 0
             for p_id, q, p_usd in zip(product_ids, quantities, prices_usd):
                 product = Product.query.get(p_id)
                 quantity = int(q)
                 
+                if not product or quantity <= 0:
+                    continue
+
+                # Verificar y descontar stock en una sola operación atómica
+                if product.stock < quantity:
+                    # Si no hay stock, se lanza un error que revertirá toda la transacción.
+                    raise ValueError(f'Stock insuficiente para el producto: {product.name}')
+
                 # Guardar el precio en VES al momento de la venta
                 price_ves = float(p_usd) * current_rate
                 
@@ -476,13 +473,9 @@ def new_order():
                     price=price_ves
                 )
                 db.session.add(item)
-                total_amount += price_ves * quantity
                 
-                # Descontar del stock
+                # Actualizar stock y registrar movimiento
                 product.stock -= quantity
-                db.session.add(product)
-                
-                # Log del movimiento de salida
                 movement = Movement(
                     product_id=product.id,
                     type='Salida',
@@ -493,7 +486,9 @@ def new_order():
                     related_party_type='Cliente'
                 )
                 db.session.add(movement)
-            
+                
+                total_amount += price_ves * quantity
+
             new_order.total_amount = total_amount
             new_order.status = 'Completada'
 
@@ -503,7 +498,6 @@ def new_order():
             create_notification_for_admins(notification_message, notification_link)
 
             db.session.commit()
-
             flash('Orden de venta creada exitosamente!', 'success')
             return redirect(url_for('main.order_list'))
         except (ValueError, IntegrityError) as e:
