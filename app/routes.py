@@ -107,7 +107,7 @@ def handle_connect():
 @routes_blueprint.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('main.dashboard'))
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -115,7 +115,7 @@ def login():
         if user and bcrypt.check_password_hash(user.password, password):
             login_user(user)
             next_page = request.args.get('next')
-            return redirect(next_page) if next_page else redirect(url_for('dashboard'))
+            return redirect(next_page) if next_page else redirect(url_for('main.dashboard'))
         else:
             flash('Inicio de sesión fallido. Por favor, verifica tu nombre de usuario y contraseña.', 'danger')
     return render_template('login.html', title='Iniciar Sesión')
@@ -124,7 +124,7 @@ def login():
 @routes_blueprint.route('/logout')
 def logout():
     logout_user()
-    return redirect(url_for('login'))
+    return redirect(url_for('main.login'))
 
 # Rutas principales
 @routes_blueprint.route('/')
@@ -209,7 +209,7 @@ def new_product():
             db.session.add(new_prod)
             db.session.commit()
             flash('Producto creado exitosamente!', 'success')
-            return redirect(url_for('inventory_list'))
+            return redirect(url_for('main.inventory_list'))
         except (ValueError, IntegrityError) as e:
             db.session.rollback()
             flash(f'Error al crear el producto: {str(e)}', 'danger')
@@ -238,7 +238,7 @@ def new_client():
             db.session.add(new_cli)
             db.session.commit()
             flash('Cliente creado exitosamente!', 'success')
-            return redirect(url_for('client_list'))
+            return redirect(url_for('main.client_list'))
         except IntegrityError:
             db.session.rollback()
             flash('Error: El email ya está registrado.', 'danger')
@@ -266,7 +266,7 @@ def new_provider():
             db.session.add(new_prov)
             db.session.commit()
             flash('Proveedor creado exitosamente!', 'success')
-            return redirect(url_for('provider_list'))
+            return redirect(url_for('main.provider_list'))
         except IntegrityError:
             db.session.rollback()
             flash('Error: Hubo un problema al crear el proveedor.', 'danger')
@@ -299,7 +299,7 @@ def new_purchase():
 
     if current_rate is None:
         flash('No se ha podido obtener la tasa de cambio. No se pueden crear compras en este momento.', 'danger')
-        return redirect(url_for('purchase_list'))
+        return redirect(url_for('main.purchase_list'))
 
     if request.method == 'POST':
         try:
@@ -333,13 +333,13 @@ def new_purchase():
             
             # Crear notificación para administradores
             notification_message = f"Nueva Orden de Compra #{new_purchase.id} creada."
-            notification_link = url_for('purchase_detail', purchase_id=new_purchase.id)
+            notification_link = url_for('main.purchase_detail', purchase_id=new_purchase.id)
             create_notification_for_admins(notification_message, notification_link)
 
             db.session.commit()
 
             flash('Compra creada exitosamente!', 'success')
-            return redirect(url_for('purchase_list'))
+            return redirect(url_for('main.purchase_list'))
         except (ValueError, IntegrityError) as e:
             db.session.rollback()
             flash(f'Error al crear la compra: {str(e)}', 'danger')
@@ -387,12 +387,12 @@ def new_reception(purchase_id):
             # Crear notificación para administradores
             notification_message = f"Nueva recepción para la compra #{purchase.id} procesada."
             # No hay una vista de detalle para la recepción, así que enlazamos a la lista.
-            notification_link = url_for('reception_list')
+            notification_link = url_for('main.reception_list')
             create_notification_for_admins(notification_message, notification_link)
 
             db.session.commit()
             flash('Recepción completada y stock actualizado!', 'success')
-            return redirect(url_for('reception_list'))
+            return redirect(url_for('main.reception_list'))
         except Exception as e:
             db.session.rollback()
             flash(f'Error al procesar la recepción: {str(e)}', 'danger')
@@ -435,7 +435,7 @@ def new_order():
     
     if current_rate is None:
         flash('No se ha podido obtener la tasa de cambio. No se pueden crear órdenes en este momento.', 'danger')
-        return redirect(url_for('order_list'))
+        return redirect(url_for('main.order_list'))
     
     if request.method == 'POST':
         try:
@@ -498,17 +498,17 @@ def new_order():
 
             # Crear notificación para administradores (Nota de Entrega)
             notification_message = f"Nueva Nota de Entrega #{new_order.id} creada."
-            notification_link = url_for('order_detail', order_id=new_order.id)
+            notification_link = url_for('main.order_detail', order_id=new_order.id)
             create_notification_for_admins(notification_message, notification_link)
 
             db.session.commit()
 
             flash('Orden de venta creada exitosamente!', 'success')
-            return redirect(url_for('order_list'))
+            return redirect(url_for('main.order_list'))
         except (ValueError, IntegrityError) as e:
             db.session.rollback()
             flash(f'Error al crear la orden: {str(e)}', 'danger')
-            return redirect(url_for('new_order'))
+            return redirect(url_for('main.new_order'))
 
     return render_template('ordenes/nuevo.html', title='Nueva Orden de Venta', clients=clients, products=products, current_rate=current_rate)
 
@@ -585,7 +585,7 @@ def cargar_excel():
     """
     if current_user.role != 'administrador':
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('inventory_list'))
+        return redirect(url_for('main.inventory_list'))
 
     if request.method == 'POST':
         if 'file' not in request.files:
@@ -665,11 +665,11 @@ def cargar_excel():
             # Guardar las actualizaciones pendientes en la sesión para el paso de confirmación
             if updates:
                 session['pending_updates'] = updates
-                return redirect(url_for('cargar_excel_confirmar'))
+                return redirect(url_for('main.cargar_excel_confirmar'))
             
             db.session.commit()
             flash('Archivo procesado exitosamente.', 'success')
-            return redirect(url_for('inventory_list'))
+            return redirect(url_for('main.inventory_list'))
 
         except Exception as e:
             db.session.rollback()
@@ -690,7 +690,7 @@ def cargar_excel_confirmar():
     """
     if current_user.role != 'administrador':
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('inventory_list'))
+        return redirect(url_for('main.inventory_list'))
         
     pending_updates = session.get('pending_updates', [])
     current_rate = get_current_exchange_rate() or 0.0
@@ -716,7 +716,7 @@ def cargar_excel_confirmar():
         finally:
             session.pop('pending_updates', None) # Limpiar los datos de la sesión
         
-        return redirect(url_for('inventory_list'))
+        return redirect(url_for('main.inventory_list'))
 
     return render_template('inventario/cargar_excel_confirmar.html', 
                            title='Confirmar Actualización de Inventario',
@@ -732,7 +732,7 @@ def company_settings():
     """
     if current_user.role != 'administrador':
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('main.dashboard'))
 
     company_info = CompanyInfo.query.first()
 
@@ -760,7 +760,7 @@ def company_settings():
                 db.session.commit()
                 flash('Información de la empresa guardada exitosamente!', 'success')
             
-            return redirect(url_for('company_settings'))
+            return redirect(url_for('main.company_settings'))
         except IntegrityError:
             db.session.rollback()
             flash('Error: El RIF ya se encuentra registrado.', 'danger')
@@ -777,13 +777,13 @@ def cost_list():
     """Muestra la tabla resumen de la estructura de costos de los productos."""
     if current_user.role != 'administrador':
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('main.dashboard'))
 
     cost_structure = CostStructure.query.first()
     if not cost_structure:
         # Si no hay configuración, redirigir para crearla primero.
         flash('Por favor, configure la estructura de costos generales primero.', 'info')
-        return redirect(url_for('cost_structure_config'))
+        return redirect(url_for('main.cost_structure_config'))
 
     products = Product.query.all()
     
@@ -849,7 +849,7 @@ def cost_structure_config():
     """Permite configurar los costos fijos y variables por defecto."""
     if current_user.role != 'administrador':
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('main.dashboard'))
 
     # Siempre trabajamos con la primera (y única) fila de configuración
     cost_structure = CostStructure.query.first()
@@ -869,7 +869,7 @@ def cost_structure_config():
             
             db.session.commit()
             flash('Configuración de costos guardada exitosamente.', 'success')
-            return redirect(url_for('cost_list'))
+            return redirect(url_for('main.cost_list'))
         except (ValueError, TypeError) as e:
             db.session.rollback()
             flash(f'Error al guardar la configuración. Verifique que los valores sean números. Error: {e}', 'danger')
@@ -886,7 +886,7 @@ def edit_product_cost(product_id):
     """Edita la estructura de costos y utilidad para un producto específico."""
     if current_user.role != 'administrador':
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('main.dashboard'))
 
     product = Product.query.get_or_404(product_id)
 
@@ -903,7 +903,7 @@ def edit_product_cost(product_id):
             cost_structure = CostStructure.query.first()
             if not cost_structure:
                 flash('La configuración de costos generales no existe. No se puede calcular el precio.', 'danger')
-                return redirect(url_for('cost_structure_config'))
+                return redirect(url_for('main.cost_structure_config'))
 
             # Se necesita recalcular el costo fijo por unidad con los datos actualizados
             total_estimated_sales = db.session.query(func.sum(Product.estimated_monthly_sales)).scalar() or 1
@@ -919,7 +919,7 @@ def edit_product_cost(product_id):
             product.price_usd = round(new_selling_price, 2) # Actualizar el precio de venta final
             db.session.commit()
             flash(f'Costos y precio del producto "{product.name}" actualizados exitosamente.', 'success')
-            return redirect(url_for('cost_list'))
+            return redirect(url_for('main.cost_list'))
         except ValueError as e:
             db.session.rollback()
             flash(f'Error al actualizar el producto: {e}', 'danger')
