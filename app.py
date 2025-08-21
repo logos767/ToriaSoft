@@ -17,8 +17,21 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Load configuration from config.py
-app.config.from_object('config.Config')
+# --- Configuration ---
+# Load configuration directly instead of from a file for better deployment reliability.
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(16))
+
+# Database configuration with error handling and auto-correction for Render's URL format.
+database_url = os.environ.get('DATABASE_URL')
+if not database_url:
+    logger.critical("FATAL: DATABASE_URL environment variable is not set!")
+    raise RuntimeError("DATABASE_URL environment variable is required")
+
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize extensions
 db.init_app(app)
