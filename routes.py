@@ -1,6 +1,6 @@
 import requests
 from flask import render_template, url_for, flash, redirect, request, jsonify, session
-from app import app, db, bcrypt, models
+from app import app, db, bcrypt
 from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification
 from flask_login import login_user, current_user, logout_user, login_required
 from sqlalchemy.exc import IntegrityError
