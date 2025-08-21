@@ -530,7 +530,7 @@ def estadisticas():
     sales_by_month = db.session.query(
         extract('month', Order.date_created).label('month'),
         func.sum(Order.total_amount).label('total_sales')
-    ).filter(extract('year', Order.date_created) == func.strftime('%Y', 'now')).group_by('month').order_by('month').all()
+    ).filter(extract('year', Order.date_created) == extract('year', func.now())).group_by('month').order_by('month').all()
 
     # Convierte los resultados a formatos más fáciles de usar en JS
     top_products_data = {'labels': [p[0] for p in top_products], 'values': [p[1] for p in top_products]}
@@ -744,7 +744,7 @@ def company_settings():
             db.session.rollback()
             flash(f'Ocurrió un error al guardar la información: {str(e)}', 'danger')
 
-    return render_template('configuracion/empresa.html', title='Configuración de Empresa', company_info=company_info)
+    return render_template('configuracion/empresa.html', title='Configuración de Empresa', company_info=company_info, current_rate=get_current_exchange_rate() or 0.0)
 
 # Rutas de Estructura de Costos
 @app.route('/costos/lista')
