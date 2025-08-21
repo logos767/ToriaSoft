@@ -9,7 +9,6 @@ from flask_socketio import SocketIO
 load_dotenv()
 
 from extensions import db, login_manager, bcrypt
-from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import inspect
 
 # Configure logging
@@ -43,23 +42,34 @@ bcrypt.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message_category = 'info'
 
-# Inicializar el scheduler
-scheduler = BackgroundScheduler()
-# NO inicies el scheduler aquí. Lo haremos al final del archivo.
-
 socketio = SocketIO(app, async_mode='eventlet')
+
+def update_exchange_rate_task():
+    """
+    Tarea en segundo plano para actualizar la tasa de cambio cada hora.
+    Utiliza socketio.sleep para ser compatible con eventlet.
+    """
+    logger.info("Iniciando tarea de actualización de tasa de cambio en segundo plano.")
+    while True:
+        with app.app_context():
+            logger.info("Ejecutando actualización de tasa de cambio...")
+            from utils import obtener_tasa_p2p_binance # Importar aquí para evitar dependencias circulares
+            new_rate = obtener_tasa_p2p_binance()
+            if new_rate:
+                rate_entry = ExchangeRate.query.first()
+                if not rate_entry:
+                    rate_entry = ExchangeRate(rate=new_rate)
+                    db.session.add(rate_entry)
+                else:
+                    rate_entry.rate = new_rate
+                db.session.commit()
+                logger.info(f"Tasa de cambio actualizada a: {new_rate}")
+        # Esperar 1 hora (3600 segundos) antes de la siguiente ejecución
+        socketio.sleep(3600)
 
 # Importar modelos y rutas después de crear las instancias de db y app
 from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, ExchangeRate
 from routes import routes_blueprint
-
-app.register_blueprint(routes_blueprint)
-
-# Configurar e iniciar el scheduler de forma segura
-if not scheduler.running:
-    scheduler.add_job(func=obtener_tasa_p2p_binance, trigger="interval", hours=1)
-    scheduler.start()
-    logger.info("Scheduler iniciado con la tarea de actualización de tasas.")
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -126,6 +136,11 @@ def create_db_and_initial_data():
         else:
             logger.info("Ya existen productos en la base de datos, omitiendo carga.")
         logger.info("¡Inicialización de la base de datos completada!")
+
+app.register_blueprint(routes_blueprint)
+
+# Iniciar la tarea en segundo plano una vez que la app está configurada
+socketio.start_background_task(target=update_exchange_rate_task)
 
 if __name__ == '__main__':
     # Para ejecutar con SocketIO en desarrollo, usa socketio.run
