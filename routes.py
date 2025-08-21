@@ -123,8 +123,72 @@ scheduler.add_job(id='update_rate', func=update_exchange_rate_job, trigger='cron
 
 # Helper para obtener la tasa de cambio actual
 def get_current_exchange_rate():
-    rate = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
-    return rate.rate if rate else 0.0
+# Ejemplo de cómo usarías esto en la ruta /ordenes/nuevo
+@app.route('/ordenes/nuevo', methods=['GET', 'POST'])
+@login_required
+def new_order():
+    clients = Client.query.all()
+    products = Product.query.all()
+    current_rate = get_current_exchange_rate()
+
+    # ¡Verificación clave!
+    if current_rate is None:
+        flash('No se ha podido obtener la tasa de cambio. No se pueden crear órdenes en este momento.', 'danger')
+        return redirect(url_for('dashboard')) # Redirigir si no hay tasa
+
+    if request.method == 'POST':
+        # ... el resto de tu lógica para crear la orden ...
+        # Aquí tienes la garantía de que current_rate es un número válido.
+        price_ves = float(p_usd) * current_rate
+        # ...
+
+    return render_template('ordenes/nuevo.html', title='Nueva Orden de Venta', clients=clients, products=products, current_rate=current_rate)
+# Ejemplo de cómo usarías esto en la ruta /ordenes/nuevo
+@app.route('/ordenes/nuevo', methods=['GET', 'POST'])
+@login_required
+def new_order():
+    clients = Client.query.all()
+    products = Product.query.all()
+    current_rate = get_current_exchange_rate()
+
+    # ¡Verificación clave!
+    if current_rate is None:
+        flash('No se ha podido obtener la tasa de cambio. No se pueden crear órdenes en este momento.', 'danger')
+        return redirect(url_for('dashboard')) # Redirigir si no hay tasa
+
+    if request.method == 'POST':
+        # ... el resto de tu lógica para crear la orden ...
+        # Aquí tienes la garantía de que current_rate es un número válido.
+        price_ves = float(p_usd) * current_rate
+        # ...
+
+    return render_template('ordenes/nuevo.html', title='Nueva Orden de Venta', clients=clients, products=products, current_rate=current_rate)
+# Ejemplo de cómo usarías esto en la ruta /ordenes/nuevo
+@app.route('/ordenes/nuevo', methods=['GET', 'POST'])
+@login_required
+def new_order():
+    clients = Client.query.all()
+    products = Product.query.all()
+    current_rate = get_current_exchange_rate()
+
+    # ¡Verificación clave!
+    if current_rate is None:
+        flash('No se ha podido obtener la tasa de cambio. No se pueden crear órdenes en este momento.', 'danger')
+        return redirect(url_for('dashboard')) # Redirigir si no hay tasa
+
+    if request.method == 'POST':
+        # ... el resto de tu lógica para crear la orden ...
+        # Aquí tienes la garantía de que current_rate es un número válido.
+        price_ves = float(p_usd) * current_rate
+        # ...
+
+    return render_template('ordenes/nuevo.html', title='Nueva Orden de Venta', clients=clients, products=products, current_rate=current_rate)
+    """
+    Obtiene la tasa de cambio más reciente de la base de datos.
+    Devuelve el valor de la tasa como float, o None si no se encuentra.
+    """
+    rate_entry = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
+    return rate_entry.rate if rate_entry else None
 
 # Rutas de autenticación
 @app.route('/login', methods=['GET', 'POST'])
@@ -160,7 +224,8 @@ def dashboard():
     total_clients = Client.query.count()
     total_orders = Order.query.count()
     
-    current_rate = get_current_exchange_rate()
+    # Obtener la tasa y usar 0.0 como valor por defecto solo para visualización
+    current_rate = get_current_exchange_rate() or 0.0
 
     # Puedes agregar más métricas relevantes aquí
     recent_products = Product.query.order_by(Product.id.desc()).limit(5).all()
