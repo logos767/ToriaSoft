@@ -2,6 +2,7 @@ import os
 import secrets
 import logging
 from flask import Flask
+from flask_socketio import SocketIO
 from extensions import db, login_manager, bcrypt
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import inspect
