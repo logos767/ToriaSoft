@@ -1,15 +1,16 @@
 from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, session, current_app
-from app import db, bcrypt, socketio # 'app' ya no es necesario para los decoradores de ruta
-from flask_socketio import join_room
-from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate
 from flask_login import login_user, current_user, logout_user, login_required
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, extract
 import openpyxl
-import os
 
-# 1. Crear una instancia de Blueprint. Este es el objeto que app.py está buscando.
+# Import extensions from the new extensions file
+from .extensions import db, bcrypt, socketio
+from .models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate
+
 routes_blueprint = Blueprint('main', __name__)
+
+
 
 # Helper para obtener la tasa de cambio actual
 def get_current_exchange_rate():
