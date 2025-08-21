@@ -1,7 +1,6 @@
 import logging
 import os
 import secrets
-import sys
 from dotenv import load_dotenv
 from flask import Flask
 from flask_socketio import SocketIO
