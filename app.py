@@ -1,8 +1,13 @@
 import os
 import secrets
 import logging
+from dotenv import load_dotenv
 from flask import Flask
 from flask_socketio import SocketIO
+
+# Carga las variables de entorno desde el archivo .env (solo para desarrollo local)
+load_dotenv()
+
 from extensions import db, login_manager, bcrypt
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import inspect
