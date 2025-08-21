@@ -10,75 +10,112 @@ import os
 
 # Función para obtener la tasa de cambio
 def obtener_tasa_p2p_binance():
-    """Obtiene la tasa de cambio USDT/VES desde el mercado P2P de Binance."""
+    """
+    Obtiene la tasa de cambio USDT/VES desde el mercado P2P de Binance.
+    Filtra los anuncios para obtener un precio más representativo.
+    """
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
     
-    # Configuración correcta para obtener el precio de venta de USDT en VES
+    # Payload para buscar vendedores de USDT en VES.
+    # Buscamos el precio al que la gente VENDE USDT, que es el precio de compra para nosotros.
     payload = {
         "asset": "USDT",
         "fiat": "VES",
-        "tradeType": "SELL",  # Cambiado a SELL para obtener precios de venta
-        "merchantCheck": False,
+        "tradeType": "SELL",
+        "merchantCheck": False, # Incluir anuncios de no comerciantes
         "page": 1,
-        "rows": 20,  # Aumentado para obtener más muestras
-        "publisherType": None,
-        "payTypes": []
+        "rows": 20, # Obtener una muestra de 20 anuncios
+        "payTypes": [], # Sin filtro por método de pago
+        "countries": [] # Sin filtro por país
     }
     
     headers = {
         "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
     
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=15)
-        response.raise_for_status()
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        response.raise_for_status() # Lanza una excepción para errores HTTP (4xx o 5xx)
         
         data = response.json()
         
-        # Verificar que la respuesta tenga la estructura esperada
-        if data.get('code') == '000000' and data.get('data') and len(data.get('data', [])) > 0:
-            # Filtrar anuncios válidos y obtener precios
-            prices = []
-            for adv in data['data']:
-                if 'adv' in adv and 'price' in adv['adv']:
-                    try:
-                        price = float(adv['adv']['price'])
-                        prices.append(price)
-                    except (ValueError, TypeError):
-                        continue
+        # Binance devuelve '000000' en el código cuando la solicitud es exitosa
+        if data.get('code') != '000000' or not data.get('data'):
+            app.logger.warning(f"La API de Binance P2P no devolvió datos exitosos. Mensaje: {data.get('message', 'N/A')}")
+            return None
             
-            if prices:
-                # Ordenar precios y tomar el promedio de los 5 mejores
-                prices.sort()
-                avg_price = sum(prices[:5]) / min(5, len(prices))
-                return round(avg_price, 2)
+        prices = []
+        for item in data['data']:
+            adv = item.get('adv')
+            if not adv:
+                continue
+            
+            # Extraer datos relevantes y asegurarse de que sean válidos
+            try:
+                price = float(adv.get('price'))
+                # Filtrar anuncios con muy poco disponible para evitar distorsiones
+                available_amount = float(adv.get('surplusAmount', 0))
+                
+                # Considerar solo anuncios con más de 50 USDT disponibles
+                if available_amount > 50:
+                    prices.append(price)
+            except (ValueError, TypeError, KeyError) as e:
+                app.logger.debug(f"Omitiendo anuncio P2P por datos inválidos: {adv}. Error: {e}")
+                continue
         
-        app.logger.warning(f"Respuesta de Binance P2P no exitosa: {data.get('message', 'Sin mensaje')}")
+        if not prices:
+            app.logger.warning("No se encontraron anuncios de P2P válidos para calcular la tasa.")
+            return None
+        
+        # Ordenar precios de menor a mayor y calcular el promedio de los 5 más bajos
+        prices.sort()
+        # Usar min() para manejar casos con menos de 5 precios
+        sample_size = min(5, len(prices)) 
+        avg_price = sum(prices[:sample_size]) / sample_size
+        
+        return round(avg_price, 2)
+        
+    except requests.exceptions.Timeout:
+        app.logger.error("Timeout al intentar conectar con la API de Binance P2P.")
         return None
-        
     except requests.exceptions.RequestException as e:
         app.logger.error(f"Error de red al obtener tasa P2P de Binance: {e}")
         return None
-    except (KeyError, IndexError, ValueError) as e:
-        app.logger.error(f"Error procesando datos de Binance P2P: {e}")
+    except Exception as e:
+        app.logger.error(f"Error inesperado procesando datos de Binance P2P: {e}")
         return None
 
 # Función para actualizar la tasa de cambio en la base de datos
 def update_exchange_rate_job():
-    """Tarea programada para actualizar la tasa de cambio."""
-    rate = obtener_tasa_p2p_binance()
-    if rate:
-        # Eliminar cualquier registro anterior para mantener solo el último
-        ExchangeRate.query.delete()
-        db.session.commit()
-
-        new_rate = ExchangeRate(rate=rate)
-        db.session.add(new_rate)
-        db.session.commit()
-        app.logger.info(f"Tasa de cambio actualizada: 1 USDT = {rate} VES")
-    else:
-        app.logger.error("No se pudo obtener la tasa de cambio. Se mantendrá la última conocida.")
+    """
+    Tarea programada para actualizar la tasa de cambio.
+    Utiliza un patrón de 'actualizar o crear' (upsert) para mayor eficiencia.
+    """
+    with app.app_context(): # Asegurarse de estar en el contexto de la aplicación
+        rate_value = obtener_tasa_p2p_binance()
+        
+        if rate_value:
+            # Intentar obtener el registro existente
+            exchange_rate_entry = ExchangeRate.query.first()
+            
+            if exchange_rate_entry:
+                # Si existe, actualizarlo
+                exchange_rate_entry.rate = rate_value
+                app.logger.info(f"Tasa de cambio existente actualizada: 1 USDT = {rate_value} VES")
+            else:
+                # Si no existe, crear uno nuevo
+                exchange_rate_entry = ExchangeRate(rate=rate_value)
+                db.session.add(exchange_rate_entry)
+                app.logger.info(f"Nueva tasa de cambio creada: 1 USDT = {rate_value} VES")
+            
+            try:
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                app.logger.error(f"Error al guardar la tasa de cambio en la BD: {e}")
+        else:
+            app.logger.error("No se pudo obtener la nueva tasa de cambio. Se mantendrá la última conocida.")
 
 # Programar la tarea de actualización
 from app import scheduler
