@@ -1,7 +1,7 @@
 import requests
 from flask import render_template, url_for, flash, redirect, request, jsonify, session
-from app import app, db, bcrypt
-from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure
+from app import app, db, bcrypt, models
+from models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification
 from flask_login import login_user, current_user, logout_user, login_required
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, extract
@@ -96,6 +96,60 @@ def get_current_exchange_rate():
     un sistema de caché.
     """
     return obtener_tasa_p2p_binance()
+
+# --- Funciones del Sistema de Notificaciones ---
+
+def create_notification_for_admins(message, link):
+    """
+    Crea una notificación para todos los usuarios con rol 'administrador'.
+    """
+    try:
+        # Asume que el modelo User tiene un campo 'role'
+        admins = User.query.filter_by(role='administrador').all()
+        for admin in admins:
+            notification = Notification(
+                user_id=admin.id,
+                message=message,
+                link=link
+            )
+            db.session.add(notification)
+    except Exception as e:
+        # Usar logger para registrar el error sin detener el flujo principal
+        app.logger.error(f"Error al crear notificaciones para administradores: {e}")
+
+@app.context_processor
+def inject_notifications():
+    """
+    Hace que las notificaciones no leídas estén disponibles en el contexto de la plantilla
+    para los usuarios administradores.
+    """
+    if not current_user.is_authenticated or current_user.role != 'administrador':
+        return dict(unread_notifications=[], unread_notification_count=0)
+    
+    try:
+        unread_notifications = Notification.query.filter_by(user_id=current_user.id, is_read=False).order_by(Notification.created_at.desc()).limit(10).all()
+        count = Notification.query.filter_by(user_id=current_user.id, is_read=False).count()
+        return dict(
+            unread_notifications=unread_notifications,
+            unread_notification_count=count
+        )
+    except Exception as e:
+        app.logger.error(f"Error al obtener notificaciones para el usuario {current_user.id}: {e}")
+        return dict(unread_notifications=[], unread_notification_count=0)
+
+@app.route('/notifications/mark-as-read', methods=['POST'])
+@login_required
+def mark_notifications_as_read():
+    if current_user.role != 'administrador':
+        return jsonify(success=False, message='Acceso denegado'), 403
+    try:
+        Notification.query.filter_by(user_id=current_user.id, is_read=False).update({'is_read': True})
+        db.session.commit()
+        return jsonify(success=True)
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error al marcar notificaciones como leídas para el usuario {current_user.id}: {e}")
+        return jsonify(success=False, message='Error interno del servidor'), 500
 
 # Rutas de autenticación
 @app.route('/login', methods=['GET', 'POST'])
@@ -324,6 +378,12 @@ def new_purchase():
                     total_cost += cost_ves * int(q)
             
             new_purchase.total_cost = total_cost
+            
+            # Crear notificación para administradores
+            notification_message = f"Nueva Orden de Compra #{new_purchase.id} creada."
+            notification_link = url_for('purchase_detail', purchase_id=new_purchase.id)
+            create_notification_for_admins(notification_message, notification_link)
+
             db.session.commit()
 
             flash('Compra creada exitosamente!', 'success')
@@ -372,6 +432,12 @@ def new_reception(purchase_id):
                     )
                     db.session.add(movement)
             
+            # Crear notificación para administradores
+            notification_message = f"Nueva recepción para la compra #{purchase.id} procesada."
+            # No hay una vista de detalle para la recepción, así que enlazamos a la lista.
+            notification_link = url_for('reception_list')
+            create_notification_for_admins(notification_message, notification_link)
+
             db.session.commit()
             flash('Recepción completada y stock actualizado!', 'success')
             return redirect(url_for('reception_list'))
@@ -477,6 +543,12 @@ def new_order():
             
             new_order.total_amount = total_amount
             new_order.status = 'Completada'
+
+            # Crear notificación para administradores (Nota de Entrega)
+            notification_message = f"Nueva Nota de Entrega #{new_order.id} creada."
+            notification_link = url_for('order_detail', order_id=new_order.id)
+            create_notification_for_admins(notification_message, notification_link)
+
             db.session.commit()
 
             flash('Orden de venta creada exitosamente!', 'success')

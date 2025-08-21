@@ -163,3 +163,16 @@ class CostStructure(db.Model):
     monthly_fixed_taxes = db.Column(db.Float, default=0)
     default_sales_commission_percent = db.Column(db.Float, default=0.05) # 5% por defecto
     default_marketing_percent = db.Column(db.Float, default=0.03) # 3% por defecto
+
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    message = db.Column(db.String(255), nullable=False)
+    link = db.Column(db.String(255), nullable=True)
+    is_read = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    user = db.relationship('User', backref=db.backref('notifications', lazy='dynamic'))
+
+    def __repr__(self):
+        return f"Notification('{self.message}', '{self.is_read}')"
