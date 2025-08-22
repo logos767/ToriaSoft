@@ -85,7 +85,7 @@ def inject_notifications():
 @login_required
 def mark_notifications_as_read():
     if current_user.role != 'administrador':
-        return jsonify(success=False, message='Acceso denegado'), 403
+        return jsonify(success=False, message='Acceso denedago'), 403
     try:
         Notification.query.filter_by(user_id=current_user.id, is_read=False).update({'is_read': True})
         db.session.commit()
@@ -102,30 +102,27 @@ def handle_connect():
     Esto permite enviarle notificaciones de forma privada.
     """
     if current_user.is_authenticated:
+        from flask_socketio import join_room
         join_room(f'user_{current_user.id}')
 
 # Rutas de autenticación
 @routes_blueprint.route('/login', methods=['GET', 'POST'])
 def login():
-    # This try...finally is a workaround for a "cannot notify on un-acquired lock"
-    # RuntimeError during request teardown, which can happen with async workers (gevent)
-    # and SQLAlchemy's connection pool.
-    try:
-        if current_user.is_authenticated:
-            return redirect(url_for('main.dashboard'))
-        if request.method == 'POST':
-            username = request.form.get('username')
-            password = request.form.get('password')
-            user = User.query.filter_by(username=username).first()
-            if user and bcrypt.check_password_hash(user.password, password):
-                login_user(user)
-                next_page = request.args.get('next')
-                return redirect(next_page) if next_page else redirect(url_for('main.dashboard'))
-            else:
-                flash('Inicio de sesión fallido. Por favor, verifica tu nombre de usuario y contraseña.', 'danger')
-        return render_template('login.html', title='Iniciar Sesión')
-    finally:
-        db.session.remove()
+    # The try...finally block was removed because the session is now handled
+    # globally by the @app.teardown_appcontext in __init__.py
+    if current_user.is_authenticated:
+        return redirect(url_for('main.dashboard'))
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username).first()
+        if user and bcrypt.check_password_hash(user.password, password):
+            login_user(user)
+            next_page = request.args.get('next')
+            return redirect(next_page) if next_page else redirect(url_for('main.dashboard'))
+        else:
+            flash('Inicio de sesión fallido. Por favor, verifica tu nombre de usuario y contraseña.', 'danger')
+    return render_template('login.html', title='Iniciar Sesión')
 
 
 @routes_blueprint.route('/logout')

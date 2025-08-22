@@ -61,5 +61,13 @@ def create_app():
     from .tasks import update_exchange_rate_task
     socketio.start_background_task(target=update_exchange_rate_task)
     logger.info("Background task for exchange rate has been started.")
+    
+    # --- Teardown Context ---
+    # This function will be called after each request to ensure the DB session is properly closed.
+    # This is the standard way to handle sessions and avoids the "un-acquired lock" error.
+    @app.teardown_appcontext
+    def shutdown_session(exception=None):
+        db.session.remove()
+
 
     return app
