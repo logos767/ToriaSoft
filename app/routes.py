@@ -13,20 +13,56 @@ routes_blueprint = Blueprint('main', __name__)
 
 
 
+# Función para obtener la tasa de cambio
+def obtener_tasa_p2p_binance():
+    """Obtiene la tasa de compra de USDT en VES desde el mercado P2P de Binance."""
+    url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
+    payload = {
+        "page": 1,
+        "rows": 1,
+        "payTypes": [],
+        "asset": "USDT",
+        "tradeType": "BUY",
+        "fiat": "VES",
+        "publisherType": None
+    }
+    headers = {"Content-Type": "application/json"}
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if data.get('code') == '000000' and data.get('data'):
+            return float(data['data'][0]['adv']['price'])
+        app.logger.warning(f"Respuesta de Binance P2P no exitosa: {data.get('message')}")
+        return None
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Error al obtener la tasa P2P de Binance: {e}")
+        return None
+
+# Función para actualizar la tasa de cambio en la base de datos
+def update_exchange_rate_job():
+    """Tarea programada para actualizar la tasa de cambio."""
+    rate = obtener_tasa_p2p_binance()
+    if rate:
+        # Eliminar cualquier registro anterior para mantener solo el último
+        ExchangeRate.query.delete()
+        db.session.commit()
+
+        new_rate = ExchangeRate(rate=rate)
+        db.session.add(new_rate)
+        db.session.commit()
+        app.logger.info(f"Tasa de cambio actualizada: 1 USDT = {rate} VES")
+    else:
+        app.logger.error("No se pudo obtener la tasa de cambio. Se mantendrá la última conocida.")
+
+# Programar la tarea de actualización
+scheduler.add_job(id='update_rate', func=update_exchange_rate_job, trigger='cron', hour=18)
+scheduler.start()
+
 # Helper para obtener la tasa de cambio actual
 def get_current_exchange_rate():
-    """
-    Obtiene la tasa de cambio más reciente desde la base de datos.
-    Esta tasa es actualizada por una tarea en segundo plano.
-    """
-    try:
-        # Usar .with_for_update() puede ser útil en escenarios de alta concurrencia, pero no es estrictamente necesario aquí.
-        rate_entry = ExchangeRate.query.first()
-        if rate_entry:
-            return rate_entry.rate
-    except Exception as e:
-        current_app.logger.error(f"Error al obtener la tasa de cambio de la base de datos: {e}")
-    return None
+    rate = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
+    return rate.rate if rate else 0.0
 
 # --- Funciones del Sistema de Notificaciones ---
 
