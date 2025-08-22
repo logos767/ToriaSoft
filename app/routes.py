@@ -37,7 +37,7 @@ def obtener_tasa_p2p_binance():
         app.logger.error(f"Error al obtener la tasa P2P de Binance: {e}")
         return None
 
-@main_bp.app_context_processor
+@routes_blueprint.context_processor
 def inject_exchange_rates():
     """Inyecta las tasas de cambio en el contexto de la aplicación."""
     exchange_rates = {}
