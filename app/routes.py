@@ -11,8 +11,6 @@ from .models import User, Product, Client, Provider, Order, OrderItem, Purchase,
 
 routes_blueprint = Blueprint('main', __name__)
 
-
-
 # Función para obtener la tasa de cambio
 def obtener_tasa_p2p_binance():
     """Obtiene la tasa de compra de USDT en VES desde el mercado P2P de Binance."""
@@ -39,29 +37,10 @@ def obtener_tasa_p2p_binance():
         app.logger.error(f"Error al obtener la tasa P2P de Binance: {e}")
         return None
 
-# Función para actualizar la tasa de cambio en la base de datos
-def update_exchange_rate_job():
-    """Tarea programada para actualizar la tasa de cambio."""
-    rate = obtener_tasa_p2p_binance()
-    if rate:
-        # Eliminar cualquier registro anterior para mantener solo el último
-        ExchangeRate.query.delete()
-        db.session.commit()
-
-        new_rate = ExchangeRate(rate=rate)
-        db.session.add(new_rate)
-        db.session.commit()
-        app.logger.info(f"Tasa de cambio actualizada: 1 USDT = {rate} VES")
-    else:
-        app.logger.error("No se pudo obtener la tasa de cambio. Se mantendrá la última conocida.")
-
-
-
 # Helper para obtener la tasa de cambio actual
 def get_current_exchange_rate():
     rate = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
-    return rate.rate if rate else 0.0
-
+    return rate.rate
 # --- Funciones del Sistema de Notificaciones ---
 
 def create_notification_for_admins(message, link):
