@@ -55,9 +55,7 @@ def update_exchange_rate_job():
     else:
         app.logger.error("No se pudo obtener la tasa de cambio. Se mantendrá la última conocida.")
 
-# Programar la tarea de actualización
-scheduler.add_job(id='update_rate', func=update_exchange_rate_job, trigger='cron', hour=18)
-scheduler.start()
+
 
 # Helper para obtener la tasa de cambio actual
 def get_current_exchange_rate():
