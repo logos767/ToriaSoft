@@ -13,8 +13,8 @@ def update_exchange_rate_task(app):
     logger.info("Background exchange rate task is ready to start.")
     socketio.sleep(10) # Initial delay to allow the app to fully start
     while True:
-        try:
-            with app.app_context():
+        with app.app_context():
+            try:
                 logger.info("Executing exchange rate update...")
                 new_rate = obtener_tasa_p2p_binance()
                 
@@ -30,9 +30,8 @@ def update_exchange_rate_task(app):
                 else:
                     logger.warning("No se pudo obtener una nueva tasa de cambio en esta ejecución.")
 
-        except Exception as e:
-            logger.error(f"Error in exchange rate task: {e}", exc_info=True)
-            with app.app_context():
+            except Exception as e:
+                logger.error(f"Error in exchange rate task: {e}", exc_info=True)
                 db.session.rollback()
         
         # Espera 1 hora para la siguiente ejecución
