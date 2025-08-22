@@ -1,12 +1,11 @@
 import logging
-from flask import current_app
 from .extensions import db, socketio
 from .models import ExchangeRate
 from .utils import obtener_tasa_p2p_binance
 
 logger = logging.getLogger(__name__)
 
-def update_exchange_rate_task():
+def update_exchange_rate_task(app):
     """
     Background task to update the exchange rate every hour.
     Uses socketio.sleep to be compatible with eventlet.
@@ -15,7 +14,7 @@ def update_exchange_rate_task():
     socketio.sleep(10) # Initial delay to allow the app to fully start
     while True:
         try:
-            with current_app.app_context():
+            with app.app_context():
                 logger.info("Executing exchange rate update...")
                 new_rate = obtener_tasa_p2p_binance()
                 
@@ -33,7 +32,7 @@ def update_exchange_rate_task():
 
         except Exception as e:
             logger.error(f"Error in exchange rate task: {e}", exc_info=True)
-            with current_app.app_context():
+            with app.app_context():
                 db.session.rollback()
         
         # Espera 1 hora para la siguiente ejecución

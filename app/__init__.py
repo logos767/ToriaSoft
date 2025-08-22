@@ -59,7 +59,7 @@ def create_app():
 
     # --- Start Background Task ---
     from .tasks import update_exchange_rate_task
-    socketio.start_background_task(target=update_exchange_rate_task)
+    socketio.start_background_task(lambda: update_exchange_rate_task(app))
     logger.info("Background task for exchange rate has been started.")
     
     # --- Teardown Context ---
