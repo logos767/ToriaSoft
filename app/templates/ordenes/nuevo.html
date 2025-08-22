@@ -64,7 +64,7 @@
     document.addEventListener('DOMContentLoaded', function() {
         const productList = document.querySelector('#product-list .space-y-4');
         const addProductBtn = document.getElementById('add-product-btn');
-        let currentRate = {{ current_rate }};
+        let currentRate = {{ exchange_rates['VES'] }};
 
         // Función para actualizar el precio en Bolívares
         function updatePriceVes(priceUsdInput) {
