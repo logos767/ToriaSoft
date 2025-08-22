@@ -1,4 +1,5 @@
 import os
+import requests # Importante: Faltaba esta importación
 from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, session, current_app
 from flask_login import login_user, current_user, logout_user, login_required
 from sqlalchemy.exc import IntegrityError
@@ -11,35 +12,37 @@ from .models import User, Product, Client, Provider, Order, OrderItem, Purchase,
 
 routes_blueprint = Blueprint('main', __name__)
 
-# Función para obtener la tasa de cambio
+# --- INICIO DE SECCIÓN DE TASAS DE CAMBIO ---
+
 def obtener_tasa_p2p_binance():
     """Obtiene la tasa de compra de USDT en VES desde el mercado P2P de Binance."""
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
     payload = {
         "page": 1,
         "rows": 1,
-        "payTypes": [],  # Busca todos los métodos de pago para mayor compatibilidad
+        "payTypes": [],
         "asset": "USDT",
-        "tradeType": "BUY",  # Es el precio al que la gente VENDE USDT, o sea, el precio de compra para nosotros.
+        "tradeType": "BUY",
         "fiat": "VES",
         "publisherType": None
     }
     headers = {"Content-Type": "application/json"}
     try:
+        # Usamos current_app.logger para acceder al logger de Flask
         response = requests.post(url, json=payload, headers=headers, timeout=10)
         response.raise_for_status()
         data = response.json()
         if data.get('code') == '000000' and data.get('data'):
             return float(data['data'][0]['adv']['price'])
-        app.logger.warning(f"Respuesta de Binance P2P no exitosa: {data.get('message')}")
+        current_app.logger.warning(f"Respuesta de Binance P2P no exitosa: {data.get('message')}")
         return None
     except requests.exceptions.RequestException as e:
-        app.logger.error(f"Error al obtener la tasa P2P de Binance: {e}")
+        current_app.logger.error(f"Error al obtener la tasa P2P de Binance: {e}")
         return None
 
 @routes_blueprint.context_processor
 def inject_exchange_rates():
-    """Inyecta las tasas de cambio en el contexto de la aplicación."""
+    """Inyecta las tasas de cambio en el contexto de la aplicación para ser usadas en las plantillas."""
     exchange_rates = {}
     try:
         response = requests.get('https://api.exchangerate-api.com/v4/latest/USD', timeout=5)
@@ -48,14 +51,43 @@ def inject_exchange_rates():
             exchange_rates['VES'] = data['rates'].get('VES', None)
             exchange_rates['EUR'] = data['rates'].get('EUR', None)
         else:
-            app.logger.error(f"Error fetching exchange rates: Status code {response.status_code}")
+            current_app.logger.error(f"Error fetching exchange rates: Status code {response.status_code}")
     except Exception as e:
-        app.logger.error(f"Exception fetching exchange rates: {e}")
+        current_app.logger.error(f"Exception fetching exchange rates: {e}")
 
     # Obtener tasa de Binance
     exchange_rates['USDT_VES_binance'] = obtener_tasa_p2p_binance()
 
     return dict(exchange_rates=exchange_rates)
+
+# --- NUEVA FUNCIÓN AUXILIAR ---
+def get_current_ves_rate():
+    """
+    Obtiene la tasa de cambio actual VES/USD para usar en la lógica del backend.
+    Prioriza la tasa P2P de Binance y, si falla, utiliza la de la API de respaldo.
+    """
+    # 1. Intenta obtener la tasa de Binance primero
+    rate = obtener_tasa_p2p_binance()
+    if rate:
+        return rate
+    
+    # 2. Si Binance falla, usa la API de respaldo
+    current_app.logger.warning("Fallo al obtener la tasa de Binance, usando fallback.")
+    try:
+        response = requests.get('https://api.exchangerate-api.com/v4/latest/USD', timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            fallback_rate = data['rates'].get('VES')
+            if fallback_rate:
+                return fallback_rate
+    except requests.exceptions.RequestException as e:
+        current_app.logger.error(f"Error fetching fallback exchange rate: {e}")
+    
+    # 3. Si todo falla, retorna None
+    current_app.logger.error("No se pudo obtener ninguna tasa de cambio.")
+    return None
+
+# --- FIN DE SECCIÓN DE TASAS DE CAMBIO ---
 
 
 # --- Funciones del Sistema de Notificaciones ---
@@ -65,7 +97,6 @@ def create_notification_for_admins(message, link):
     Crea una notificación para todos los usuarios con rol 'administrador'.
     """
     try:
-        # Asume que el modelo User tiene un campo 'role'
         admins = User.query.filter_by(role='administrador').all()
         if not admins:
             return
@@ -77,9 +108,8 @@ def create_notification_for_admins(message, link):
                 link=link
             )
             db.session.add(notification)
-            db.session.flush() # Para obtener los datos generados por la DB (como created_at)
+            db.session.flush()
 
-            # Emitir evento de WebSocket a la sala específica del administrador
             socketio.emit('new_notification', {
                 'message': notification.message,
                 'link': notification.link,
@@ -87,16 +117,11 @@ def create_notification_for_admins(message, link):
             }, room=f'user_{admin.id}')
 
     except Exception as e:
-        # Usar logger para registrar el error sin detener el flujo principal
         current_app.logger.error(f"Error al crear notificaciones para administradores: {e}")
-        db.session.rollback() # Revertir si algo falla
+        db.session.rollback()
 
 @routes_blueprint.context_processor
 def inject_notifications():
-    """
-    Hace que las notificaciones no leídas estén disponibles en el contexto de la plantilla
-    para los usuarios administradores.
-    """
     if not current_user.is_authenticated or current_user.role != 'administrador':
         return dict(unread_notifications=[], unread_notification_count=0)
     
@@ -115,7 +140,7 @@ def inject_notifications():
 @login_required
 def mark_notifications_as_read():
     if current_user.role != 'administrador':
-        return jsonify(success=False, message='Acceso denedago'), 403
+        return jsonify(success=False, message='Acceso denegado'), 403
     try:
         Notification.query.filter_by(user_id=current_user.id, is_read=False).update({'is_read': True})
         db.session.commit()
@@ -127,10 +152,6 @@ def mark_notifications_as_read():
 
 @socketio.on('connect')
 def handle_connect():
-    """
-    Cuando un usuario se conecta, lo une a una sala con su ID.
-    Esto permite enviarle notificaciones de forma privada.
-    """
     if current_user.is_authenticated:
         from flask_socketio import join_room
         join_room(f'user_{current_user.id}')
@@ -138,8 +159,6 @@ def handle_connect():
 # Rutas de autenticación
 @routes_blueprint.route('/login', methods=['GET', 'POST'])
 def login():
-    # The try...finally block was removed because the session is now handled
-    # globally by the @app.teardown_appcontext in __init__.py
     if current_user.is_authenticated:
         return redirect(url_for('main.dashboard'))
     if request.method == 'POST':
@@ -171,10 +190,9 @@ def dashboard():
     total_clients = Client.query.count()
     total_orders = Order.query.count()
     
-    # Obtener la tasa y usar 0.0 como valor por defecto solo para visualización
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función para obtener la tasa
+    current_rate = get_current_ves_rate() or 0.0
 
-    # Puedes agregar más métricas relevantes aquí
     recent_products = Product.query.order_by(Product.id.desc()).limit(5).all()
     recent_orders = Order.query.order_by(Order.date_created.desc()).limit(5).all()
 
@@ -191,13 +209,10 @@ def dashboard():
 @routes_blueprint.route('/inventario/lista')
 @login_required
 def inventory_list():
-    """
-    Muestra la lista de productos en el inventario,
-    con vistas de lista (tabla) y cuadrícula.
-    """
     products = Product.query.all()
     user_role = current_user.role if current_user.is_authenticated else 'invitado'
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate() or 0.0
     return render_template('inventario/lista.html',
                            title='Lista de Inventario',
                            products=products,
@@ -207,23 +222,22 @@ def inventory_list():
 @routes_blueprint.route('/inventario/existencias')
 @login_required
 def inventory_stock():
-    """Muestra el estado de existencias de los productos."""
     products = Product.query.all()
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate() or 0.0
     return render_template('inventario/existencias.html', title='Existencias', products=products, current_rate=current_rate)
 
 @routes_blueprint.route('/inventario/producto/<int:product_id>')
 @login_required
 def product_detail(product_id):
-    """Muestra los detalles de un producto específico, incluyendo código de barras y QR."""
     product = Product.query.get_or_404(product_id)
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate() or 0.0
     return render_template('inventario/detalle_producto.html', title=product.name, product=product, current_rate=current_rate)
 
 @routes_blueprint.route('/inventario/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_product():
-    """Maneja el formulario para crear un nuevo producto."""
     if request.method == 'POST':
         try:
             name = request.form.get('name')
@@ -247,21 +261,21 @@ def new_product():
         except (ValueError, IntegrityError) as e:
             db.session.rollback()
             flash(f'Error al crear el producto: {str(e)}', 'danger')
-    return render_template('inventario/nuevo.html', title='Nuevo Producto', current_rate=get_current_exchange_rate() or 0.0)
+    # CORRECCIÓN: Usar la nueva función
+    return render_template('inventario/nuevo.html', title='Nuevo Producto', current_rate=get_current_ves_rate() or 0.0)
 
 # Rutas de clientes
 @routes_blueprint.route('/clientes/lista')
 @login_required
 def client_list():
-    """Muestra la lista de clientes."""
     clients = Client.query.all()
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate() or 0.0
     return render_template('clientes/lista.html', title='Lista de Clientes', clients=clients, current_rate=current_rate)
 
 @routes_blueprint.route('/clientes/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_client():
-    """Maneja el formulario para crear un nuevo cliente."""
     if request.method == 'POST':
         try:
             name = request.form.get('name')
@@ -276,21 +290,21 @@ def new_client():
         except IntegrityError:
             db.session.rollback()
             flash('Error: El email ya está registrado.', 'danger')
-    return render_template('clientes/nuevo.html', title='Nuevo Cliente', current_rate=get_current_exchange_rate() or 0.0)
+    # CORRECCIÓN: Usar la nueva función
+    return render_template('clientes/nuevo.html', title='Nuevo Cliente', current_rate=get_current_ves_rate() or 0.0)
 
 # Rutas de proveedores
 @routes_blueprint.route('/proveedores/lista')
 @login_required
 def provider_list():
-    """Muestra la lista de proveedores."""
     providers = Provider.query.all()
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate() or 0.0
     return render_template('proveedores/lista.html', title='Lista de Proveedores', providers=providers, current_rate=current_rate)
 
 @routes_blueprint.route('/proveedores/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_provider():
-    """Maneja el formulario para crear un nuevo proveedor."""
     if request.method == 'POST':
         try:
             name = request.form.get('name')
@@ -304,32 +318,33 @@ def new_provider():
         except IntegrityError:
             db.session.rollback()
             flash('Error: Hubo un problema al crear el proveedor.', 'danger')
-    return render_template('proveedores/nuevo.html', title='Nuevo Proveedor', current_rate=get_current_exchange_rate() or 0.0)
+    # CORRECCIÓN: Usar la nueva función
+    return render_template('proveedores/nuevo.html', title='Nuevo Proveedor', current_rate=get_current_ves_rate() or 0.0)
 
 # Rutas de compras
 @routes_blueprint.route('/compras/lista')
 @login_required
 def purchase_list():
-    """Muestra la lista de compras."""
     purchases = Purchase.query.all()
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate() or 0.0
     return render_template('compras/lista.html', title='Lista de Compras', purchases=purchases, current_rate=current_rate)
 
 @routes_blueprint.route('/compras/detalle/<int:purchase_id>')
 @login_required
 def purchase_detail(purchase_id):
-    """Muestra los detalles de una compra específica."""
     purchase = Purchase.query.get_or_404(purchase_id)
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate() or 0.0
     return render_template('compras/detalle_compra.html', title=f'Compra #{purchase.id}', purchase=purchase, current_rate=current_rate)
 
 @routes_blueprint.route('/compras/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_purchase():
-    """Maneja el formulario para crear una nueva compra."""
     providers = Provider.query.all()
     products = Product.query.all()
-    current_rate = get_current_exchange_rate()
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate()
 
     if current_rate is None:
         flash('No se ha podido obtener la tasa de cambio. No se pueden crear compras en este momento.', 'danger')
@@ -340,9 +355,8 @@ def new_purchase():
             provider_id = request.form.get('provider_id')
             new_purchase = Purchase(provider_id=provider_id, total_cost=0)
             db.session.add(new_purchase)
-            db.session.flush() # Assigns an ID to new_purchase without committing
+            db.session.flush()
             
-            # Procesar los productos de la compra
             product_ids = request.form.getlist('product_id[]')
             quantities = request.form.getlist('quantity[]')
             costs_usd = request.form.getlist('cost_usd[]')
@@ -352,7 +366,6 @@ def new_purchase():
                 product = Product.query.get(p_id)
                 quantity = int(q)
                 if product and quantity > 0:
-                    # Guardar el costo en VES al momento de la compra
                     cost_ves = float(c_usd) * current_rate
                     item = PurchaseItem(
                         purchase_id=new_purchase.id,
@@ -365,12 +378,10 @@ def new_purchase():
             
             new_purchase.total_cost = total_cost
             
-            # Crear notificación para administradores
             notification_message = f"Nueva Orden de Compra #{new_purchase.id} creada."
             notification_link = url_for('main.purchase_detail', purchase_id=new_purchase.id)
             create_notification_for_admins(notification_message, notification_link)
 
-            # Commit the entire transaction at once.
             db.session.commit()
             flash('Compra creada exitosamente!', 'success')
             return redirect(url_for('main.purchase_list'))
@@ -384,17 +395,17 @@ def new_purchase():
 @routes_blueprint.route('/recepciones/lista')
 @login_required
 def reception_list():
-    """Muestra la lista de recepciones."""
     receptions = Reception.query.all()
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate() or 0.0
     return render_template('recepciones/lista.html', title='Lista de Recepciones', receptions=receptions, current_rate=current_rate)
 
 @routes_blueprint.route('/recepciones/nueva/<int:purchase_id>', methods=['GET', 'POST'])
 @login_required
 def new_reception(purchase_id):
-    """Maneja el formulario para una nueva recepción y actualiza el stock."""
     purchase = Purchase.query.get_or_404(purchase_id)
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate() or 0.0
     if request.method == 'POST':
         try:
             new_reception = Reception(purchase_id=purchase.id, status='Completada')
@@ -406,7 +417,6 @@ def new_reception(purchase_id):
                     product.stock += item.quantity
                     db.session.add(product)
                     
-                    # Log del movimiento de entrada
                     movement = Movement(
                         product_id=product.id,
                         type='Entrada',
@@ -418,9 +428,7 @@ def new_reception(purchase_id):
                     )
                     db.session.add(movement)
             
-            # Crear notificación para administradores
             notification_message = f"Nueva recepción para la compra #{purchase.id} procesada."
-            # No hay una vista de detalle para la recepción, así que enlazamos a la lista.
             notification_link = url_for('main.reception_list')
             create_notification_for_admins(notification_message, notification_link)
 
@@ -438,21 +446,18 @@ def new_reception(purchase_id):
 @routes_blueprint.route('/ordenes/lista')
 @login_required
 def order_list():
-    """Muestra la lista de órdenes."""
     orders = Order.query.all()
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate() or 0.0
     return render_template('ordenes/lista.html', title='Lista de Órdenes', orders=orders, current_rate=current_rate)
 
 @routes_blueprint.route('/ordenes/detalle/<int:order_id>')
 @login_required
 def order_detail(order_id):
-    """
-    Muestra los detalles de una orden de venta específica.
-    Ahora también busca la información de la empresa para mostrar el botón de impresión.
-    """
     order = Order.query.get_or_404(order_id)
     company_info = CompanyInfo.query.first()
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate() or 0.0
     return render_template('ordenes/detalle_orden.html', 
                            title=f'Orden #{order.id}', 
                            order=order,
@@ -462,10 +467,10 @@ def order_detail(order_id):
 @routes_blueprint.route('/ordenes/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_order():
-    """Maneja el formulario para crear una nueva orden de venta."""
     clients = Client.query.all()
     products = Product.query.all()
-    current_rate = get_current_exchange_rate()
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate()
     
     if current_rate is None:
         flash('No se ha podido obtener la tasa de cambio. No se pueden crear órdenes en este momento.', 'danger')
@@ -478,10 +483,9 @@ def new_order():
         prices_usd = request.form.getlist('price_usd[]')
         
         try:
-            # Iniciar la transacción. Todo lo que sigue se ejecutará como una unidad.
             new_order = Order(client_id=client_id, status='Pendiente', total_amount=0)
             db.session.add(new_order)
-            db.session.flush() # Asigna un ID a new_order sin comitear la transacción
+            db.session.flush()
 
             total_amount = 0
             for p_id, q, p_usd in zip(product_ids, quantities, prices_usd):
@@ -491,12 +495,9 @@ def new_order():
                 if not product or quantity <= 0:
                     continue
 
-                # Verificar y descontar stock en una sola operación atómica
                 if product.stock < quantity:
-                    # Si no hay stock, se lanza un error que revertirá toda la transacción.
                     raise ValueError(f'Stock insuficiente para el producto: {product.name}')
 
-                # Guardar el precio en VES al momento de la venta
                 price_ves = float(p_usd) * current_rate
                 
                 item = OrderItem(
@@ -507,7 +508,6 @@ def new_order():
                 )
                 db.session.add(item)
                 
-                # Actualizar stock y registrar movimiento
                 product.stock -= quantity
                 movement = Movement(
                     product_id=product.id,
@@ -525,7 +525,6 @@ def new_order():
             new_order.total_amount = total_amount
             new_order.status = 'Completada'
 
-            # Crear notificación para administradores (Nota de Entrega)
             notification_message = f"Nueva Nota de Entrega #{new_order.id} creada."
             notification_link = url_for('main.order_detail', order_id=new_order.id)
             create_notification_for_admins(notification_message, notification_link)
@@ -545,9 +544,9 @@ def new_order():
 @routes_blueprint.route('/movimientos/lista')
 @login_required
 def movement_list():
-    """Muestra la lista de movimientos de inventario."""
     movements = Movement.query.order_by(Movement.date.desc()).all()
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate() or 0.0
     return render_template('movimientos/lista.html', title='Registro de Movimientos', movements=movements, current_rate=current_rate)
 
 
@@ -555,46 +554,36 @@ def movement_list():
 @routes_blueprint.route('/estadisticas')
 @login_required
 def estadisticas():
-    """Muestra las estadísticas y métricas del negocio con gráficos."""
-    
-    # 1. Productos más vendidos
-    # Obtiene los productos con más cantidad vendida, incluyendo los que no tienen ventas.
     top_products = db.session.query(
         Product.name,
         func.sum(func.coalesce(OrderItem.quantity, 0)).label('total_sold')
     ).outerjoin(OrderItem).group_by(Product.id).order_by(func.sum(func.coalesce(OrderItem.quantity, 0)).desc()).limit(5).all()
 
-    # 2. Productos menos vendidos (con ventas > 0)
-    # Excluye productos sin ventas para una métrica más precisa de "menos vendidos"
     least_products = db.session.query(
         Product.name,
         func.sum(OrderItem.quantity).label('total_sold')
     ).join(OrderItem).group_by(Product.id).order_by('total_sold').limit(5).all()
 
-    # 3. Clientes más frecuentes (por número de órdenes)
     frequent_clients = db.session.query(
         Client.name,
         func.count(Order.id).label('total_orders')
     ).outerjoin(Order).group_by(Client.id).order_by(func.count(Order.id).desc()).limit(5).all()
 
-    # 4. Ventas por mes
-    # Obtiene el monto total de ventas por cada mes del año actual.
     sales_by_month = db.session.query(
         extract('month', Order.date_created).label('month'),
         func.sum(Order.total_amount).label('total_sales')
     ).filter(extract('year', Order.date_created) == extract('year', func.now())).group_by('month').order_by('month').all()
 
-    # Convierte los resultados a formatos más fáciles de usar en JS
     top_products_data = {'labels': [p[0] for p in top_products], 'values': [p[1] for p in top_products]}
     least_products_data = {'labels': [p[0] for p in least_products], 'values': [p[1] for p in least_products]}
     frequent_clients_data = {'labels': [c[0] for c in frequent_clients], 'values': [c[1] for c in frequent_clients]}
     
-    # Prepara los datos de ventas mensuales (asegura que todos los meses estén presentes)
     months_names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
     monthly_sales = {int(s[0]): s[1] for s in sales_by_month}
     sales_data_complete = {'labels': months_names, 'values': [monthly_sales.get(i + 1, 0) for i in range(12)]}
     
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate() or 0.0
 
     return render_template('estadisticas.html',
                            title='Estadísticas Gerenciales',
@@ -608,9 +597,6 @@ def estadisticas():
 @routes_blueprint.route('/inventario/cargar_excel', methods=['GET', 'POST'])
 @login_required
 def cargar_excel():
-    """
-    Permite a los administradores cargar y actualizar productos desde un archivo de Excel.
-    """
     if current_user.role != 'administrador':
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.inventory_list'))
@@ -625,32 +611,24 @@ def cargar_excel():
             flash('No se ha seleccionado ningún archivo.', 'danger')
             return redirect(request.url)
         
-        # Validar la extensión del archivo
         if not file.filename.endswith(('.xlsx', '.xls')):
             flash('Formato de archivo no válido. Solo se aceptan archivos .xlsx.', 'danger')
             return redirect(request.url)
 
-        # Usar una ruta temporal para guardar el archivo
         filepath = os.path.join('/tmp', file.filename)
         file.save(filepath)
 
         try:
-            # Abrir el archivo de Excel y seleccionar la hoja activa
             workbook = openpyxl.load_workbook(filepath)
             sheet = workbook.active
             
-            # Dictionaries para almacenar productos nuevos y productos para actualizar
             new_products = []
             updates = []
             
-            # Iterar sobre las filas, asumiendo que la primera fila son los encabezados
             for row in sheet.iter_rows(min_row=2, values_only=True):
-                if not row[0]:  # Si el código de barras está vacío, saltar la fila
+                if not row[0]:
                     continue
                 
-                # Asignar valores de las columnas (ajusta esto si tu formato de Excel cambia)
-                # Formato de columnas esperado:
-                # [0] Codigo, [1] Nombre, [2] Costo (USD), [3] Precio (USD), [4] Existencia, [5] Imagen
                 barcode = str(row[0]).strip()
                 name = str(row[1]).strip()
                 cost_usd = row[2] if row[2] is not None else 0
@@ -658,11 +636,9 @@ def cargar_excel():
                 stock = row[4] if row[4] is not None else 0
                 image_url = row[5] if row[5] is not None else ''
 
-                # Buscar el producto en la base de datos por el código de barras
                 product = Product.query.filter_by(barcode=barcode).first()
 
                 if product:
-                    # Producto existente, preparar para posible actualización
                     updates.append({
                         'id': product.id,
                         'name': product.name,
@@ -675,7 +651,6 @@ def cargar_excel():
                         'new_image_url': image_url
                     })
                 else:
-                    # Nuevo producto, crear el objeto y agregarlo a la lista de nuevos
                     new_products.append(Product(
                         barcode=barcode,
                         name=name,
@@ -685,12 +660,10 @@ def cargar_excel():
                         image_url=image_url
                     ))
 
-            # Guardar los productos nuevos en la base de datos
             if new_products:
                 db.session.bulk_save_objects(new_products)
                 flash(f'Se han agregado {len(new_products)} productos nuevos.', 'success')
 
-            # Guardar las actualizaciones pendientes en la sesión para el paso de confirmación
             if updates:
                 session['pending_updates'] = updates
                 return redirect(url_for('main.cargar_excel_confirmar'))
@@ -704,31 +677,26 @@ def cargar_excel():
             flash(f'Ocurrió un error al procesar el archivo: {str(e)}', 'danger')
             return redirect(request.url)
         finally:
-            # Eliminar el archivo temporal
             if os.path.exists(filepath):
                 os.remove(filepath)
     
-    return render_template('inventario/cargar_excel.html', title='Cargar Inventario desde Excel', current_rate=get_current_exchange_rate() or 0.0)
+    # CORRECCIÓN: Usar la nueva función
+    return render_template('inventario/cargar_excel.html', title='Cargar Inventario desde Excel', current_rate=get_current_ves_rate() or 0.0)
 
 @routes_blueprint.route('/inventario/cargar_excel_confirmar', methods=['GET', 'POST'])
 @login_required
 def cargar_excel_confirmar():
-    """
-    Página de confirmación para actualizar el stock y costo de productos existentes.
-    """
     if current_user.role != 'administrador':
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.inventory_list'))
         
     pending_updates = session.get('pending_updates', [])
-    current_rate = get_current_exchange_rate() or 0.0
+    # CORRECCIÓN: Usar la nueva función
+    current_rate = get_current_ves_rate() or 0.0
 
     if request.method == 'POST':
-        # El usuario ha confirmado, procesar las actualizaciones
         try:
             if pending_updates:
-                # Preparar los datos para una actualización masiva (bulk update)
-                # Esto es mucho más eficiente que actualizar en un bucle.
                 update_mappings = [
                     {
                         'id': update['id'],
@@ -748,7 +716,7 @@ def cargar_excel_confirmar():
             db.session.rollback()
             flash(f'Ocurrió un error al confirmar la actualización: {str(e)}', 'danger')
         finally:
-            session.pop('pending_updates', None) # Limpiar los datos de la sesión
+            session.pop('pending_updates', None)
         
         return redirect(url_for('main.inventory_list'))
 
@@ -761,9 +729,6 @@ def cargar_excel_confirmar():
 @routes_blueprint.route('/configuracion/empresa', methods=['GET', 'POST'])
 @login_required
 def company_settings():
-    """
-    Permite a los administradores configurar la información de la empresa.
-    """
     if current_user.role != 'administrador':
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.dashboard'))
@@ -779,7 +744,6 @@ def company_settings():
         
         try:
             if company_info:
-                # Actualizar información existente
                 company_info.name = name
                 company_info.rif = rif
                 company_info.address = address
@@ -788,7 +752,6 @@ def company_settings():
                 db.session.commit()
                 flash('Información de la empresa actualizada exitosamente!', 'success')
             else:
-                # Crear nueva información
                 new_info = CompanyInfo(name=name, rif=rif, address=address, phone_numbers=phone_numbers, logo_url=logo_url)
                 db.session.add(new_info)
                 db.session.commit()
@@ -802,29 +765,27 @@ def company_settings():
             db.session.rollback()
             flash(f'Ocurrió un error al guardar la información: {str(e)}', 'danger')
 
-    return render_template('configuracion/empresa.html', title='Configuración de Empresa', company_info=company_info, current_rate=get_current_exchange_rate() or 0.0)
+    # CORRECCIÓN: Usar la nueva función
+    return render_template('configuracion/empresa.html', title='Configuración de Empresa', company_info=company_info, current_rate=get_current_ves_rate() or 0.0)
 
 # Rutas de Estructura de Costos
 @routes_blueprint.route('/costos/lista')
 @login_required
 def cost_list():
-    """Muestra la tabla resumen de la estructura de costos de los productos."""
     if current_user.role != 'administrador':
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.dashboard'))
 
     cost_structure = CostStructure.query.first()
     if not cost_structure:
-        # Si no hay configuración, redirigir para crearla primero.
         flash('Por favor, configure la estructura de costos generales primero.', 'info')
         return redirect(url_for('main.cost_structure_config'))
 
     products = Product.query.all()
     
-    # Calcular el total de ventas estimadas para distribuir los costos fijos
     total_estimated_sales = db.session.query(func.sum(Product.estimated_monthly_sales)).scalar() or 1
     if total_estimated_sales == 0:
-        total_estimated_sales = 1 # Evitar división por cero
+        total_estimated_sales = 1
 
     total_fixed_costs = (cost_structure.monthly_rent or 0) + \
                         (cost_structure.monthly_utilities or 0) + \
@@ -834,21 +795,16 @@ def cost_list():
 
     products_with_costs = []
     for product in products:
-        # Usar costos variables específicos del producto si existen, si no, los por defecto.
         var_sales_exp_pct = product.variable_selling_expense_percent if product.variable_selling_expense_percent > 0 else cost_structure.default_sales_commission_percent
         var_marketing_pct = product.variable_marketing_percent if product.variable_marketing_percent > 0 else cost_structure.default_marketing_percent
 
-        # Costo base = Costo de compra + Flete específico + Costo Fijo por unidad
         base_cost = (product.cost_usd or 0) + \
                     (product.specific_freight_cost or 0) + \
                     fixed_cost_per_unit
-
-        # Denominador para la fórmula del precio de venta
-        # P = base_cost / (1 - %gastos_var - %utilidad)
+        
         denominator = 1 - (var_sales_exp_pct or 0) - (var_marketing_pct or 0) - (product.profit_margin or 0)
 
         if denominator <= 0:
-            # Si los porcentajes suman 100% o más, el precio es infinito o negativo. Marcar como error.
             selling_price = 0
             profit = 0
             sales_expense = 0
@@ -874,18 +830,17 @@ def cost_list():
     return render_template('costos/lista.html',
                            title='Estructura de Costos',
                            products_data=products_with_costs,
-                           current_rate=get_current_exchange_rate() or 0.0)
+                           # CORRECCIÓN: Usar la nueva función
+                           current_rate=get_current_ves_rate() or 0.0)
 
 
 @routes_blueprint.route('/costos/configuracion', methods=['GET', 'POST'])
 @login_required
 def cost_structure_config():
-    """Permite configurar los costos fijos y variables por defecto."""
     if current_user.role != 'administrador':
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.dashboard'))
 
-    # Siempre trabajamos con la primera (y única) fila de configuración
     cost_structure = CostStructure.query.first()
     if not cost_structure:
         cost_structure = CostStructure()
@@ -897,7 +852,6 @@ def cost_structure_config():
             cost_structure.monthly_rent = float(request.form.get('monthly_rent', 0))
             cost_structure.monthly_utilities = float(request.form.get('monthly_utilities', 0))
             cost_structure.monthly_fixed_taxes = float(request.form.get('monthly_fixed_taxes', 0))
-            # Los porcentajes se guardan como decimales (ej. 5% -> 0.05)
             cost_structure.default_sales_commission_percent = float(request.form.get('default_sales_commission_percent', 0)) / 100
             cost_structure.default_marketing_percent = float(request.form.get('default_marketing_percent', 0)) / 100
             
@@ -911,13 +865,13 @@ def cost_structure_config():
     return render_template('costos/configuracion.html',
                            title='Configurar Costos Generales',
                            cost_structure=cost_structure,
-                           current_rate=get_current_exchange_rate() or 0.0)
+                           # CORRECCIÓN: Usar la nueva función
+                           current_rate=get_current_ves_rate() or 0.0)
 
 
 @routes_blueprint.route('/costos/editar/<int:product_id>', methods=['GET', 'POST'])
 @login_required
 def edit_product_cost(product_id):
-    """Edita la estructura de costos y utilidad para un producto específico."""
     if current_user.role != 'administrador':
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.dashboard'))
@@ -926,20 +880,17 @@ def edit_product_cost(product_id):
 
     if request.method == 'POST':
         try:
-            # Actualizar los campos del producto desde el formulario
             product.profit_margin = float(request.form.get('profit_margin', 0)) / 100
             product.specific_freight_cost = float(request.form.get('specific_freight_cost', 0))
             product.estimated_monthly_sales = int(request.form.get('estimated_monthly_sales', 1))
             product.variable_selling_expense_percent = float(request.form.get('variable_selling_expense_percent', 0)) / 100
             product.variable_marketing_percent = float(request.form.get('variable_marketing_percent', 0)) / 100
 
-            # --- Recalcular y actualizar el precio de venta del producto ---
             cost_structure = CostStructure.query.first()
             if not cost_structure:
                 flash('La configuración de costos generales no existe. No se puede calcular el precio.', 'danger')
                 return redirect(url_for('main.cost_structure_config'))
 
-            # Se necesita recalcular el costo fijo por unidad con los datos actualizados
             total_estimated_sales = db.session.query(func.sum(Product.estimated_monthly_sales)).scalar() or 1
             if total_estimated_sales == 0: total_estimated_sales = 1
 
@@ -950,7 +901,7 @@ def edit_product_cost(product_id):
             if denominator <= 0:
                 raise ValueError("La suma de porcentajes de utilidad y gastos variables no puede ser 100% o más.")
             new_selling_price = base_cost / denominator
-            product.price_usd = round(new_selling_price, 2) # Actualizar el precio de venta final
+            product.price_usd = round(new_selling_price, 2)
             db.session.commit()
             flash(f'Costos y precio del producto "{product.name}" actualizados exitosamente.', 'success')
             return redirect(url_for('main.cost_list'))
@@ -964,18 +915,15 @@ def edit_product_cost(product_id):
     return render_template('costos/editar.html',
                            title=f'Editar Costos de {product.name}',
                            product=product,
-                           current_rate=get_current_exchange_rate() or 0.0)
+                           # CORRECCIÓN: Usar la nueva función
+                           current_rate=get_current_ves_rate() or 0.0)
 
 @routes_blueprint.route('/ordenes/imprimir/<int:order_id>')
 @login_required
 def print_delivery_note(order_id):
-    """
-    Genera y muestra una nota de entrega en formato de recibo para imprimir.
-    """
     order = Order.query.get_or_404(order_id)
     company_info = CompanyInfo.query.first()
     
-    # Calcular subtotal, IVA y total con un IVA del 16%
     iva_rate = 0.16
     subtotal = order.total_amount / (1 + iva_rate)
     iva = order.total_amount - subtotal
@@ -989,5 +937,9 @@ def print_delivery_note(order_id):
 # Nueva ruta de API para obtener la tasa de cambio actual
 @routes_blueprint.route('/api/exchange_rate')
 def api_exchange_rate():
-    rate = get_current_exchange_rate()
-    return jsonify(rate=rate)
+    # CORRECCIÓN: Usar la nueva función
+    rate = get_current_ves_rate()
+    if rate:
+        return jsonify(rate=rate)
+    else:
+        return jsonify(error="No se pudo obtener la tasa de cambio"), 500

@@ -62,7 +62,7 @@
                         <p class="text-sm text-gray-500">
                             Código: {{ product.barcode }} |
                             Costo: ${{ "%.2f"|format(product.cost_usd) }} |
-                            Precio: Bs. {{ "%.2f"|format(product.price_usd * exchange_rates['VES']) }} |
+                            Precio: Bs. {{ "%.2f"|format(product.price_usd * current_rate) }} |
                             Existencias: {{ product.stock }}
                         </p>
                     </div>
