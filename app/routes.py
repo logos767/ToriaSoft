@@ -18,9 +18,9 @@ def obtener_tasa_p2p_binance():
     payload = {
         "page": 1,
         "rows": 1,
-        "payTypes": [],
+        "payTypes": [],  # Busca todos los métodos de pago para mayor compatibilidad
         "asset": "USDT",
-        "tradeType": "BUY",
+        "tradeType": "BUY",  # Es el precio al que la gente VENDE USDT, o sea, el precio de compra para nosotros.
         "fiat": "VES",
         "publisherType": None
     }
@@ -37,10 +37,27 @@ def obtener_tasa_p2p_binance():
         app.logger.error(f"Error al obtener la tasa P2P de Binance: {e}")
         return None
 
-# Helper para obtener la tasa de cambio actual
-def get_current_exchange_rate():
-    rate = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
-    return rate.rate
+@main_bp.app_context_processor
+def inject_exchange_rates():
+    """Inyecta las tasas de cambio en el contexto de la aplicación."""
+    exchange_rates = {}
+    try:
+        response = requests.get('https://api.exchangerate-api.com/v4/latest/USD', timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            exchange_rates['VES'] = data['rates'].get('VES', None)
+            exchange_rates['EUR'] = data['rates'].get('EUR', None)
+        else:
+            app.logger.error(f"Error fetching exchange rates: Status code {response.status_code}")
+    except Exception as e:
+        app.logger.error(f"Exception fetching exchange rates: {e}")
+
+    # Obtener tasa de Binance
+    exchange_rates['USDT_VES_binance'] = obtener_tasa_p2p_binance()
+
+    return dict(exchange_rates=exchange_rates)
+
+
 # --- Funciones del Sistema de Notificaciones ---
 
 def create_notification_for_admins(message, link):
