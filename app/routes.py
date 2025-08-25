@@ -33,10 +33,10 @@ def obtener_tasa_p2p_binance():
         data = response.json()
         if data.get('code') == '000000' and data.get('data'):
             return float(data['data'][0]['adv']['price'])
-        app.logger.warning(f"Respuesta de Binance P2P no exitosa: {data.get('message')}")
+        current_app.logger.warning(f"Respuesta de Binance P2P no exitosa: {data.get('message')}")
         return None
     except requests.exceptions.RequestException as e:
-        app.logger.error(f"Error al obtener la tasa P2P de Binance: {e}")
+        current_app.logger.error(f"Error al obtener la tasa P2P de Binance: {e}")
         return None
 
 # --- NUEVA FUNCIÓN AUXILIAR ---
