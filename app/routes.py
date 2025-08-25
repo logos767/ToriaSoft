@@ -16,23 +16,52 @@ routes_blueprint = Blueprint('main', __name__)
 # --- INICIO DE SECCIÓN DE TASAS DE CAMBIO ---
 
 def obtener_tasa_p2p_binance():
-    """Obtiene la tasa de compra de USDT en VES desde ExchangeMonitor."""
-    url = "https://exchangemonitor.net/venezuela/dolar-binance"
+    """
+    Obtiene el precio P2P de USDT/VES directamente desde la API de Binance.
+    Este método es más robusto que el scraping.
+    """
+    current_app.logger.info("Obteniendo tasa P2P desde la API de Binance...")
+    api_url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
+    }
+    payload = {
+        "proMerchantAds": False,
+        "payTypes": ["Bancamiga"],
+        "page": 1,
+        "rows": 10,
+        "countries": [],
+        "tradeType": "BUY",
+        "asset": "USDT",
+        "fiat": "VES",
+        "publisherType": None
+    }
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.post(api_url, headers=headers, json=payload, timeout=20)
         response.raise_for_status()
+        data = response.json()
+
+        if not data or not data.get('data'):
+            current_app.logger.warning("La respuesta de la API de Binance no contiene datos.")
+            return None
+
+        prices = [float(adv['adv']['price']) for adv in data['data']]
         
-        # Search for the price pattern in the HTML content
-        # The price is shown as "Bs. 214,50" or "Bs. 214.50"
-        match = re.search(r'Bs\.\s*([\d,.]+)', response.text)
-        if match:
-            price_str = match.group(1).replace(',', '.')
-            return float(price_str)
+        if not prices:
+            current_app.logger.error("No se pudieron extraer precios de la respuesta de la API.")
+            return None
         
-        current_app.logger.warning("No se pudo encontrar el patrón de precio en la página de ExchangeMonitor.")
+        # Calculamos el promedio de los 10 primeros para mayor estabilidad
+        average_price = sum(prices[:10]) / len(prices[:10])
+        current_app.logger.info(f"API de Binance exitosa. Promedio: {average_price:.2f}")
+        return average_price
+
+    except requests.exceptions.RequestException as e:
+        current_app.logger.error(f"Falló la petición a la API de Binance: {e}")
         return None
-    except (requests.exceptions.RequestException, ValueError) as e:
-        current_app.logger.error(f"Error al obtener la tasa de ExchangeMonitor: {e}")
+    except (ValueError, TypeError, KeyError) as e:
+        current_app.logger.error(f"Error procesando la respuesta de la API de Binance: {e}")
         return None
 
 # --- NUEVA FUNCIÓN AUXILIAR ---
