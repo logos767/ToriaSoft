@@ -15,43 +15,29 @@ routes_blueprint = Blueprint('main', __name__)
 # --- INICIO DE SECCIÓN DE TASAS DE CAMBIO ---
 
 def obtener_tasa_p2p_binance():
-    """Obtiene la tasa de compra de USDT en VES desde el mercado P2P de Binance usando pyDolarVenezuela."""
-    url = "https://pydolarve.org/api/v1/dollar?page=binance&monitor=usdt"
+    """Obtiene la tasa de compra de USDT en VES desde el mercado P2P de Binance."""
+    url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
+    payload = {
+        "page": 1,
+        "rows": 1,
+        "payTypes": [],  # Busca todos los métodos de pago para mayor compatibilidad
+        "asset": "USDT",
+        "tradeType": "BUY",  # Es el precio al que la gente VENDE USDT, o sea, el precio de compra para nosotros.
+        "fiat": "VES",
+        "publisherType": None
+    }
+    headers = {"Content-Type": "application/json"}
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
         response.raise_for_status()
         data = response.json()
-        if data and data.get('price'):
-            return float(data['price'])
-        current_app.logger.warning(f"Respuesta de pyDolarVenezuela (Binance P2P) no exitosa: {data}")
+        if data.get('code') == '000000' and data.get('data'):
+            return float(data['data'][0]['adv']['price'])
+        app.logger.warning(f"Respuesta de Binance P2P no exitosa: {data.get('message')}")
         return None
     except requests.exceptions.RequestException as e:
-        current_app.logger.error(f"Error al obtener la tasa P2P de Binance desde pyDolarVenezuela: {e}")
+        app.logger.error(f"Error al obtener la tasa P2P de Binance: {e}")
         return None
-
-@routes_blueprint.context_processor
-def inject_exchange_rates():
-    """Inyecta las tasas de cambio en el contexto de la aplicación para ser usadas en las plantillas."""
-    exchange_rates = {}
-    # Obtener tasa oficial (BCV) de pyDolarVenezuela
-    try:
-        url_bcv = "https://pydolarve.org/api/v1/dollar?page=bcv&monitor=usd"
-        response_bcv = requests.get(url_bcv, timeout=5)
-        response_bcv.raise_for_status()
-        data_bcv = response_bcv.json()
-        if data_bcv and data_bcv.get('price'):
-            exchange_rates['VES'] = float(data_bcv['price'])
-        else:
-            current_app.logger.warning(f"Respuesta de pyDolarVenezuela (BCV) no exitosa: {data_bcv}")
-    except requests.exceptions.RequestException as e:
-        current_app.logger.error(f"Error al obtener la tasa BCV de pyDolarVenezuela: {e}")
-    except Exception as e:
-        current_app.logger.error(f"Excepción al obtener la tasa BCV: {e}")
-
-    # Obtener tasa de Binance P2P
-    exchange_rates['USDT_VES_binance'] = obtener_tasa_p2p_binance()
-
-    return dict(exchange_rates=exchange_rates)
 
 # --- NUEVA FUNCIÓN AUXILIAR ---
 def get_current_ves_rate():
@@ -64,23 +50,6 @@ def get_current_ves_rate():
     if rate:
         return rate
     
-    # 2. Si Binance falla, usa la API de respaldo (BCV) de pyDolarVenezuela
-    current_app.logger.warning("Fallo al obtener la tasa de Binance, usando fallback (BCV).")
-    try:
-        url_bcv = "https://pydolarve.org/api/v1/dollar?page=bcv&monitor=usd"
-        response_bcv = requests.get(url_bcv, timeout=5)
-        response_bcv.raise_for_status()
-        data_bcv = response_bcv.json()
-        if data_bcv and data_bcv.get('price'):
-            fallback_rate = float(data_bcv['price'])
-            if fallback_rate:
-                return fallback_rate
-        else:
-            current_app.logger.warning(f"Respuesta de pyDolarVenezuela (BCV fallback) no exitosa: {data_bcv}")
-    except requests.exceptions.RequestException as e:
-        current_app.logger.error(f"Error fetching fallback exchange rate from pyDolarVenezuela (BCV): {e}")
-    
-    # 3. Si todo falla, retorna None
     current_app.logger.error("No se pudo obtener ninguna tasa de cambio.")
     return None
 
