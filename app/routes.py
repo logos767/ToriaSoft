@@ -66,6 +66,57 @@ def obtener_tasa_p2p_binance():
         current_app.logger.error(f"Error procesando la respuesta de la API de Binance: {e}")
         return None
 
+# --- INICIO DE SECCIÓN DE TASAS DE CAMBIO ---
+
+def obtener_tasa_p2p_binance():
+    """
+    Obtiene el precio P2P de USDT/VES directamente desde la API de Binance.
+    Este método es más robusto que el scraping.
+    """
+    current_app.logger.info("Obteniendo tasa P2P desde la API de Binance...")
+    api_url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
+    }
+    payload = {
+        "proMerchantAds": False,
+        "payTypes": ["Bancamiga"],
+        "page": 1,
+        "rows": 10,
+        "countries": [],
+        "tradeType": "BUY",
+        "asset": "USDT",
+        "fiat": "VES",
+        "publisherType": None
+    }
+    try:
+        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        if not data or not data.get('data'):
+            current_app.logger.warning("La respuesta de la API de Binance no contiene datos.")
+            return None
+
+        prices = [float(adv['adv']['price']) for adv in data['data']]
+        
+        if not prices:
+            current_app.logger.error("No se pudieron extraer precios de la respuesta de la API.")
+            return None
+        
+        # Calculamos el promedio de los 10 primeros para mayor estabilidad
+        average_price = sum(prices[:10]) / len(prices[:10])
+        current_app.logger.info(f"API de Binance exitosa. Promedio: {average_price:.2f}")
+        return average_price
+
+    except requests.exceptions.RequestException as e:
+        current_app.logger.error(f"Falló la petición a la API de Binance: {e}")
+        return None
+    except (ValueError, TypeError, KeyError) as e:
+        current_app.logger.error(f"Error procesando la respuesta de la API de Binance: {e}")
+        return None
+
 def obtener_tasa_exchangemonitor():
     """
     Obtiene la tasa de cambio desde ExchangeMonitor como fallback.
@@ -87,7 +138,7 @@ def obtener_tasa_exchangemonitor():
         price_text = price_tag.get_text() # "Bs.217,71 -1,12VES (-0,52%)"
         
         # Usar regex para encontrar el primer número decimal con coma
-        match = re.search(r'Bs\.\s*([\d,\.]+)', price_text)
+        match = re.search(r'Bs\.s*([\d,\.]+)', price_text)
         if match:
             price_str = match.group(1).replace('.', '').replace(',', '.')
             return float(price_str)
@@ -101,6 +152,85 @@ def obtener_tasa_exchangemonitor():
     except (ValueError, TypeError) as e:
         current_app.logger.error(f"Error procesando la respuesta de ExchangeMonitor: {e}")
         return None
+
+def obtener_tasa_render():
+    """
+    Obtiene la tasa de cambio desde la aplicación en Render.
+    """
+    current_app.logger.info("Obteniendo tasa desde Render...")
+    url = "https://p2p-binance-0tym.onrender.com/"
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data and 'transfer_price' in data:
+            current_app.logger.info(f"Tasa de Render exitosa: {data['transfer_price']}")
+            return float(data['transfer_price'])
+        else:
+            current_app.logger.error("No se pudo extraer el precio de la respuesta de Render.")
+            return None
+
+    except requests.exceptions.RequestException as e:
+        current_app.logger.error(f"Falló la petición a Render: {e}")
+        return None
+    except (ValueError, TypeError, KeyError) as e:
+        current_app.logger.error(f"Error procesando la respuesta de Render: {e}")
+        return None
+
+# --- NUEVAS FUNCIONES AUXILIARES ---
+def get_cached_exchange_rate():
+    """
+    Obtiene la última tasa de cambio guardada en la base de datos.
+    """
+    try:
+        cached_rate = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
+        if cached_rate:
+            return cached_rate.rate
+    except Exception as e:
+        current_app.logger.error(f"Error al obtener la tasa de cambio de la base de datos: {e}")
+    
+    current_app.logger.warning("No se encontró una tasa de cambio en la base de datos.")
+    return None
+
+def fetch_and_update_exchange_rate():
+    """
+    Obtiene la tasa de cambio actual VES/USD de fuentes externas y la guarda en la BD.
+    Prioriza la tasa P2P de Binance y, si falla, utiliza la de ExchangeMonitor.
+    """
+    rate = None
+    # 1. Intenta obtener la tasa de Binance primero
+    rate = obtener_tasa_p2p_binance()
+    
+    # 2. Si Binance falla, intenta con la app de Render
+    if not rate:
+        current_app.logger.warning("Falló la API de Binance, intentando con la app de Render.")
+        rate = obtener_tasa_render()
+
+    # 3. Si la app de Render falla, intenta con ExchangeMonitor
+    if not rate:
+        current_app.logger.warning("Falló la app de Render, intentando con ExchangeMonitor.")
+        rate = obtener_tasa_exchangemonitor()
+
+    # 4. Si se obtuvo una tasa de alguna API, se guarda en la BD
+    if rate:
+        try:
+            exchange_rate_entry = ExchangeRate.query.first()
+            if exchange_rate_entry:
+                exchange_rate_entry.rate = rate
+                exchange_rate_entry.date_updated = datetime.utcnow()
+            else:
+                exchange_rate_entry = ExchangeRate(rate=rate)
+                db.session.add(exchange_rate_entry)
+            db.session.commit()
+            current_app.logger.info(f"Tasa de cambio actualizada en la base de datos: {rate}")
+            return rate
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error al guardar la tasa de cambio en la base de datos: {e}")
+    
+    current_app.logger.error("No se pudo obtener ninguna tasa de cambio de las APIs externas.")
+    return None
 
 # --- NUEVAS FUNCIONES AUXILIARES ---
 def get_cached_exchange_rate():
