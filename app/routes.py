@@ -1,6 +1,7 @@
 import os
-import requests # Importante: Faltaba esta importación
+import requests
 import re
+from bs4 import BeautifulSoup
 from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, session, current_app
 from flask_login import login_user, current_user, logout_user, login_required
 from sqlalchemy.exc import IntegrityError
@@ -38,7 +39,7 @@ def obtener_tasa_p2p_binance():
         "publisherType": None
     }
     try:
-        response = requests.post(api_url, headers=headers, json=payload, timeout=20)
+        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
         data = response.json()
 
@@ -64,17 +65,59 @@ def obtener_tasa_p2p_binance():
         current_app.logger.error(f"Error procesando la respuesta de la API de Binance: {e}")
         return None
 
+def obtener_tasa_exchangemonitor():
+    """
+    Obtiene la tasa de cambio desde ExchangeMonitor como fallback.
+    """
+    current_app.logger.info("Obteniendo tasa desde ExchangeMonitor...")
+    url = "https://exchangemonitor.net/venezuela/dolar-binance"
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Encontrar el h3 que contiene el precio
+        price_tag = soup.find('h3')
+        if not price_tag:
+            current_app.logger.error("No se encontró la etiqueta de precio en ExchangeMonitor.")
+            return None
+            
+        # Extraer el texto y limpiar
+        price_text = price_tag.get_text() # "Bs.217,71 -1,12VES (-0,52%)"
+        
+        # Usar regex para encontrar el primer número decimal con coma
+        match = re.search(r'Bs\.\s*([\d,\.]+)', price_text)
+        if match:
+            price_str = match.group(1).replace('.', '').replace(',', '.')
+            return float(price_str)
+        else:
+            current_app.logger.error("No se pudo extraer el precio del texto en ExchangeMonitor.")
+            return None
+
+    except requests.exceptions.RequestException as e:
+        current_app.logger.error(f"Falló la petición a ExchangeMonitor: {e}")
+        return None
+    except (ValueError, TypeError) as e:
+        current_app.logger.error(f"Error procesando la respuesta de ExchangeMonitor: {e}")
+        return None
+
 # --- NUEVA FUNCIÓN AUXILIAR ---
 def get_current_ves_rate():
     """
     Obtiene la tasa de cambio actual VES/USD para usar en la lógica del backend.
-    Prioriza la tasa P2P de Binance y, si falla, utiliza la de la API de respaldo (BCV).
+    Prioriza la tasa P2P de Binance y, si falla, utiliza la de ExchangeMonitor.
     """
     # 1. Intenta obtener la tasa de Binance primero
     rate = obtener_tasa_p2p_binance()
     if rate:
         return rate
     
+    # 2. Si Binance falla, intenta con ExchangeMonitor
+    current_app.logger.warning("Falló la API de Binance, intentando con ExchangeMonitor.")
+    rate = obtener_tasa_exchangemonitor()
+    if rate:
+        return rate
+
     current_app.logger.error("No se pudo obtener ninguna tasa de cambio.")
     return None
 
