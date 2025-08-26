@@ -291,10 +291,15 @@ def create_notification_for_admins(message, link):
     """
     Crea una notificación para todos los usuarios con rol 'administrador'.
     """
+    current_app.logger.info(f"Attempting to create notification for admins: {message}")
     try:
         admins = User.query.filter_by(role='administrador').all()
         if not admins:
+            current_app.logger.warning("No admin users found to send notification.")
             return
+
+        admin_ids = [admin.id for admin in admins]
+        current_app.logger.info(f"Found admins: {admin_ids}")
 
         for admin in admins:
             notification = Notification(
@@ -304,12 +309,14 @@ def create_notification_for_admins(message, link):
             )
             db.session.add(notification)
             db.session.flush()
+            current_app.logger.info(f"Notification created in DB for admin {admin.id}: {notification.message}")
 
             socketio.emit('new_notification', {
                 'message': notification.message,
                 'link': notification.link,
                 'created_at': notification.created_at.strftime('%d/%m %H:%M')
             }, room=f'user_{admin.id}')
+            current_app.logger.info(f"Emitted socketio event to room user_{admin.id}")
 
     except Exception as e:
         current_app.logger.error(f"Error al crear notificaciones para administradores: {e}")
