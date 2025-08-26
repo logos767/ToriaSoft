@@ -17,6 +17,19 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def update_exchange_rate_on_startup(app):
+    with app.app_context():
+        from .models import ExchangeRate
+        from .routes import fetch_and_update_exchange_rate
+        from datetime import datetime
+
+        last_update = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
+        if not last_update or last_update.date_updated.date() < datetime.utcnow().date():
+            app.logger.info("Updating exchange rate on startup...")
+            fetch_and_update_exchange_rate()
+        else:
+            app.logger.info("Exchange rate is already up to date for today.")
+
 def create_app():
     """Application Factory Function"""
     app = Flask(__name__)
@@ -66,5 +79,7 @@ def create_app():
     def shutdown_session(exception=None):
         db.session.remove()
 
+    # --- Update exchange rate on startup ---
+    update_exchange_rate_on_startup(app)
 
     return app

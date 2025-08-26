@@ -102,12 +102,25 @@ def obtener_tasa_exchangemonitor():
         current_app.logger.error(f"Error procesando la respuesta de ExchangeMonitor: {e}")
         return None
 
-# --- NUEVA FUNCIÓN AUXILIAR ---
-def get_current_ves_rate():
+# --- NUEVAS FUNCIONES AUXILIARES ---
+def get_cached_exchange_rate():
     """
-    Obtiene la tasa de cambio actual VES/USD para usar en la lógica del backend.
+    Obtiene la última tasa de cambio guardada en la base de datos.
+    """
+    try:
+        cached_rate = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
+        if cached_rate:
+            return cached_rate.rate
+    except Exception as e:
+        current_app.logger.error(f"Error al obtener la tasa de cambio de la base de datos: {e}")
+    
+    current_app.logger.warning("No se encontró una tasa de cambio en la base de datos.")
+    return None
+
+def fetch_and_update_exchange_rate():
+    """
+    Obtiene la tasa de cambio actual VES/USD de fuentes externas y la guarda en la BD.
     Prioriza la tasa P2P de Binance y, si falla, utiliza la de ExchangeMonitor.
-    Si ambos fallan, utiliza la última tasa guardada en la base de datos.
     """
     rate = None
     # 1. Intenta obtener la tasa de Binance primero
@@ -130,22 +143,12 @@ def get_current_ves_rate():
                 db.session.add(exchange_rate_entry)
             db.session.commit()
             current_app.logger.info(f"Tasa de cambio actualizada en la base de datos: {rate}")
+            return rate
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Error al guardar la tasa de cambio en la base de datos: {e}")
-        return rate
-
-    # 4. Si ambas APIs fallan, intenta obtener la tasa de la BD
-    current_app.logger.warning("Ambas APIs de tasas de cambio fallaron. Intentando obtener la última tasa desde la base de datos.")
-    try:
-        cached_rate = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
-        if cached_rate:
-            current_app.logger.warning(f"Usando tasa de cambio cacheada de la base de datos: {cached_rate.rate}")
-            return cached_rate.rate
-    except Exception as e:
-        current_app.logger.error(f"Error al obtener la tasa de cambio de la base de datos: {e}")
-
-    current_app.logger.error("No se pudo obtener ninguna tasa de cambio, ni de las APIs ni de la base de datos.")
+    
+    current_app.logger.error("No se pudo obtener ninguna tasa de cambio de las APIs externas.")
     return None
 
 
@@ -253,7 +256,7 @@ def dashboard():
     total_orders = Order.query.count()
     
     # CORRECCIÓN: Usar la nueva función para obtener la tasa
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
 
     recent_products = Product.query.order_by(Product.id.desc()).limit(5).all()
     recent_orders = Order.query.order_by(Order.date_created.desc()).limit(5).all()
@@ -274,7 +277,7 @@ def inventory_list():
     products = Product.query.all()
     user_role = current_user.role if current_user.is_authenticated else 'invitado'
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
     return render_template('inventario/lista.html',
                            title='Lista de Inventario',
                            products=products,
@@ -286,7 +289,7 @@ def inventory_list():
 def inventory_stock():
     products = Product.query.all()
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
     return render_template('inventario/existencias.html', title='Existencias', products=products, current_rate=current_rate)
 
 @routes_blueprint.route('/inventario/producto/<int:product_id>')
@@ -294,7 +297,7 @@ def inventory_stock():
 def product_detail(product_id):
     product = Product.query.get_or_404(product_id)
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
     return render_template('inventario/detalle_producto.html', title=product.name, product=product, current_rate=current_rate)
 
 @routes_blueprint.route('/inventario/nuevo', methods=['GET', 'POST'])
@@ -324,7 +327,7 @@ def new_product():
             db.session.rollback()
             flash(f'Error al crear el producto: {str(e)}', 'danger')
     # CORRECCIÓN: Usar la nueva función
-    return render_template('inventario/nuevo.html', title='Nuevo Producto', current_rate=get_current_ves_rate() or 0.0)
+    return render_template('inventario/nuevo.html', title='Nuevo Producto', current_rate=get_cached_exchange_rate() or 0.0)
 
 # Rutas de clientes
 @routes_blueprint.route('/clientes/lista')
@@ -332,7 +335,7 @@ def new_product():
 def client_list():
     clients = Client.query.all()
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
     return render_template('clientes/lista.html', title='Lista de Clientes', clients=clients, current_rate=current_rate)
 
 @routes_blueprint.route('/clientes/nuevo', methods=['GET', 'POST'])
@@ -353,7 +356,7 @@ def new_client():
             db.session.rollback()
             flash('Error: El email ya está registrado.', 'danger')
     # CORRECCIÓN: Usar la nueva función
-    return render_template('clientes/nuevo.html', title='Nuevo Cliente', current_rate=get_current_ves_rate() or 0.0)
+    return render_template('clientes/nuevo.html', title='Nuevo Cliente', current_rate=get_cached_exchange_rate() or 0.0)
 
 # Rutas de proveedores
 @routes_blueprint.route('/proveedores/lista')
@@ -361,7 +364,7 @@ def new_client():
 def provider_list():
     providers = Provider.query.all()
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
     return render_template('proveedores/lista.html', title='Lista de Proveedores', providers=providers, current_rate=current_rate)
 
 @routes_blueprint.route('/proveedores/nuevo', methods=['GET', 'POST'])
@@ -381,7 +384,7 @@ def new_provider():
             db.session.rollback()
             flash('Error: Hubo un problema al crear el proveedor.', 'danger')
     # CORRECCIÓN: Usar la nueva función
-    return render_template('proveedores/nuevo.html', title='Nuevo Proveedor', current_rate=get_current_ves_rate() or 0.0)
+    return render_template('proveedores/nuevo.html', title='Nuevo Proveedor', current_rate=get_cached_exchange_rate() or 0.0)
 
 # Rutas de compras
 @routes_blueprint.route('/compras/lista')
@@ -389,7 +392,7 @@ def new_provider():
 def purchase_list():
     purchases = Purchase.query.all()
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
     return render_template('compras/lista.html', title='Lista de Compras', purchases=purchases, current_rate=current_rate)
 
 @routes_blueprint.route('/compras/detalle/<int:purchase_id>')
@@ -397,7 +400,7 @@ def purchase_list():
 def purchase_detail(purchase_id):
     purchase = Purchase.query.get_or_404(purchase_id)
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
     return render_template('compras/detalle_compra.html', title=f'Compra #{purchase.id}', purchase=purchase, current_rate=current_rate)
 
 @routes_blueprint.route('/compras/nuevo', methods=['GET', 'POST'])
@@ -406,7 +409,7 @@ def new_purchase():
     providers = Provider.query.all()
     products = Product.query.all()
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate()
+    current_rate = get_cached_exchange_rate()
 
     if current_rate is None:
         flash('No se ha podido obtener la tasa de cambio. No se pueden crear compras en este momento.', 'danger')
@@ -459,7 +462,7 @@ def new_purchase():
 def reception_list():
     receptions = Reception.query.all()
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
     return render_template('recepciones/lista.html', title='Lista de Recepciones', receptions=receptions, current_rate=current_rate)
 
 @routes_blueprint.route('/recepciones/nueva/<int:purchase_id>', methods=['GET', 'POST'])
@@ -467,7 +470,7 @@ def reception_list():
 def new_reception(purchase_id):
     purchase = Purchase.query.get_or_404(purchase_id)
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
     if request.method == 'POST':
         try:
             new_reception = Reception(purchase_id=purchase.id, status='Completada')
@@ -510,7 +513,7 @@ def new_reception(purchase_id):
 def order_list():
     orders = Order.query.all()
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
     return render_template('ordenes/lista.html', title='Lista de Órdenes', orders=orders, current_rate=current_rate)
 
 @routes_blueprint.route('/ordenes/detalle/<int:order_id>')
@@ -519,7 +522,7 @@ def order_detail(order_id):
     order = Order.query.get_or_404(order_id)
     company_info = CompanyInfo.query.first()
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
     return render_template('ordenes/detalle_orden.html', 
                            title=f'Orden #{order.id}', 
                            order=order,
@@ -532,7 +535,7 @@ def new_order():
     clients = Client.query.all()
     products = Product.query.all()
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate()
+    current_rate = get_cached_exchange_rate()
     
     if current_rate is None:
         flash('No se ha podido obtener la tasa de cambio. No se pueden crear órdenes en este momento.', 'danger')
@@ -608,7 +611,7 @@ def new_order():
 def movement_list():
     movements = Movement.query.order_by(Movement.date.desc()).all()
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
     return render_template('movimientos/lista.html', title='Registro de Movimientos', movements=movements, current_rate=current_rate)
 
 
@@ -645,7 +648,7 @@ def estadisticas():
     sales_data_complete = {'labels': months_names, 'values': [monthly_sales.get(i + 1, 0) for i in range(12)]}
     
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
 
     return render_template('estadisticas.html',
                            title='Estadísticas Gerenciales',
@@ -743,7 +746,7 @@ def cargar_excel():
                 os.remove(filepath)
     
     # CORRECCIÓN: Usar la nueva función
-    return render_template('inventario/cargar_excel.html', title='Cargar Inventario desde Excel', current_rate=get_current_ves_rate() or 0.0)
+    return render_template('inventario/cargar_excel.html', title='Cargar Inventario desde Excel', current_rate=get_cached_exchange_rate() or 0.0)
 
 @routes_blueprint.route('/inventario/cargar_excel_confirmar', methods=['GET', 'POST'])
 @login_required
@@ -754,7 +757,7 @@ def cargar_excel_confirmar():
         
     pending_updates = session.get('pending_updates', [])
     # CORRECCIÓN: Usar la nueva función
-    current_rate = get_current_ves_rate() or 0.0
+    current_rate = get_cached_exchange_rate() or 0.0
 
     if request.method == 'POST':
         try:
@@ -828,7 +831,7 @@ def company_settings():
             flash(f'Ocurrió un error al guardar la información: {str(e)}', 'danger')
 
     # CORRECCIÓN: Usar la nueva función
-    return render_template('configuracion/empresa.html', title='Configuración de Empresa', company_info=company_info, current_rate=get_current_ves_rate() or 0.0)
+    return render_template('configuracion/empresa.html', title='Configuración de Empresa', company_info=company_info, current_rate=get_cached_exchange_rate() or 0.0)
 
 # Rutas de Estructura de Costos
 @routes_blueprint.route('/costos/lista')
@@ -893,7 +896,7 @@ def cost_list():
                            title='Estructura de Costos',
                            products_data=products_with_costs,
                            # CORRECCIÓN: Usar la nueva función
-                           current_rate=get_current_ves_rate() or 0.0)
+                           current_rate=get_cached_exchange_rate() or 0.0)
 
 
 @routes_blueprint.route('/costos/configuracion', methods=['GET', 'POST'])
@@ -928,7 +931,7 @@ def cost_structure_config():
                            title='Configurar Costos Generales',
                            cost_structure=cost_structure,
                            # CORRECCIÓN: Usar la nueva función
-                           current_rate=get_current_ves_rate() or 0.0)
+                           current_rate=get_cached_exchange_rate() or 0.0)
 
 
 @routes_blueprint.route('/costos/editar/<int:product_id>', methods=['GET', 'POST'])
@@ -978,7 +981,7 @@ def edit_product_cost(product_id):
                            title=f'Editar Costos de {product.name}',
                            product=product,
                            # CORRECCIÓN: Usar la nueva función
-                           current_rate=get_current_ves_rate() or 0.0)
+                           current_rate=get_cached_exchange_rate() or 0.0)
 
 @routes_blueprint.route('/ordenes/imprimir/<int:order_id>')
 @login_required
@@ -1000,7 +1003,7 @@ def print_delivery_note(order_id):
 @routes_blueprint.route('/api/exchange_rate')
 def api_exchange_rate():
     # CORRECCIÓN: Usar la nueva función
-    rate = get_current_ves_rate()
+    rate = get_cached_exchange_rate()
     if rate:
         return jsonify(rate=rate)
     else:
