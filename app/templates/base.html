@@ -185,8 +185,7 @@
                 // 2. Mostrar notificación de escritorio
                 if (Notification.permission === "granted") {
                     var notification = new Notification('Nueva Notificación de ToriaSoft', {
-                        body: data.message,
-                        icon: "{{ url_for('static', filename='images/logo.png') }}" // Opcional
+                        body: data.message
                     });
 
                     notification.onclick = function () {
