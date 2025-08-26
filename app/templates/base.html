@@ -6,6 +6,8 @@
     <title>{{ title }} - ToriaSoft</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <!-- Toastr CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
 </head>
 <body class="bg-gray-100 font-sans">
     <div class="flex h-screen bg-gray-200">
@@ -77,6 +79,9 @@
                     <h1 class="text-xl font-semibold text-gray-800">{{ title }}</h1>
                 </div>
                 <div>
+                    <button id="enable-notifications" class="text-blue-500 hover:text-blue-700 mr-4">
+                        <i class="fas fa-bell"></i> Activar Notificaciones
+                    </button>
                     <a href="{{ url_for('main.logout') }}" class="text-red-500 hover:text-red-700">
                         <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
                     </a>
@@ -100,6 +105,12 @@
             </main>
         </div>
     </div>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Toastr JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <!-- Socket.IO Client -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const mobileMenuButton = document.getElementById('mobile-menu-button');
@@ -122,5 +133,78 @@
             }
         });
     </script>
+
+    <!-- NUEVO SCRIPT PARA NOTIFICACIONES EN TIEMPO REAL -->
+    {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+    <script type="text/javascript">
+        $(document).ready(function() {
+            // Configuración de Toastr
+            toastr.options = {
+                "closeButton": true,
+                "progressBar": true,
+                "positionClass": "toast-top-right",
+                "timeOut": "7000", // 7 segundos
+            };
+
+            function requestNotificationPermission() {
+                if (!("Notification" in window)) {
+                    toastr.error("Este navegador no soporta notificaciones de escritorio.");
+                } else if (Notification.permission === "granted") {
+                    toastr.success("Las notificaciones ya están activadas.");
+                } else if (Notification.permission !== "denied") {
+                    Notification.requestPermission().then(function (permission) {
+                        if (permission === "granted") {
+                            new Notification("¡Notificaciones activadas!", {
+                                body: "Gracias por activar las notificaciones.",
+                                icon: "{{ url_for('static', filename='images/logo.png') }}" // Opcional
+                            });
+                        }
+                    });
+                }
+            }
+
+            $('#enable-notifications').on('click', requestNotificationPermission);
+
+            var socket = io(); // Conectar al servidor WebSocket
+
+            socket.on('connect', function() {
+                console.log('Conectado al servidor de notificaciones.');
+            });
+
+            // Escuchar el evento 'new_notification'
+            socket.on('new_notification', function(data) {
+                // 1. Mostrar el pop-up con Toastr
+                let toast = toastr.info(data.message, 'Nueva Notificación', {
+                    "onclick": function() {
+                        if (data.link) {
+                            window.location.href = data.link;
+                        }
+                    }
+                });
+
+                // 2. Mostrar notificación de escritorio
+                if (Notification.permission === "granted") {
+                    var notification = new Notification('Nueva Notificación de ToriaSoft', {
+                        body: data.message,
+                        icon: "{{ url_for('static', filename='images/logo.png') }}" // Opcional
+                    });
+
+                    notification.onclick = function () {
+                        window.open(data.link);
+                    };
+                }
+
+                // 3. Actualizar el contador de la campana (si existe)
+                let badge = $('#notifications-dropdown .navbar-badge');
+                if (badge.length) {
+                    badge.text(parseInt(badge.text()) + 1);
+                } else {
+                    // Si no hay contador, lo crea
+                    $('#notifications-dropdown').append('<span class="badge badge-warning navbar-badge">1</span>');
+                }
+            });
+        });
+    </script>
+    {% endif %}
 </body>
 </html>
