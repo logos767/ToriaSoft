@@ -7,6 +7,7 @@ from flask_login import login_user, current_user, logout_user, login_required
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, extract
 import openpyxl
+from datetime import datetime
 
 # Import extensions from the new extensions file
 from .extensions import db, bcrypt, socketio
@@ -106,20 +107,47 @@ def get_current_ves_rate():
     """
     Obtiene la tasa de cambio actual VES/USD para usar en la lógica del backend.
     Prioriza la tasa P2P de Binance y, si falla, utiliza la de ExchangeMonitor.
+    Si ambos fallan, utiliza la última tasa guardada en la base de datos.
     """
+    rate = None
     # 1. Intenta obtener la tasa de Binance primero
     rate = obtener_tasa_p2p_binance()
-    if rate:
-        return rate
     
     # 2. Si Binance falla, intenta con ExchangeMonitor
-    current_app.logger.warning("Falló la API de Binance, intentando con ExchangeMonitor.")
-    rate = obtener_tasa_exchangemonitor()
+    if not rate:
+        current_app.logger.warning("Falló la API de Binance, intentando con ExchangeMonitor.")
+        rate = obtener_tasa_exchangemonitor()
+
+    # 3. Si se obtuvo una tasa de alguna API, se guarda en la BD
     if rate:
+        try:
+            exchange_rate_entry = ExchangeRate.query.first()
+            if exchange_rate_entry:
+                exchange_rate_entry.rate = rate
+                exchange_rate_entry.date_updated = datetime.utcnow()
+            else:
+                exchange_rate_entry = ExchangeRate(rate=rate)
+                db.session.add(exchange_rate_entry)
+            db.session.commit()
+            current_app.logger.info(f"Tasa de cambio actualizada en la base de datos: {rate}")
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error al guardar la tasa de cambio en la base de datos: {e}")
         return rate
 
-    current_app.logger.error("No se pudo obtener ninguna tasa de cambio.")
+    # 4. Si ambas APIs fallan, intenta obtener la tasa de la BD
+    current_app.logger.warning("Ambas APIs de tasas de cambio fallaron. Intentando obtener la última tasa desde la base de datos.")
+    try:
+        cached_rate = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
+        if cached_rate:
+            current_app.logger.warning(f"Usando tasa de cambio cacheada de la base de datos: {cached_rate.rate}")
+            return cached_rate.rate
+    except Exception as e:
+        current_app.logger.error(f"Error al obtener la tasa de cambio de la base de datos: {e}")
+
+    current_app.logger.error("No se pudo obtener ninguna tasa de cambio, ni de las APIs ni de la base de datos.")
     return None
+
 
 # --- FIN DE SECCIÓN DE TASAS DE CAMBIO ---
 
