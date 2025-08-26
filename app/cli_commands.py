@@ -12,7 +12,7 @@ def register_commands(app):
         """Creates the database and loads initial data."""
         with current_app.app_context():
             inspector = inspect(db.engine)
-            if not inspector.has_table('user'):
+            if not inspector.has_table('users'):
                 logger.info("Creating all database tables...")
                 db.create_all()
                 if not User.query.filter_by(username='admin').first():
@@ -22,7 +22,7 @@ def register_commands(app):
                     db.session.add(admin_user)
                     db.session.commit()
             else:
-                logger.info("Table 'user' already exists, skipping table creation.")
+                logger.info("Table 'users' already exists, skipping table creation.")
             
             # ... (The rest of your data loading logic for clients, providers, products) ...
             logger.info("Database initialization complete!")
