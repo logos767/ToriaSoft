@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Imprimir Códigos de Barra</title>
+    <style>
+        @media print {
+            @page {
+                size: A4;
+                margin: 10mm; /* Margen para la página */
+            }
+            body {
+                margin: 0;
+                font-family: sans-serif;
+            }
+        }
+        body {
+            font-family: sans-serif;
+        }
+        .page {
+            display: grid;
+            grid-template-columns: repeat(4, 50mm);
+            grid-template-rows: repeat(11, 25mm);
+            gap: 0;
+            width: 210mm;
+            height: 297mm;
+            margin: auto;
+            page-break-after: always;
+        }
+        .label {
+            width: 50mm;
+            height: 25mm;
+            box-sizing: border-box;
+            padding: 2mm;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        .product-name {
+            font-size: 8pt;
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+        .barcode-svg {
+            width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        {% for product in products %}
+        <div class="label">
+            <div class="product-name">{{ product.name }}</div>
+            <div class="barcode-svg">
+                {{ product.barcode_svg|safe }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</body>
+</html>

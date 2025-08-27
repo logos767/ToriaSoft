@@ -5,13 +5,21 @@ from bs4 import BeautifulSoup
 from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, session, current_app
 from flask_login import login_user, current_user, logout_user, login_required
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func, extract
+from sqlalchemy import func, extract, or_
 import openpyxl
 from datetime import datetime
+import barcode
+from barcode.writer import SVGWriter
+from io import BytesIO
 
 # Import extensions from the new extensions file
 from .extensions import db, bcrypt, socketio
 from .models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve
+
+def is_valid_ean13(barcode):
+    if not barcode or not barcode.isdigit() or len(barcode) != 13:
+        return False
+    return True
 
 routes_blueprint = Blueprint('main', __name__)
 
@@ -420,6 +428,54 @@ def inventory_list():
                            products=products,
                            user_role=user_role,
                            current_rate=current_rate)
+
+@routes_blueprint.route('/inventario/codigos_barra', methods=['GET'])
+@login_required
+def codigos_barra():
+    products = Product.query.all()
+    return render_template('inventario/codigos_barra.html', title='Imprimir Códigos de Barra', products=products)
+
+@routes_blueprint.route('/inventario/codigos_barra_api', methods=['GET'])
+@login_required
+def codigos_barra_api():
+    search_term = request.args.get('search', '').lower()
+    query = Product.query
+    if search_term:
+        query = query.filter(or_(
+            Product.name.ilike(f'%{search_term}%'),
+            Product.barcode.ilike(f'%{search_term}%')
+        ))
+    products = query.all()
+    return jsonify(products=[{'id': p.id, 'name': p.name, 'barcode': p.barcode} for p in products])
+
+@routes_blueprint.route('/inventario/imprimir_codigos_barra', methods=['POST'])
+@login_required
+def imprimir_codigos_barra():
+    product_ids = request.form.getlist('product_ids')
+    if not product_ids:
+        flash('No se seleccionó ningún producto para imprimir.', 'warning')
+        return redirect(url_for('main.codigos_barra'))
+
+    products_to_print = Product.query.filter(Product.id.in_(product_ids)).all()
+
+    for product in products_to_print:
+        if product.barcode and is_valid_ean13(product.barcode):
+            # Generar código de barras en formato SVG
+            try:
+                EAN = barcode.get_barcode_class('ean13')
+                ean = EAN(product.barcode, writer=SVGWriter())
+                buffer = BytesIO()
+                ean.write(buffer)
+                product.barcode_svg = buffer.getvalue().decode('utf-8')
+            except Exception as e:
+                current_app.logger.error(f"Error generating barcode for {product.barcode}: {e}")
+                product.barcode_svg = "<span>Error al generar código de barras</span>"
+        else:
+            product.barcode_svg = "<span>Código de barras no válido</span>"
+
+
+    return render_template('inventario/imprimir_codigos.html', products=products_to_print)
+
 
 @routes_blueprint.route('/inventario/existencias')
 @login_required
@@ -1064,11 +1120,43 @@ def cost_structure_config():
             db.session.rollback()
             flash(f'Error al guardar la configuración. Verifique que los valores sean números. Error: {e}', 'danger')
 
+    current_rate = get_cached_exchange_rate()
+    manual_rate_required = current_rate is None
+    if manual_rate_required:
+        flash('No se pudo obtener la tasa de cambio de las APIs. Por favor, ingrese un valor manualmente.', 'warning')
+
     return render_template('costos/configuracion.html',
                            title='Configurar Costos Generales',
                            cost_structure=cost_structure,
-                           # CORRECCIÓN: Usar la nueva función
-                           current_rate=get_cached_exchange_rate() or 0.0)
+                           current_rate=current_rate or 0.0,
+                           manual_rate_required=manual_rate_required)
+
+
+@routes_blueprint.route('/costos/update_rate', methods=['POST'])
+@login_required
+def update_exchange_rate():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    try:
+        manual_rate = float(request.form.get('manual_rate'))
+        if manual_rate > 0:
+            exchange_rate_entry = ExchangeRate.query.first()
+            if exchange_rate_entry:
+                exchange_rate_entry.rate = manual_rate
+                exchange_rate_entry.date_updated = get_current_time_ve()
+            else:
+                exchange_rate_entry = ExchangeRate(rate=manual_rate)
+                db.session.add(exchange_rate_entry)
+            db.session.commit()
+            flash('Tasa de cambio actualizada manualmente.', 'success')
+        else:
+            flash('La tasa de cambio debe ser un número positivo.', 'danger')
+    except (ValueError, TypeError):
+        flash('Valor de tasa de cambio inválido.', 'danger')
+
+    return redirect(url_for('main.cost_structure_config'))
 
 
 @routes_blueprint.route('/costos/editar/<int:product_id>', methods=['GET', 'POST'])
