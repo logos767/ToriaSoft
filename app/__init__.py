@@ -6,9 +6,12 @@ import os
 import secrets
 from dotenv import load_dotenv
 from flask import Flask
+from apscheduler.schedulers.background import BackgroundScheduler
+
 
 # Import extensions
 from .extensions import db, login_manager, bcrypt, socketio
+from .routes import fetch_and_update_exchange_rate
 
 # Load environment variables
 load_dotenv()
@@ -17,18 +20,16 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def update_exchange_rate_on_startup(app):
-    with app.app_context():
-        from .models import ExchangeRate
-        from .routes import fetch_and_update_exchange_rate
-        from datetime import datetime
-
-        last_update = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
-        if not last_update or last_update.date_updated.date() < datetime.utcnow().date():
-            app.logger.info("Updating exchange rate on startup...")
+def schedule_exchange_rate_update(app):
+    def update_rate():
+        with app.app_context():
+            logger.info("Executing scheduled exchange rate update...")
             fetch_and_update_exchange_rate()
-        else:
-            app.logger.info("Exchange rate is already up to date for today.")
+
+    scheduler = BackgroundScheduler(daemon=True)
+    scheduler.add_job(update_rate, 'cron', hour=6, minute=0)
+    scheduler.start()
+    logger.info("Scheduled exchange rate update to run daily at 6:00 AM.")
 
 def create_app():
     """Application Factory Function"""
@@ -79,7 +80,7 @@ def create_app():
     def shutdown_session(exception=None):
         db.session.remove()
 
-    # --- Update exchange rate on startup ---
-    update_exchange_rate_on_startup(app)
+    # --- Schedule exchange rate update ---
+    schedule_exchange_rate_update(app)
 
     return app
