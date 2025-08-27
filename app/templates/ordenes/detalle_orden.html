@@ -10,6 +10,10 @@
             <a href="{{ url_for('main.print_delivery_note', order_id=order.id) }}" target="_blank" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">
                 <i class="fas fa-print mr-2"></i>Imprimir Recibo/Nota
             </a>
+            {% else %}
+            <a href="{{ url_for('main.company_settings') }}" class="bg-gray-400 text-white font-bold py-2 px-4 rounded-lg cursor-not-allowed" title="Configure la información de la empresa para imprimir">
+                <i class="fas fa-print mr-2"></i>Imprimir Recibo/Nota
+            </a>
             {% endif %}
         </div>
     </div>
@@ -19,7 +23,7 @@
             <h2 class="text-xl font-semibold text-gray-700">Información General</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 text-gray-600">
                 <p><strong>Cliente:</strong> {{ order.client.name }}</p>
-                <p><strong>Fecha:</strong> {{ order.date_created.strftime('%d/%m/%Y %H:%M') }}</p>
+                <p><strong>Fecha:</strong> {{ order.date_created.strftime('%d/%m/%Y %H:%M:%S') }}</p>
                 <p><strong>Estado:</strong> {{ order.status }}</p>
                 <p><strong>Monto Total:</strong> <span class="font-bold text-green-700">Bs. {{ "%.2f"|format(order.total_amount) }}</span></p>
             </div>

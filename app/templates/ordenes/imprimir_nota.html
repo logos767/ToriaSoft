@@ -95,7 +95,7 @@
 
     <!-- Información del cliente y orden -->
     <div class="info">
-        <p><strong>Fecha:</strong> {{ order.date_created.strftime('%d/%m/%Y %H:%M') }}</p>
+        <p><strong>Fecha:</strong> {{ order.date_created.strftime('%d/%m/%Y %H:%M:%S') }}</p>
         <p><strong>N° de Orden:</strong> {{ order.id }}</p>
         <p><strong>Cliente:</strong> {{ order.client.name }}</p>
     </div>
