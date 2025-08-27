@@ -173,6 +173,7 @@
 
             // Escuchar el evento 'new_notification'
             socket.on('new_notification', function(data) {
+                console.log('¡Evento de notificación recibido!', data);
                 // 1. Mostrar el pop-up con Toastr
                 let toast = toastr.info(data.message, 'Nueva Notificación', {
                     "onclick": function() {
