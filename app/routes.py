@@ -11,7 +11,7 @@ from datetime import datetime
 
 # Import extensions from the new extensions file
 from .extensions import db, bcrypt, socketio
-from .models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate
+from .models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve
 
 routes_blueprint = Blueprint('main', __name__)
 
@@ -218,7 +218,7 @@ def fetch_and_update_exchange_rate():
             exchange_rate_entry = ExchangeRate.query.first()
             if exchange_rate_entry:
                 exchange_rate_entry.rate = rate
-                exchange_rate_entry.date_updated = datetime.utcnow()
+                exchange_rate_entry.date_updated = get_current_time_ve()
             else:
                 exchange_rate_entry = ExchangeRate(rate=rate)
                 db.session.add(exchange_rate_entry)
@@ -267,7 +267,7 @@ def fetch_and_update_exchange_rate():
             exchange_rate_entry = ExchangeRate.query.first()
             if exchange_rate_entry:
                 exchange_rate_entry.rate = rate
-                exchange_rate_entry.date_updated = datetime.utcnow()
+                exchange_rate_entry.date_updated = get_current_time_ve()
             else:
                 exchange_rate_entry = ExchangeRate(rate=rate)
                 db.session.add(exchange_rate_entry)

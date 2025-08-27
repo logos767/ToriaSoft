@@ -1,4 +1,13 @@
 from datetime import datetime
+import pytz
+
+# Define la zona horaria de Venezuela (GMT-4)
+VE_TIMEZONE = pytz.timezone('America/Caracas')
+
+def get_current_time_ve():
+    """Retorna la hora actual en la zona horaria de Venezuela."""
+    return datetime.now(VE_TIMEZONE)
+
 from .extensions import db, login_manager
 from flask_login import UserMixin
 
@@ -71,7 +80,7 @@ class Provider(db.Model):
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
-    date_created = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    date_created = db.Column(db.DateTime, nullable=False, default=get_current_time_ve)
     status = db.Column(db.String(20), nullable=False, default='Pendiente')
     total_amount = db.Column(db.Float, nullable=False, default=0.0)
 
@@ -94,7 +103,7 @@ class OrderItem(db.Model):
 class Purchase(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'), nullable=False)
-    date_created = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    date_created = db.Column(db.DateTime, nullable=False, default=get_current_time_ve)
     status = db.Column(db.String(20), nullable=False, default='Pendiente')
     total_cost = db.Column(db.Float, nullable=False, default=0.0)
 
@@ -118,7 +127,7 @@ class PurchaseItem(db.Model):
 class Reception(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     purchase_id = db.Column(db.Integer, db.ForeignKey('purchase.id'), nullable=False, unique=True)
-    date_received = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    date_received = db.Column(db.DateTime, nullable=False, default=get_current_time_ve)
     status = db.Column(db.String(20), nullable=False, default='Pendiente')
 
     def __repr__(self):
@@ -129,7 +138,7 @@ class Movement(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     type = db.Column(db.String(20), nullable=False)  # 'Entrada', 'Salida'
     quantity = db.Column(db.Integer, nullable=False)
-    date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    date = db.Column(db.DateTime, nullable=False, default=get_current_time_ve)
     document_id = db.Column(db.Integer, nullable=True) # ID de la orden, compra, etc.
     document_type = db.Column(db.String(50), nullable=True) # 'Orden de Venta', 'Orden de Compra', 'Ajuste'
     related_party_id = db.Column(db.Integer, nullable=True) # ID del cliente o proveedor
@@ -152,7 +161,7 @@ class CompanyInfo(db.Model):
 class ExchangeRate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     rate = db.Column(db.Float, nullable=False)
-    date_updated = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    date_updated = db.Column(db.DateTime, nullable=False, default=get_current_time_ve)
 
     def __repr__(self):
         return f"ExchangeRate(rate='{self.rate}', date='{self.date_updated}')"
@@ -171,7 +180,7 @@ class Notification(db.Model):
     message = db.Column(db.String(255), nullable=False)
     link = db.Column(db.String(255), nullable=True)
     is_read = db.Column(db.Boolean, default=False, nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=get_current_time_ve)
 
     user = db.relationship('User', backref=db.backref('notifications', lazy='dynamic'))
 
