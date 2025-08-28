@@ -41,12 +41,14 @@
                     </thead>
                     <tbody id="product-table-body" class="bg-white divide-y divide-gray-200">
                         {% for product in products %}
-                        <tr>
+                        <tr data-product-id="{{ product.id }}" data-barcode="{{ product.barcode }}">
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <input type="checkbox" name="product_ids" value="{{ product.id }}" class="product-checkbox">
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ product.name }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.barcode }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <svg id="barcode-{{ product.id }}"></svg>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -56,20 +58,67 @@
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const selectAllCheckbox = document.getElementById('select-all');
-    const productCheckboxes = document.querySelectorAll('.product-checkbox');
     const searchInput = document.getElementById('search-input');
     const filterBtn = document.getElementById('filter-btn');
     const tableBody = document.getElementById('product-table-body');
 
-    // Seleccionar/Deseleccionar todos
-    selectAllCheckbox.addEventListener('change', function () {
-        productCheckboxes.forEach(checkbox => {
-            checkbox.checked = selectAllCheckbox.checked;
+    function generateBarcodes() {
+        const rows = tableBody.querySelectorAll('tr');
+        rows.forEach(row => {
+            const barcodeValue = row.dataset.barcode;
+            const productId = row.dataset.productId;
+            if (barcodeValue && productId) {
+                try {
+                    JsBarcode(`#barcode-${productId}`, barcodeValue, {
+                        format: "CODE128",
+                        displayValue: true,
+                        fontSize: 14,
+                        height: 50,
+                        width: 1.5
+                    });
+                } catch (e) {
+                    console.error(`Error generating barcode for product ${productId}:`, e);
+                    const barcodeElement = document.getElementById(`barcode-${productId}`);
+                    if(barcodeElement) {
+                        barcodeElement.outerHTML = '<p class="text-red-500">Error</p>';
+                    }
+                }
+            }
         });
-    });
+    }
+
+    function updateTable(products) {
+        tableBody.innerHTML = ''; // Limpiar tabla
+        products.forEach(product => {
+            const row = `
+                <tr data-product-id="${product.id}" data-barcode="${product.barcode}">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <input type="checkbox" name="product_ids" value="${product.id}" class="product-checkbox">
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${product.name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <svg id="barcode-${product.id}"></svg>
+                    </td>
+                </tr>
+            `;
+            tableBody.innerHTML += row;
+        });
+        generateBarcodes();
+        updateCheckboxEventListeners();
+    }
+    
+    function updateCheckboxEventListeners() {
+        const productCheckboxes = document.querySelectorAll('.product-checkbox');
+        selectAllCheckbox.addEventListener('change', function () {
+            productCheckboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+        });
+    }
 
     // Filtrado y búsqueda
     filterBtn.addEventListener('click', function() {
@@ -78,21 +127,13 @@ document.addEventListener('DOMContentLoaded', function () {
         fetch(`{{ url_for('main.codigos_barra_api') }}?search=${searchTerm}`)
             .then(response => response.json())
             .then(data => {
-                tableBody.innerHTML = ''; // Limpiar tabla
-                data.products.forEach(product => {
-                    const row = `
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <input type="checkbox" name="product_ids" value="${product.id}" class="product-checkbox">
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${product.name}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${product.barcode}</td>
-                        </tr>
-                    `;
-                    tableBody.innerHTML += row;
-                });
+                updateTable(data.products);
             });
     });
+
+    // Generación inicial de códigos de barras
+    generateBarcodes();
+    updateCheckboxEventListeners();
 });
 </script>
 {% endblock %}
