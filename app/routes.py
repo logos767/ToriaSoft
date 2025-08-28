@@ -433,7 +433,8 @@ def inventory_list():
 @login_required
 def codigos_barra():
     products = Product.query.all()
-    return render_template('inventario/codigos_barra.html', title='Imprimir Códigos de Barra', products=products)
+    current_rate = get_cached_exchange_rate() or 0.0
+    return render_template('inventario/codigos_barra.html', title='Imprimir Códigos de Barra', products=products, current_rate=current_rate)
 
 @routes_blueprint.route('/inventario/codigos_barra_api', methods=['GET'])
 @login_required
