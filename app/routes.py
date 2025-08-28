@@ -903,12 +903,12 @@ def cargar_excel():
                     continue
                 
                 barcode = str(row[0]).strip()
-                codigo_producto = str(row[6]).strip() if len(row) > 6 and row[6] is not None else ''
-                name = str(row[1]).strip()
-                cost_usd = row[2] if row[2] is not None else 0
-                price_usd = row[3] if row[3] is not None else 0
-                stock = row[4] if row[4] is not None else 0
-                image_url = row[5] if row[5] is not None else ''
+                codigo_producto = str(row[1]).strip() if len(row) > 1 and row[1] is not None else ''
+                name = str(row[2]).strip()
+                cost_usd = row[3] if row[3] is not None else 0
+                price_usd = row[4] if row[4] is not None else 0
+                stock = row[5] if row[5] is not None else 0
+                image_url = row[6] if row[6] is not None else ''
                 marca = str(row[7]).strip() if len(row) > 7 and row[7] is not None else ''
                 color = str(row[8]).strip() if len(row) > 8 and row[8] is not None else ''
                 talla = str(row[9]).strip() if len(row) > 9 and row[9] is not None else ''
@@ -921,12 +921,12 @@ def cargar_excel():
                         'new_codigo_producto': codigo_producto,
                         'old_codigo_producto': product.codigo_producto,
                         'name': product.name,
-                        'new_stock': int(stock),
-                        'old_stock': product.stock,
+                        'new_name': name,
                         'new_cost_usd': float(cost_usd),
                         'old_cost_usd': product.cost_usd,
-                        'new_name': name,
                         'new_price_usd': float(price_usd),
+                        'new_stock': int(stock),
+                        'old_stock': product.stock,
                         'new_image_url': image_url,
                         'new_marca': marca,
                         'old_marca': product.marca,
