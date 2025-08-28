@@ -462,8 +462,10 @@ def imprimir_codigos_barra():
 
     products_to_print = Product.query.filter(Product.id.in_(product_ids)).all()
 
+    products_dict = [{'id': p.id, 'name': p.name, 'barcode': p.barcode} for p in products_to_print]
+
     # Render the HTML template with the products
-    html_string = render_template('inventario/imprimir_codigos.html', products=products_to_print)
+    html_string = render_template('inventario/imprimir_codigos.html', products=products_dict)
 
     # Create a PDF from the HTML string
     pdf = HTML(string=html_string).write_pdf()
