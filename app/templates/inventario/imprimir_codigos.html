@@ -54,38 +54,11 @@
         {% for product in products %}
         <div class="label">
             <div class="product-name">{{ product.name }}</div>
-            <svg class="barcode-svg" id="barcode-{{ product.id }}"></svg>
+            <div class="barcode-svg">{{ product.barcode_svg|safe }}</div>
         </div>
         {% endfor %}
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const products = {{ products|tojson|safe }};
-            products.forEach(product => {
-                if (product.barcode) {
-                    try {
-                        JsBarcode(`#barcode-${product.id}`, product.barcode, {
-                            format: "CODE128",
-                            width: 1.5,
-                            height: 30,
-                            displayValue: true,
-                            fontSize: 10,
-                            margin: 5
-                        });
-                    } catch (e) {
-                        console.error(`Error al generar código de barras para ${product.barcode}:`, e);
-                        const barcodeElement = document.getElementById(`barcode-${product.id}`);
-                        if (barcodeElement) {
-                            barcodeElement.outerHTML = '<p style="font-size: 8pt; color: red;">Error</p>';
-                        }
-                    }
-                }
-            });
-            // Trigger print dialog
-            window.print();
-        });
-    </script>
+    
 </body>
 </html>

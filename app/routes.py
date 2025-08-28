@@ -451,6 +451,9 @@ def codigos_barra_api():
 
 from weasyprint import HTML
 from flask import Response
+from barcode import Code128
+from barcode.writer import SVGWriter
+from io import BytesIO
 
 @routes_blueprint.route('/inventario/imprimir_codigos_barra', methods=['POST'])
 @login_required
@@ -462,7 +465,19 @@ def imprimir_codigos_barra():
 
     products_to_print = Product.query.filter(Product.id.in_(product_ids)).all()
 
-    products_dict = [{'id': p.id, 'name': p.name, 'barcode': p.barcode} for p in products_to_print]
+    products_dict = []
+    for p in products_to_print:
+        barcode_svg = ""
+        if p.barcode:
+            try:
+                # Generate barcode SVG
+                buffer = BytesIO()
+                Code128(p.barcode, writer=SVGWriter()).write(buffer)
+                barcode_svg = buffer.getvalue().decode('utf-8')
+            except Exception as e:
+                current_app.logger.error(f"Error generating barcode for {p.barcode}: {e}")
+                barcode_svg = f"<p style='color:red;'>Error: {e}</p>"
+        products_dict.append({'id': p.id, 'name': p.name, 'barcode': p.barcode, 'barcode_svg': barcode_svg})
 
     # Render the HTML template with the products
     html_string = render_template('inventario/imprimir_codigos.html', products=products_dict)
