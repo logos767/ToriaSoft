@@ -36,7 +36,7 @@ class Product(db.Model):
     price_usd = db.Column(db.Float, nullable=False, default=0.0) # Almacenado en USD
     image_url = db.Column(db.String(200), nullable=True)
     size = db.Column(db.String(20), nullable=True)
-    color = db.Column(db.String(20), nullable=True)
+    color = db.Column(db.String(120), nullable=True)
     codigo_producto = db.Column(db.String(50), nullable=True)
     marca = db.Column(db.String(50), nullable=True)
     profit_margin = db.Column(db.Float, nullable=False, default=0.20) # Margen de utilidad (ej. 20%)
