@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto p-4 max-w-4xl">
+<div class="container mx-auto p-4 max-w-6xl">
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-edit mr-2"></i>Editando: {{ product.name }}</h1>
         <a href="{{ url_for('main.cost_list') }}" class="text-blue-500 hover:text-blue-700">
@@ -9,58 +9,219 @@
         </a>
     </div>
 
-    <div class="bg-white p-8 rounded-lg shadow-md">
-        <form method="POST" action="{{ url_for('main.edit_product_cost', product_id=product.id) }}">
-            <div class="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-6 rounded-lg">
-                <p class="font-bold">Información Importante</p>
-                <p>El <strong>Costo de Compra</strong> actual de este producto es <strong>${{ "%.2f"|format(product.cost_usd) }}</strong>. Este valor se cambia directamente en la ficha del producto.</p>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Formulario de edición -->
+        <div class="bg-white p-8 rounded-lg shadow-md">
+            <form method="POST" action="{{ url_for('main.edit_product_cost', product_id=product.id) }}">
+                <div class="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-6 rounded-lg">
+                    <p class="font-bold">Información Importante</p>
+                    <p>El <strong>Costo de Compra</strong> actual de este producto es <strong>${{ "%.2f"|format(product.cost_usd) }}</strong>. Este valor se cambia directamente en la ficha del producto.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="mb-4">
+                        <label for="profit_margin" class="block text-gray-700 font-bold mb-2">Margen de Utilidad Deseado (%)</label>
+                        <input type="number" step="0.01" id="profit_margin" name="profit_margin" value="{{ (product.profit_margin or 0) * 100 }}" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <p class="text-sm text-gray-500 mt-1">Introduzca el porcentaje de ganancia que desea obtener. Ej: 25 para 25%.</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="specific_freight_cost" class="block text-gray-700 font-bold mb-2">Costo de Flete por Unidad (USD)</label>
+                        <input type="number" step="0.01" id="specific_freight_cost" name="specific_freight_cost" value="{{ product.specific_freight_cost or 0 }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="estimated_monthly_sales" class="block text-gray-700 font-bold mb-2">Ventas Mensuales Estimadas (Unidades)</label>
+                        <input type="number" id="estimated_monthly_sales" name="estimated_monthly_sales" value="{{ product.estimated_monthly_sales or 100 }}" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <p class="text-sm text-gray-500 mt-1">Crucial para distribuir los costos fijos de la empresa.</p>
+                    </div>
+                </div>
+
+                <hr class="my-6">
+
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Gastos Variables Específicos (%)</h2>
+                <p class="text-gray-600 mb-6">Deje en 0 para usar los valores por defecto de la configuración general.</p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="mb-4">
+                        <label for="variable_selling_expense_percent" class="block text-gray-700 font-bold mb-2">Gasto de Venta Específico (%)</label>
+                        <input type="number" step="0.01" id="variable_selling_expense_percent" name="variable_selling_expense_percent" value="{{ (product.variable_selling_expense_percent or 0) * 100 }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="variable_marketing_percent" class="block text-gray-700 font-bold mb-2">Gasto de Mercadeo Específico (%)</label>
+                        <input type="number" step="0.01" id="variable_marketing_percent" name="variable_marketing_percent" value="{{ (product.variable_marketing_percent or 0) * 100 }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end mt-6">
+                    <a href="{{ url_for('main.cost_list') }}" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors mr-4">
+                        Cancelar
+                    </a>
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
+                        <i class="fas fa-save mr-2"></i>Guardar Cambios
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Sección de Punto de Equilibrio -->
+        <div class="bg-white p-8 rounded-lg shadow-md">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-chart-line mr-2"></i>Punto de Equilibrio Financiero</h2>
+            
+            {% if break_even_data %}
+            <div class="mb-6">
+                <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-lg">
+                    <p class="font-bold">Resultados del Análisis</p>
+                    <p><strong>Punto de Equilibrio:</strong> {{ "%.0f"|format(break_even_data.break_even_units) }} unidades</p>
+                    <p><strong>Monto de Equilibrio:</strong> ${{ "%.2f"|format(break_even_data.break_even_amount) }} USD</p>
+                    <p><strong>Precio de Venta:</strong> ${{ "%.2f"|format(break_even_data.selling_price) }} USD</p>
+                </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="mb-4">
-                    <label for="profit_margin" class="block text-gray-700 font-bold mb-2">Margen de Utilidad Deseado (%)</label>
-                    <input type="number" step="0.01" id="profit_margin" name="profit_margin" value="{{ (product.profit_margin or 0) * 100 }}" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <p class="text-sm text-gray-500 mt-1">Introduzca el porcentaje de ganancia que desea obtener. Ej: 25 para 25%.</p>
-                </div>
-
-                <div class="mb-4">
-                    <label for="specific_freight_cost" class="block text-gray-700 font-bold mb-2">Costo de Flete por Unidad (USD)</label>
-                    <input type="number" step="0.01" id="specific_freight_cost" name="specific_freight_cost" value="{{ product.specific_freight_cost or 0 }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-
-                <div class="mb-4">
-                    <label for="estimated_monthly_sales" class="block text-gray-700 font-bold mb-2">Ventas Mensuales Estimadas (Unidades)</label>
-                    <input type="number" id="estimated_monthly_sales" name="estimated_monthly_sales" value="{{ product.estimated_monthly_sales or 100 }}" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <p class="text-sm text-gray-500 mt-1">Crucial para distribuir los costos fijos de la empresa.</p>
-                </div>
-            </div>
-
-            <hr class="my-6">
-
-            <h2 class="text-2xl font-bold text-gray-800 mb-4">Gastos Variables Específicos (%)</h2>
-            <p class="text-gray-600 mb-6">Deje en 0 para usar los valores por defecto de la configuración general.</p>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="mb-4">
-                    <label for="variable_selling_expense_percent" class="block text-gray-700 font-bold mb-2">Gasto de Venta Específico (%)</label>
-                    <input type="number" step="0.01" id="variable_selling_expense_percent" name="variable_selling_expense_percent" value="{{ (product.variable_selling_expense_percent or 0) * 100 }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-
-                <div class="mb-4">
-                    <label for="variable_marketing_percent" class="block text-gray-700 font-bold mb-2">Gasto de Mercadeo Específico (%)</label>
-                    <input type="number" step="0.01" id="variable_marketing_percent" name="variable_marketing_percent" value="{{ (product.variable_marketing_percent or 0) * 100 }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <div class="mb-6">
+                <h3 class="text-lg font-bold text-gray-700 mb-3">Desglose de Costos</h3>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div class="bg-gray-50 p-3 rounded">
+                        <p class="font-semibold">Costos Fijos Totales</p>
+                        <p>${{ "%.2f"|format(break_even_data.fixed_costs_total) }} USD</p>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded">
+                        <p class="font-semibold">Costos Fijos por Unidad</p>
+                        <p>${{ "%.2f"|format(break_even_data.fixed_cost_per_unit) }} USD</p>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded">
+                        <p class="font-semibold">Costos Variables por Unidad</p>
+                        <p>${{ "%.2f"|format(break_even_data.variable_cost_per_unit) }} USD</p>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded">
+                        <p class="font-semibold">Margen de Contribución</p>
+                        <p>${{ "%.2f"|format(break_even_data.selling_price - break_even_data.variable_cost_per_unit) }} USD</p>
+                    </div>
                 </div>
             </div>
 
-            <div class="flex items-center justify-end mt-6">
-                <a href="{{ url_for('main.cost_list') }}" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors mr-4">
-                    Cancelar
-                </a>
-                <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
-                    <i class="fas fa-save mr-2"></i>Guardar Cambios
-                </button>
+            <div class="mb-6">
+                <h3 class="text-lg font-bold text-gray-700 mb-3">Gastos Variables</h3>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div class="bg-blue-50 p-3 rounded">
+                        <p class="font-semibold">Comisión de Ventas</p>
+                        <p>{{ "%.1f"|format(break_even_data.var_sales_exp_pct) }}%</p>
+                    </div>
+                    <div class="bg-blue-50 p-3 rounded">
+                        <p class="font-semibold">Marketing</p>
+                        <p>{{ "%.1f"|format(break_even_data.var_marketing_pct) }}%</p>
+                    </div>
+                </div>
             </div>
-        </form>
+
+            <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-lg">
+                <p class="font-bold">Interpretación</p>
+                <p>Para cubrir todos los costos, necesita vender al menos <strong>{{ "%.0f"|format(break_even_data.break_even_units) }}</strong> unidades mensuales, generando <strong>${{ "%.2f"|format(break_even_data.break_even_amount) }}</strong> en ingresos.</p>
+            </div>
+
+            {% else %}
+            <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-lg">
+                <p class="font-bold">Información Requerida</p>
+                <p>Complete la configuración de costos generales y los datos del producto para calcular el punto de equilibrio.</p>
+            </div>
+            {% endif %}
+        </div>
     </div>
+
+    <!-- Gráfica del Punto de Equilibrio -->
+    {% if break_even_data %}
+    <div class="mt-8 bg-white p-8 rounded-lg shadow-md">
+        <h2 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-chart-bar mr-2"></i>Gráfica de Punto de Equilibrio</h2>
+        <canvas id="breakEvenChart" width="400" height="200"></canvas>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const ctx = document.getElementById('breakEvenChart').getContext('2d');
+            
+            // Datos para la gráfica
+            const breakEvenUnits = {{ break_even_data.break_even_units }};
+            const maxUnits = Math.max(breakEvenUnits * 2, 1000);
+            const step = Math.ceil(maxUnits / 10);
+            
+            const units = [];
+            const fixedCosts = [];
+            const variableCosts = [];
+            const totalCosts = [];
+            const revenues = [];
+            
+            for (let i = 0; i <= maxUnits; i += step) {
+                units.push(i);
+                fixedCosts.push({{ break_even_data.fixed_costs_total }});
+                variableCosts.push(i * {{ break_even_data.variable_cost_per_unit }});
+                totalCosts.push({{ break_even_data.fixed_costs_total }} + (i * {{ break_even_data.variable_cost_per_unit }}));
+                revenues.push(i * {{ break_even_data.selling_price }});
+            }
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: units,
+                    datasets: [
+                        {
+                            label: 'Costos Fijos',
+                            data: fixedCosts,
+                            borderColor: 'rgb(255, 99, 132)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                            fill: true,
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Costos Totales',
+                            data: totalCosts,
+                            borderColor: 'rgb(54, 162, 235)',
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            fill: true,
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Ingresos',
+                            data: revenues,
+                            borderColor: 'rgb(75, 192, 192)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            fill: false,
+                            tension: 0.1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Análisis de Punto de Equilibrio'
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Unidades Vendidas'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Monto (USD)'
+                            },
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+    {% endif %}
 </div>
 {% endblock %}

@@ -1202,6 +1202,56 @@ def edit_product_cost(product_id):
         return redirect(url_for('main.dashboard'))
 
     product = Product.query.get_or_404(product_id)
+    cost_structure = CostStructure.query.first()
+    
+    # Calcular punto de equilibrio financiero
+    break_even_data = None
+    if cost_structure:
+        # Calcular costos fijos totales
+        total_fixed_costs = (cost_structure.monthly_rent or 0) + \
+                           (cost_structure.monthly_utilities or 0) + \
+                           (cost_structure.monthly_fixed_taxes or 0)
+        
+        # Calcular ventas mensuales estimadas totales
+        total_estimated_sales = db.session.query(func.sum(Product.estimated_monthly_sales)).scalar() or 1
+        if total_estimated_sales == 0:
+            total_estimated_sales = 1
+        
+        # Calcular costos fijos por unidad
+        fixed_cost_per_unit = total_fixed_costs / total_estimated_sales
+        
+        # Usar gastos variables específicos o los valores por defecto
+        var_sales_exp_pct = product.variable_selling_expense_percent if product.variable_selling_expense_percent > 0 else cost_structure.default_sales_commission_percent
+        var_marketing_pct = product.variable_marketing_percent if product.variable_marketing_percent > 0 else cost_structure.default_marketing_percent
+        
+        # Calcular precio de venta (misma lógica que en cost_list)
+        base_cost = (product.cost_usd or 0) + (product.specific_freight_cost or 0) + fixed_cost_per_unit
+        denominator = 1 - var_sales_exp_pct - var_marketing_pct - (product.profit_margin or 0)
+        
+        if denominator > 0:
+            selling_price = base_cost / denominator
+            product.price_usd = round(selling_price, 2)
+            
+            # Calcular costo variable unitario
+            variable_cost_per_unit = (product.cost_usd or 0) + (product.specific_freight_cost or 0) + \
+                                   (selling_price * var_sales_exp_pct) + \
+                                   (selling_price * var_marketing_pct)
+            
+            # Calcular punto de equilibrio
+            if selling_price > variable_cost_per_unit:
+                break_even_units = total_fixed_costs / (selling_price - variable_cost_per_unit)
+                break_even_amount = break_even_units * selling_price
+                
+                break_even_data = {
+                    'fixed_costs_total': total_fixed_costs,
+                    'fixed_cost_per_unit': fixed_cost_per_unit,
+                    'variable_cost_per_unit': variable_cost_per_unit,
+                    'selling_price': selling_price,
+                    'break_even_units': break_even_units,
+                    'break_even_amount': break_even_amount,
+                    'var_sales_exp_pct': var_sales_exp_pct * 100,
+                    'var_marketing_pct': var_marketing_pct * 100
+                }
 
     if request.method == 'POST':
         try:
@@ -1211,7 +1261,6 @@ def edit_product_cost(product_id):
             product.variable_selling_expense_percent = float(request.form.get('variable_selling_expense_percent', 0)) / 100
             product.variable_marketing_percent = float(request.form.get('variable_marketing_percent', 0)) / 100
 
-            cost_structure = CostStructure.query.first()
             if not cost_structure:
                 flash('La configuración de costos generales no existe. No se puede calcular el precio.', 'danger')
                 return redirect(url_for('main.cost_structure_config'))
@@ -1240,7 +1289,7 @@ def edit_product_cost(product_id):
     return render_template('costos/editar.html',
                            title=f'Editar Costos de {product.name}',
                            product=product,
-                           # CORRECCIÓN: Usar la nueva función
+                           break_even_data=break_even_data,
                            current_rate=get_cached_exchange_rate() or 0.0)
 
 @routes_blueprint.route('/ordenes/imprimir/<int:order_id>')
