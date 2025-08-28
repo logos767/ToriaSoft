@@ -472,7 +472,7 @@ def imprimir_codigos_barra():
             try:
                 # Generate barcode SVG
                 buffer = BytesIO()
-                Code128(p.barcode, writer=SVGWriter()).write(buffer, options={'module_width': 0.3, 'quiet_zone': 2}))
+                Code128(p.barcode, writer=SVGWriter()).write(buffer, options={'module_width': 0.3, 'quiet_zone': 2})
                 barcode_svg = buffer.getvalue().decode('utf-8')
             except Exception as e:
                 current_app.logger.error(f"Error generating barcode for {p.barcode}: {e}")
