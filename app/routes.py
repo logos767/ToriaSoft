@@ -449,6 +449,9 @@ def codigos_barra_api():
     products = query.all()
     return jsonify(products=[{'id': p.id, 'name': p.name, 'barcode': p.barcode} for p in products])
 
+from weasyprint import HTML
+from flask import Response
+
 @routes_blueprint.route('/inventario/imprimir_codigos_barra', methods=['POST'])
 @login_required
 def imprimir_codigos_barra():
@@ -459,23 +462,14 @@ def imprimir_codigos_barra():
 
     products_to_print = Product.query.filter(Product.id.in_(product_ids)).all()
 
-    for product in products_to_print:
-        if product.barcode and is_valid_ean13(product.barcode):
-            # Generar código de barras en formato SVG
-            try:
-                EAN = barcode.get_barcode_class('ean13')
-                ean = EAN(product.barcode, writer=SVGWriter())
-                buffer = BytesIO()
-                ean.write(buffer)
-                product.barcode_svg = buffer.getvalue().decode('utf-8')
-            except Exception as e:
-                current_app.logger.error(f"Error generating barcode for {product.barcode}: {e}")
-                product.barcode_svg = "<span>Error al generar código de barras</span>"
-        else:
-            product.barcode_svg = "<span>Código de barras no válido</span>"
+    # Render the HTML template with the products
+    html_string = render_template('inventario/imprimir_codigos.html', products=products_to_print)
 
+    # Create a PDF from the HTML string
+    pdf = HTML(string=html_string).write_pdf()
 
-    return render_template('inventario/imprimir_codigos.html', products=products_to_print)
+    # Return the PDF as a response
+    return Response(pdf, mimetype='application/pdf', headers={'Content-Disposition': 'inline; filename=codigos_de_barra.pdf'})
 
 
 @routes_blueprint.route('/inventario/existencias')
