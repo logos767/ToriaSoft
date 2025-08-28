@@ -505,12 +505,15 @@ def new_product():
             image_url = request.form.get('image_url')
             size = request.form.get('size')
             color = request.form.get('color')
+            codigo_producto = request.form.get('codigo_producto')
+            marca = request.form.get('marca')
             cost_usd = float(request.form.get('cost_usd'))
             price_usd = float(request.form.get('price_usd'))
 
             new_prod = Product(
                 name=name, description=description, barcode=barcode, qr_code=qr_code,
-                image_url=image_url, size=size, color=color, cost_usd=cost_usd, price_usd=price_usd, stock=0
+                image_url=image_url, size=size, color=color, cost_usd=cost_usd, price_usd=price_usd, stock=0,
+                codigo_producto=codigo_producto, marca=marca
             )
             db.session.add(new_prod)
             db.session.commit()
@@ -893,6 +896,10 @@ def cargar_excel():
                 price_usd = row[3] if row[3] is not None else 0
                 stock = row[4] if row[4] is not None else 0
                 image_url = row[5] if row[5] is not None else ''
+                codigo_producto = str(row[6]).strip() if len(row) > 6 and row[6] is not None else ''
+                marca = str(row[7]).strip() if len(row) > 7 and row[7] is not None else ''
+                color = str(row[8]).strip() if len(row) > 8 and row[8] is not None else ''
+                talla = str(row[9]).strip() if len(row) > 9 and row[9] is not None else ''
 
                 product = Product.query.filter_by(barcode=barcode).first()
 
@@ -906,7 +913,15 @@ def cargar_excel():
                         'old_cost_usd': product.cost_usd,
                         'new_name': name,
                         'new_price_usd': float(price_usd),
-                        'new_image_url': image_url
+                        'new_image_url': image_url,
+                        'new_codigo_producto': codigo_producto,
+                        'old_codigo_producto': product.codigo_producto,
+                        'new_marca': marca,
+                        'old_marca': product.marca,
+                        'new_color': color,
+                        'old_color': product.color,
+                        'new_talla': talla,
+                        'old_talla': product.size
                     })
                 else:
                     new_products.append(Product(
@@ -915,7 +930,11 @@ def cargar_excel():
                         cost_usd=float(cost_usd),
                         price_usd=float(price_usd),
                         stock=int(stock),
-                        image_url=image_url
+                        image_url=image_url,
+                        codigo_producto=codigo_producto,
+                        marca=marca,
+                        color=color,
+                        size=talla
                     ))
 
             if new_products:
@@ -962,7 +981,11 @@ def cargar_excel_confirmar():
                         'cost_usd': update['new_cost_usd'],
                         'name': update['new_name'],
                         'price_usd': update['new_price_usd'],
-                        'image_url': update['new_image_url']
+                        'image_url': update['new_image_url'],
+                        'codigo_producto': update['new_codigo_producto'],
+                        'marca': update['new_marca'],
+                        'color': update['new_color'],
+                        'size': update['new_talla']
                     }
                     for update in pending_updates
                 ]

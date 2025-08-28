@@ -37,6 +37,8 @@ class Product(db.Model):
     image_url = db.Column(db.String(200), nullable=True)
     size = db.Column(db.String(20), nullable=True)
     color = db.Column(db.String(20), nullable=True)
+    codigo_producto = db.Column(db.String(50), nullable=True)
+    marca = db.Column(db.String(50), nullable=True)
     profit_margin = db.Column(db.Float, nullable=False, default=0.20) # Margen de utilidad (ej. 20%)
     specific_freight_cost = db.Column(db.Float, nullable=False, default=0) # Costo de flete específico por unidad
     estimated_monthly_sales = db.Column(db.Integer, nullable=False, default=1) # Ventas estimadas para distribuir costos fijos
