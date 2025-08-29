@@ -946,7 +946,8 @@ def cargar_excel():
                         image_url=image_url,
                         marca=marca,
                         color=color,
-                        size=talla
+                        size=talla,
+                        estimated_monthly_sales=100
                     ))
 
             if new_products:
