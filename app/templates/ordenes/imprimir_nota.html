@@ -98,6 +98,15 @@
         <p><strong>Fecha:</strong> {{ order.date_created.strftime('%d/%m/%Y %H:%M:%S') }}</p>
         <p><strong>N° de Orden:</strong> {{ order.id }}</p>
         <p><strong>Cliente:</strong> {{ order.client.name }}</p>
+        {% if order.client.cedula_rif %}
+        <p><strong>Cédula/RIF:</strong> {{ order.client.cedula_rif }}</p>
+        {% endif %}
+        {% if order.client.address %}
+        <p><strong>Dirección:</strong> {{ order.client.address }}</p>
+        {% endif %}
+        {% if order.client.phone %}
+        <p><strong>Teléfono:</strong> {{ order.client.phone }}</p>
+        {% endif %}
     </div>
 
     <!-- Tabla de productos -->

@@ -552,10 +552,11 @@ def new_client():
     if request.method == 'POST':
         try:
             name = request.form.get('name')
+            cedula_rif = request.form.get('cedula_rif')
             email = request.form.get('email')
             phone = request.form.get('phone')
             address = request.form.get('address')
-            new_cli = Client(name=name, email=email, phone=phone, address=address)
+            new_cli = Client(name=name, cedula_rif=cedula_rif, email=email, phone=phone, address=address)
             db.session.add(new_cli)
             db.session.commit()
             flash('Cliente creado exitosamente!', 'success')
