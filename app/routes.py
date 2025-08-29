@@ -1310,6 +1310,22 @@ def print_delivery_note(order_id):
                            iva=iva)
 
 # Nueva ruta de API para obtener la tasa de cambio actual
+@routes_blueprint.route('/api/product_by_barcode/<barcode>')
+@login_required
+def api_product_by_barcode(barcode):
+    """API endpoint to get product information by barcode."""
+    product = Product.query.filter_by(barcode=barcode).first()
+    if product:
+        return jsonify({
+            'id': product.id,
+            'name': product.name,
+            'codigo_producto': product.codigo_producto,
+            'price_usd': product.price_usd,
+            'stock': product.stock
+        })
+    else:
+        return jsonify({'error': 'Producto no encontrado'}), 404
+
 @routes_blueprint.route('/api/exchange_rate')
 def api_exchange_rate():
     # CORRECCIÓN: Usar la nueva función
