@@ -4,7 +4,7 @@
 <div class="container mx-auto p-4 max-w-2xl">
     <h1 class="text-3xl font-bold text-gray-800 mb-6"><i class="fas fa-cogs mr-2"></i>Configuración de Empresa</h1>
     <div class="bg-white p-6 rounded-lg shadow-md">
-        <form method="POST" action="{{ url_for('main.company_settings') }}">
+        <form method="POST" action="{{ url_for('main.company_settings') }}" enctype="multipart/form-data">
             <div class="mb-4">
                 <label for="name" class="block text-gray-700 font-bold mb-2">Nombre de la Empresa</label>
                 <input type="text" id="name" name="name" value="{{ company_info.name if company_info }}" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -22,8 +22,13 @@
                 <input type="text" id="phone_numbers" name="phone_numbers" value="{{ company_info.phone_numbers if company_info }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
             <div class="mb-6">
-                <label for="logo_url" class="block text-gray-700 font-bold mb-2">URL del Logo (opcional)</label>
-                <input type="url" id="logo_url" name="logo_url" value="{{ company_info.logo_url if company_info }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <label for="logo_file" class="block text-gray-700 font-bold mb-2">Logo de la Empresa (opcional)</label>
+                <input type="file" id="logo_file" name="logo_file" accept="image/*" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                {% if company_info and company_info.logo_filename %}
+                <p class="text-sm text-gray-600 mt-2">Logo actual: 
+                    <img src="{{ url_for('static', filename=company_info.logo_filename) }}" alt="Logo actual" class="h-8 inline-block ml-2">
+                </p>
+                {% endif %}
             </div>
             <div class="flex items-center justify-end">
                 <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">

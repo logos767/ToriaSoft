@@ -1035,7 +1035,7 @@ def company_settings():
         rif = request.form.get('rif')
         address = request.form.get('address')
         phone_numbers = request.form.get('phone_numbers')
-        logo_url = request.form.get('logo_url')
+        logo_file = request.files.get('logo_file')
         
         try:
             if company_info:
@@ -1043,12 +1043,46 @@ def company_settings():
                 company_info.rif = rif
                 company_info.address = address
                 company_info.phone_numbers = phone_numbers
-                company_info.logo_url = logo_url
+                
+                # Handle logo file upload
+                if logo_file and logo_file.filename:
+                    # Create uploads directory if it doesn't exist
+                    upload_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'logos')
+                    os.makedirs(upload_dir, exist_ok=True)
+                    
+                    # Generate unique filename
+                    filename = f"logo_{company_info.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{os.path.splitext(logo_file.filename)[1]}"
+                    filepath = os.path.join(upload_dir, filename)
+                    
+                    # Save the file
+                    logo_file.save(filepath)
+                    
+                    # Update logo filename in database
+                    company_info.logo_filename = f"uploads/logos/{filename}"
+                
                 db.session.commit()
                 flash('Información de la empresa actualizada exitosamente!', 'success')
             else:
-                new_info = CompanyInfo(name=name, rif=rif, address=address, phone_numbers=phone_numbers, logo_url=logo_url)
+                new_info = CompanyInfo(name=name, rif=rif, address=address, phone_numbers=phone_numbers)
                 db.session.add(new_info)
+                db.session.flush()  # Get the ID for the new company info
+                
+                # Handle logo file upload for new company
+                if logo_file and logo_file.filename:
+                    # Create uploads directory if it doesn't exist
+                    upload_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'logos')
+                    os.makedirs(upload_dir, exist_ok=True)
+                    
+                    # Generate unique filename
+                    filename = f"logo_{new_info.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{os.path.splitext(logo_file.filename)[1]}"
+                    filepath = os.path.join(upload_dir, filename)
+                    
+                    # Save the file
+                    logo_file.save(filepath)
+                    
+                    # Update logo filename in database
+                    new_info.logo_filename = f"uploads/logos/{filename}"
+                
                 db.session.commit()
                 flash('Información de la empresa guardada exitosamente!', 'success')
             

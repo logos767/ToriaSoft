@@ -156,7 +156,7 @@ class CompanyInfo(db.Model):
     rif = db.Column(db.String(20), unique=True, nullable=False)
     address = db.Column(db.String(200), nullable=True)
     phone_numbers = db.Column(db.String(100), nullable=True)
-    logo_url = db.Column(db.String(200), nullable=True)
+    logo_filename = db.Column(db.String(200), nullable=True)
 
     def __repr__(self):
         return f"CompanyInfo('{self.name}', '{self.rif}')"
