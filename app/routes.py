@@ -495,7 +495,7 @@ def generate_barcode_pdf_reportlab(products, company_info):
 
             # Company name (top right)
             if company_info and company_info.name:
-                c.setFont("Helvetica-Bold", 6)
+                c.setFont("Helvetica-Bold", 7)
                 company_name = company_info.name[:20]
                 # Right align company name
                 text_width = c.stringWidth(company_name, "Helvetica-Bold", 6)
@@ -510,8 +510,8 @@ def generate_barcode_pdf_reportlab(products, company_info):
             # Price (below product name)
             c.setFont("Helvetica-Bold", 6)
             price_text = f"${product['price_ves']:.2f}"
-            text_width = c.stringWidth(price_text, "Helvetica-Bold", 6)
-            c.drawString(x + (label_width - text_width) / 2, y + label_height - 24*mm, price_text)
+            text_width = c.stringWidth(price_text, "Helvetica-Bold", 7)
+            c.drawString(x + (label_width - text_width), y + label_height - 18*mm, price_text)
 
             # Barcode (bottom)
             if product['barcode']:
@@ -522,8 +522,8 @@ def generate_barcode_pdf_reportlab(products, company_info):
                     # Create barcode using ReportLab with full width
                     barcode_obj = code128.Code128(
                         product['barcode'],
-                        barWidth=0.25*mm,  # Slightly thinner bars to fit more
-                        barHeight=8*mm,    # Taller barcode
+                        barWidth=0.6*mm,  # Slightly thinner bars to fit more
+                        barHeight=20*mm,    # Taller barcode
                         quiet=1
                     )
 
@@ -535,9 +535,9 @@ def generate_barcode_pdf_reportlab(products, company_info):
                     barcode_obj.drawOn(c, barcode_x, barcode_y)
 
                     # Add barcode text below the barcode
-                    c.setFont("Helvetica", 4)  # Small font for barcode text
+                    c.setFont("Helvetica", 6)  # Small font for barcode text
                     barcode_text = product['barcode']
-                    text_width = c.stringWidth(barcode_text, "Helvetica", 4)
+                    text_width = c.stringWidth(barcode_text, "Helvetica", 6)
                     text_x = x + (label_width - text_width) / 2  # Center the text
                     text_y = barcode_y - 1*mm  # Position below barcode
 
