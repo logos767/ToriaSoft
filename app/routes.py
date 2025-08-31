@@ -457,13 +457,7 @@ import time
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
-from reportlab.lib import colors
 from reportlab.graphics.barcode import code128
-from reportlab.graphics import renderPDF
-from reportlab.graphics.shapes import Drawing
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Paragraph
-from reportlab.lib.styles import ParagraphStyle
 import io
 
 def generate_barcode_pdf_reportlab(products, company_info):
@@ -482,51 +476,13 @@ def generate_barcode_pdf_reportlab(products, company_info):
     label_width = 65 * mm
     label_height = 32 * mm
 
-    # Create PDF document
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=margin,
-        rightMargin=margin,
-        topMargin=margin,
-        bottomMargin=margin
-    )
-
-    # Styles for text
-    styles = getSampleStyleSheet()
-    company_style = ParagraphStyle(
-        'Company',
-        parent=styles['Normal'],
-        fontSize=6,
-        fontName='Helvetica-Bold',
-        alignment=2,  # Right alignment
-        leading=7
-    )
-    product_style = ParagraphStyle(
-        'Product',
-        parent=styles['Normal'],
-        fontSize=6,
-        fontName='Helvetica',
-        alignment=1,  # Center alignment
-        leading=7
-    )
-    price_style = ParagraphStyle(
-        'Price',
-        parent=styles['Normal'],
-        fontSize=6,
-        fontName='Helvetica-Bold',
-        alignment=1,  # Center alignment
-        leading=7
-    )
-
-    story = []
+    # Create PDF canvas directly for more control
+    c = canvas.Canvas(buffer, pagesize=A4)
+    c.setFont("Helvetica", 6)
 
     # Process products in batches of 27 (3x9 grid)
     for i in range(0, len(products), 27):
         batch = products[i:i+27]
-
-        # Create a custom drawing for this page
-        page_drawing = Drawing(page_width - 2*margin, page_height - 2*margin)
 
         for j, product in enumerate(batch):
             # Calculate position in grid
@@ -534,25 +490,28 @@ def generate_barcode_pdf_reportlab(products, company_info):
             row = j // 3
 
             # Calculate position coordinates
-            x = col * label_width
-            y = (page_height - 2*margin) - (row + 1) * label_height
+            x = margin + col * label_width
+            y = page_height - margin - (row + 1) * label_height
 
             # Company name (top right)
             if company_info and company_info.name:
-                company_text = Paragraph(company_info.name[:20], company_style)
-                company_text.wrapOn(page_drawing, label_width - 2*mm, 5*mm)
-                company_text.drawOn(page_drawing, x + mm, y + label_height - 6*mm)
+                c.setFont("Helvetica-Bold", 6)
+                company_name = company_info.name[:20]
+                # Right align company name
+                text_width = c.stringWidth(company_name, "Helvetica-Bold", 6)
+                c.drawString(x + label_width - text_width - mm, y + label_height - 6*mm, company_name)
 
             # Product name (centered)
+            c.setFont("Helvetica", 6)
             product_name = product['name'][:30]  # Limit length
-            product_text = Paragraph(product_name, product_style)
-            product_text.wrapOn(page_drawing, label_width - 4*mm, 10*mm)
-            product_text.drawOn(page_drawing, x + 2*mm, y + label_height - 18*mm)
+            text_width = c.stringWidth(product_name, "Helvetica", 6)
+            c.drawString(x + (label_width - text_width) / 2, y + label_height - 18*mm, product_name)
 
             # Price (below product name)
-            price_text = Paragraph(f"${product['price_ves']:.2f}", price_style)
-            price_text.wrapOn(page_drawing, label_width - 4*mm, 5*mm)
-            price_text.drawOn(page_drawing, x + 2*mm, y + label_height - 24*mm)
+            c.setFont("Helvetica-Bold", 6)
+            price_text = f"${product['price_ves']:.2f}"
+            text_width = c.stringWidth(price_text, "Helvetica-Bold", 6)
+            c.drawString(x + (label_width - text_width) / 2, y + label_height - 24*mm, price_text)
 
             # Barcode (bottom)
             if product['barcode']:
@@ -569,21 +528,22 @@ def generate_barcode_pdf_reportlab(products, company_info):
                     barcode_x = x + (label_width - barcode_obj.width) / 2
                     barcode_y = y + 2*mm
 
-                    # Draw barcode
-                    barcode_obj.drawOn(page_drawing, barcode_x, barcode_y)
+                    # Draw barcode on canvas
+                    barcode_obj.drawOn(c, barcode_x, barcode_y)
 
                 except Exception as e:
                     current_app.logger.error(f"Error generating barcode for {product['barcode']}: {e}")
                     # Draw error text instead
-                    error_text = Paragraph("Error", price_style)
-                    error_text.wrapOn(page_drawing, label_width - 4*mm, 5*mm)
-                    error_text.drawOn(page_drawing, x + 2*mm, y + 4*mm)
+                    c.setFont("Helvetica-Bold", 6)
+                    c.drawString(x + 2*mm, y + 4*mm, "Error")
 
-        # Add page to story
-        story.append(page_drawing)
+        # Start new page if there are more products
+        if i + 27 < len(products):
+            c.showPage()
+            c.setFont("Helvetica", 6)
 
-    # Build PDF
-    doc.build(story)
+    # Save PDF
+    c.save()
 
     # Get PDF data
     pdf_data = buffer.getvalue()
