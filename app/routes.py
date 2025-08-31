@@ -454,6 +454,7 @@ from flask import Response
 from barcode import Code128
 from barcode.writer import SVGWriter
 from io import BytesIO
+import re
 
 @routes_blueprint.route('/inventario/imprimir_codigos_barra', methods=['POST'])
 @login_required
@@ -467,18 +468,37 @@ def imprimir_codigos_barra():
     company_info = CompanyInfo.query.first()
     current_rate = get_cached_exchange_rate() or 0.0
 
+    def generate_weasyprint_compatible_svg(barcode_value):
+        """Generate SVG barcode compatible with WeasyPrint"""
+        try:
+            # Generate barcode with basic SVG writer
+            buffer = BytesIO()
+            Code128(barcode_value, writer=SVGWriter()).write(buffer, options={'module_width': 0.6, 'quiet_zone': 1})
+            svg_content = buffer.getvalue().decode('utf-8')
+
+            # Clean up SVG for WeasyPrint compatibility
+            # Remove unsupported properties
+            svg_content = re.sub(r'fill="[^"]*"', '', svg_content)
+            svg_content = re.sub(r'text-anchor="[^"]*"', '', svg_content)
+            svg_content = re.sub(r'font-family="[^"]*"', '', svg_content)
+            svg_content = re.sub(r'font-size="[^"]*"', '', svg_content)
+
+            # Fix duplicate IDs by making them unique
+            svg_content = re.sub(r'id="([^"]*)"', lambda m: f'id="{m.group(1)}_{barcode_value}"', svg_content)
+
+            # Add WeasyPrint-compatible styling
+            svg_content = re.sub(r'<svg([^>]*)>', r'<svg\1 style="font-family: monospace; font-size: 8px;">', svg_content)
+
+            return svg_content
+        except Exception as e:
+            current_app.logger.error(f"Error generating barcode for {barcode_value}: {e}")
+            return f'<text x="0" y="15" style="font-family: monospace; font-size: 8px;">Error: {str(e)}</text>'
+
     products_dict = []
     for p in products_to_print:
         barcode_svg = ""
         if p.barcode:
-            try:
-                # Generate barcode SVG
-                buffer = BytesIO()
-                Code128(p.barcode, writer=SVGWriter()).write(buffer, options={'module_width': 0.6, 'quiet_zone': 1})
-                barcode_svg = buffer.getvalue().decode('utf-8')
-            except Exception as e:
-                current_app.logger.error(f"Error generating barcode for {p.barcode}: {e}")
-                barcode_svg = f"<p style='color:red;'>Error: {e}</p>"
+            barcode_svg = generate_weasyprint_compatible_svg(p.barcode)
         price_ves = p.price_usd if p.price_usd else 0
         products_dict.append({'id': p.id, 'name': p.name, 'barcode': p.barcode, 'barcode_svg': barcode_svg, 'price_ves': price_ves})
 
