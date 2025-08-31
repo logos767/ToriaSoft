@@ -449,13 +449,148 @@ def codigos_barra_api():
     products = query.all()
     return jsonify(products=[{'id': p.id, 'name': p.name, 'barcode': p.barcode} for p in products])
 
-from weasyprint import HTML, CSS
 from flask import Response
-from barcode import Code128
-from barcode.writer import SVGWriter
-from io import BytesIO
 import re
 import time
+
+# ReportLab imports for PDF generation
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
+from reportlab.lib import colors
+from reportlab.graphics.barcode import code128
+from reportlab.graphics import renderPDF
+from reportlab.graphics.shapes import Drawing
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph
+from reportlab.lib.styles import ParagraphStyle
+import io
+
+def generate_barcode_pdf_reportlab(products, company_info):
+    """
+    Generate PDF with barcodes using ReportLab for better performance.
+    Layout: 3 columns x 9 rows = 27 labels per page
+    """
+    # Create PDF buffer
+    buffer = io.BytesIO()
+
+    # Page dimensions
+    page_width, page_height = A4
+    margin = 3 * mm
+
+    # Label dimensions (same as HTML template)
+    label_width = 65 * mm
+    label_height = 32 * mm
+
+    # Create PDF document
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=margin,
+        rightMargin=margin,
+        topMargin=margin,
+        bottomMargin=margin
+    )
+
+    # Styles for text
+    styles = getSampleStyleSheet()
+    company_style = ParagraphStyle(
+        'Company',
+        parent=styles['Normal'],
+        fontSize=6,
+        fontName='Helvetica-Bold',
+        alignment=2,  # Right alignment
+        leading=7
+    )
+    product_style = ParagraphStyle(
+        'Product',
+        parent=styles['Normal'],
+        fontSize=6,
+        fontName='Helvetica',
+        alignment=1,  # Center alignment
+        leading=7
+    )
+    price_style = ParagraphStyle(
+        'Price',
+        parent=styles['Normal'],
+        fontSize=6,
+        fontName='Helvetica-Bold',
+        alignment=1,  # Center alignment
+        leading=7
+    )
+
+    story = []
+
+    # Process products in batches of 27 (3x9 grid)
+    for i in range(0, len(products), 27):
+        batch = products[i:i+27]
+
+        # Create a custom drawing for this page
+        page_drawing = Drawing(page_width - 2*margin, page_height - 2*margin)
+
+        for j, product in enumerate(batch):
+            # Calculate position in grid
+            col = j % 3
+            row = j // 3
+
+            # Calculate position coordinates
+            x = col * label_width
+            y = (page_height - 2*margin) - (row + 1) * label_height
+
+            # Company name (top right)
+            if company_info and company_info.name:
+                company_text = Paragraph(company_info.name[:20], company_style)
+                company_text.wrapOn(page_drawing, label_width - 2*mm, 5*mm)
+                company_text.drawOn(page_drawing, x + mm, y + label_height - 6*mm)
+
+            # Product name (centered)
+            product_name = product['name'][:30]  # Limit length
+            product_text = Paragraph(product_name, product_style)
+            product_text.wrapOn(page_drawing, label_width - 4*mm, 10*mm)
+            product_text.drawOn(page_drawing, x + 2*mm, y + label_height - 18*mm)
+
+            # Price (below product name)
+            price_text = Paragraph(f"${product['price_ves']:.2f}", price_style)
+            price_text.wrapOn(page_drawing, label_width - 4*mm, 5*mm)
+            price_text.drawOn(page_drawing, x + 2*mm, y + label_height - 24*mm)
+
+            # Barcode (bottom)
+            if product['barcode']:
+                try:
+                    # Create barcode using ReportLab
+                    barcode_obj = code128.Code128(
+                        product['barcode'],
+                        barWidth=0.3*mm,
+                        barHeight=6*mm,
+                        quiet=1
+                    )
+
+                    # Position barcode in center bottom of label
+                    barcode_x = x + (label_width - barcode_obj.width) / 2
+                    barcode_y = y + 2*mm
+
+                    # Draw barcode
+                    barcode_obj.drawOn(page_drawing, barcode_x, barcode_y)
+
+                except Exception as e:
+                    current_app.logger.error(f"Error generating barcode for {product['barcode']}: {e}")
+                    # Draw error text instead
+                    error_text = Paragraph("Error", price_style)
+                    error_text.wrapOn(page_drawing, label_width - 4*mm, 5*mm)
+                    error_text.drawOn(page_drawing, x + 2*mm, y + 4*mm)
+
+        # Add page to story
+        story.append(page_drawing)
+
+    # Build PDF
+    doc.build(story)
+
+    # Get PDF data
+    pdf_data = buffer.getvalue()
+    buffer.close()
+
+    return pdf_data
+
 
 @routes_blueprint.route('/inventario/imprimir_codigos_barra', methods=['POST'])
 @login_required
@@ -474,122 +609,59 @@ def imprimir_codigos_barra():
     company_info = CompanyInfo.query.first()
     current_rate = get_cached_exchange_rate() or 0.0
 
-    def generate_weasyprint_compatible_svg(barcode_value):
-        """Generate SVG barcode compatible with WeasyPrint - Optimized version"""
-        try:
-            # Validate barcode before processing
-            if not barcode_value or not barcode_value.strip():
-                return '<text x="10" y="20" font-family="monospace" font-size="8">Sin código</text>'
 
-            # Generate barcode with optimized settings for speed
-            buffer = BytesIO()
-            Code128(barcode_value.strip(), writer=SVGWriter()).write(
-                buffer,
-                options={
-                    'module_width': 0.3,  # Reduced for better fit
-                    'quiet_zone': 0.3,    # Reduced quiet zone
-                    'font_size': 0,       # Remove text to save space
-                    'text_distance': 0
-                }
-            )
-            svg_content = buffer.getvalue().decode('utf-8')
 
-            # Fast string replacements for WeasyPrint compatibility
-            replacements = [
-                ('fill="black"', ''),
-                ('text-anchor="middle"', ''),
-                ('font-family="monospace"', ''),
-                ('font-size="11"', ''),
-                ('id="barcode_group"', f'id="barcode_group_{hash(barcode_value) % 1000}"')
-            ]
-
-            for old, new in replacements:
-                svg_content = svg_content.replace(old, new)
-
-            return svg_content
-        except Exception as e:
-            current_app.logger.error(f"Error generating barcode for {barcode_value}: {e}")
-            return f'<text x="10" y="20" font-family="monospace" font-size="8">Error</text>'
-
-    # Generar códigos de barras con logging de progreso
-    current_app.logger.info(f"Iniciando generación de códigos de barras para {len(products_to_print)} productos")
+    # Preparar datos de productos para ReportLab
+    current_app.logger.info(f"Preparando datos para generación de PDF con {len(products_to_print)} productos")
     products_dict = []
-    for i, p in enumerate(products_to_print):
-        if i % 20 == 0:  # Log cada 20 productos
-            current_app.logger.info(f"Procesando producto {i+1}/{len(products_to_print)}: {p.name}")
-
-        barcode_svg = ""
-        if p.barcode:
-            barcode_svg = generate_weasyprint_compatible_svg(p.barcode)
+    for p in products_to_print:
         price_ves = p.price_usd if p.price_usd else 0
-        products_dict.append({'id': p.id, 'name': p.name, 'barcode': p.barcode, 'barcode_svg': barcode_svg, 'price_ves': price_ves})
+        products_dict.append({
+            'id': p.id,
+            'name': p.name,
+            'barcode': p.barcode,
+            'price_ves': price_ves
+        })
 
-    current_app.logger.info("Generación de códigos de barras completada")
+    current_app.logger.info("Datos preparados, iniciando generación de PDF con ReportLab")
 
-    # Render the HTML template with the products
-    html_string = render_template('inventario/imprimir_codigos.html', products=products_dict, company_info=company_info)
-
-    # Create PDF with enhanced timeout and error handling
+    # Generate PDF with ReportLab (more efficient)
     try:
-        current_app.logger.info("Iniciando generación de PDF")
-
-        # Add CSS to avoid fontTools issues
-        css_string = """
-        @page { size: A4; margin: 3mm; }
-        body { font-family: monospace; font-size: 8pt; }
-        """
-
-        # Create PDF with timeout monitoring
         start_time = time.time()
-        html_doc = HTML(string=html_string)
 
-        # Set a more aggressive timeout for PDF writing
-        import signal
-
-        def timeout_handler(signum, frame):
-            raise TimeoutError("PDF generation timeout")
-
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(20)  # 20 second timeout
-
-        try:
-            pdf = html_doc.write_pdf()
-            signal.alarm(0)  # Cancel alarm
-        except TimeoutError:
-            signal.alarm(0)
-            raise TimeoutError("PDF generation exceeded 20 seconds")
+        # Use the new ReportLab function
+        pdf_data = generate_barcode_pdf_reportlab(products_dict, company_info)
 
         generation_time = time.time() - start_time
-        current_app.logger.info(f"PDF generado exitosamente en {generation_time:.2f} segundos")
+        current_app.logger.info(f"PDF generado exitosamente con ReportLab en {generation_time:.2f} segundos")
 
         # Return the PDF as a response
-        return Response(pdf, mimetype='application/pdf', headers={'Content-Disposition': 'inline; filename=codigos_de_barra.pdf'})
+        return Response(pdf_data, mimetype='application/pdf', headers={'Content-Disposition': 'inline; filename=codigos_de_barra.pdf'})
 
-    except TimeoutError as e:
-        current_app.logger.error(f"PDF generation timeout: {str(e)}")
-        error_message = "La generación del PDF tomó demasiado tiempo. Intente con menos productos (máximo 50 recomendado)."
     except Exception as e:
-        current_app.logger.error(f"Error generating PDF: {str(e)}")
+        current_app.logger.error(f"Error generating PDF with ReportLab: {str(e)}")
         error_message = f"Error generando PDF: {str(e)}. Intente con menos productos o contacte al administrador."
 
-    # Return a simple error PDF
-    error_html = f"""
-    <html>
-    <head><style>body {{ font-family: monospace; font-size: 12pt; text-align: center; margin: 50px; }}</style></head>
-    <body>
-        <h1>Error generando PDF</h1>
-        <p>{error_message}</p>
-        <p>Número de productos seleccionados: {len(products_to_print)}</p>
-        <p>Recomendación: Seleccione máximo 50 productos por vez.</p>
-    </body>
-    </html>
-    """
-    try:
-        error_pdf = HTML(string=error_html).write_pdf()
-        return Response(error_pdf, mimetype='application/pdf', headers={'Content-Disposition': 'inline; filename=error.pdf'})
-    except:
-        # If even error PDF fails, return plain text
-        return Response(error_message, mimetype='text/plain')
+        # Fallback: try to generate a simple error PDF with ReportLab
+        try:
+            from reportlab.pdfgen import canvas
+            from reportlab.lib.pagesizes import A4
+
+            buffer = io.BytesIO()
+            c = canvas.Canvas(buffer, pagesize=A4)
+            c.drawString(100, 750, "Error generando PDF")
+            c.drawString(100, 720, error_message)
+            c.drawString(100, 690, f"Número de productos seleccionados: {len(products_to_print)}")
+            c.drawString(100, 660, "Recomendación: Seleccione máximo 100 productos por vez.")
+            c.save()
+
+            error_pdf = buffer.getvalue()
+            buffer.close()
+            return Response(error_pdf, mimetype='application/pdf', headers={'Content-Disposition': 'inline; filename=error.pdf'})
+
+        except:
+            # If even error PDF fails, return plain text
+            return Response(error_message, mimetype='text/plain')
 
 
 @routes_blueprint.route('/inventario/existencias')
