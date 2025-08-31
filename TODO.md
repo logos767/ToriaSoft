@@ -1,17 +1,17 @@
-# TODO: Order Creation Enhancements
+# Optimización de impresión de códigos de barras
 
-## Phase 1: Backend API
-- [x] Create API endpoint `/api/product_by_barcode/<barcode>` in routes.py
-- [ ] Test the API endpoint
+## Objetivo
+Optimizar el espacio en página A4 para imprimir códigos de barras en 4 columnas y 11 filas por página
 
-## Phase 2: Frontend Enhancements
-- [x] Add product code display in product rows in nuevo.html
-- [x] Add VAT calculation display (subtotal, VAT, total)
-- [x] Add barcode input field for scanning
-- [x] Add JavaScript to handle barcode scanning and automatic product addition
-- [x] Add JavaScript to dynamically calculate and update VAT and total
+## Plan de trabajo
+1. [x] Analizar el archivo actual `imprimir_codigos.html`
+2. [x] Analizar el código relacionado en `routes.py` y `codigos_barra.html`
+3. [x] Crear plan de optimización
+4. [ ] Modificar CSS para usar 11 filas fijas por página
+5. [ ] Crear contenedores separados para cada página (cada 44 productos)
+6. [ ] Ajustar márgenes y espaciado para optimizar espacio A4
+7. [ ] Asegurar saltos de página adecuados entre páginas
+8. [ ] Verificar que la funcionalidad se mantenga
 
-## Phase 3: Testing
-- [ ] Test barcode scanning functionality
-- [ ] Test VAT calculations
-- [ ] Test order creation with new features
+## Archivos a modificar
+- `app/templates/inventario/imprimir_codigos.html` (principal)

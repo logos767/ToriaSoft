@@ -464,6 +464,8 @@ def imprimir_codigos_barra():
         return redirect(url_for('main.codigos_barra'))
 
     products_to_print = Product.query.filter(Product.id.in_(product_ids)).all()
+    company_info = CompanyInfo.query.first()
+    current_rate = get_cached_exchange_rate() or 0.0
 
     products_dict = []
     for p in products_to_print:
@@ -477,10 +479,11 @@ def imprimir_codigos_barra():
             except Exception as e:
                 current_app.logger.error(f"Error generating barcode for {p.barcode}: {e}")
                 barcode_svg = f"<p style='color:red;'>Error: {e}</p>"
-        products_dict.append({'id': p.id, 'name': p.name, 'barcode': p.barcode, 'barcode_svg': barcode_svg})
+        price_ves = p.price_usd * current_rate if p.price_usd else 0
+        products_dict.append({'id': p.id, 'name': p.name, 'barcode': p.barcode, 'barcode_svg': barcode_svg, 'price_ves': price_ves})
 
     # Render the HTML template with the products
-    html_string = render_template('inventario/imprimir_codigos.html', products=products_dict)
+    html_string = render_template('inventario/imprimir_codigos.html', products=products_dict, company_info=company_info)
 
     # Create a PDF from the HTML string
     pdf = HTML(string=html_string).write_pdf()

@@ -38,7 +38,6 @@
         .product-name {
             font-size: 7pt;
             margin-bottom: 2px;
-            white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             max-width: 100%;
@@ -54,8 +53,14 @@
         <div class="page">
             {% for product in page %}
                 {% if product %}
-                <div class="label">
-                    <div class="product-name">{{ product.name }}</div>
+                <div class="label" style="position: relative;">
+                    <div style="position: absolute; top: 2mm; right: 2mm; font-size: 6pt; font-weight: bold; text-align: right;">
+                        {{ company_info.name if company_info else '' }}
+                    </div>
+                    <div class="product-name" style="display: flex; justify-content: center; gap: 4px; font-size: 7pt; margin-bottom: 2px;">
+                        <span>{{ product.name }}</span>
+                        <span style="font-weight: normal;">${{ '%.2f'|format(product.price_ves) }}</span>
+                    </div>
                     <div class="barcode-svg">{{ product.barcode_svg|safe }}</div>
                 </div>
                 {% else %}
