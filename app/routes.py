@@ -474,12 +474,12 @@ def imprimir_codigos_barra():
             try:
                 # Generate barcode SVG
                 buffer = BytesIO()
-                Code128(p.barcode, writer=SVGWriter()).write(buffer, options={'module_width': 0.5, 'quiet_zone': 2})
+                Code128(p.barcode, writer=SVGWriter()).write(buffer, options={'module_width': 0.6, 'quiet_zone': 1})
                 barcode_svg = buffer.getvalue().decode('utf-8')
             except Exception as e:
                 current_app.logger.error(f"Error generating barcode for {p.barcode}: {e}")
                 barcode_svg = f"<p style='color:red;'>Error: {e}</p>"
-        price_ves = p.price_usd * current_rate if p.price_usd else 0
+        price_ves = p.price_usd if p.price_usd else 0
         products_dict.append({'id': p.id, 'name': p.name, 'barcode': p.barcode, 'barcode_svg': barcode_svg, 'price_ves': price_ves})
 
     # Render the HTML template with the products
