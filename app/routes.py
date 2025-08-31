@@ -449,12 +449,13 @@ def codigos_barra_api():
     products = query.all()
     return jsonify(products=[{'id': p.id, 'name': p.name, 'barcode': p.barcode} for p in products])
 
-from weasyprint import HTML
+from weasyprint import HTML, CSS
 from flask import Response
 from barcode import Code128
 from barcode.writer import SVGWriter
 from io import BytesIO
 import re
+import time
 
 @routes_blueprint.route('/inventario/imprimir_codigos_barra', methods=['POST'])
 @login_required
@@ -473,26 +474,23 @@ def imprimir_codigos_barra():
         try:
             # Generate barcode with basic SVG writer
             buffer = BytesIO()
-            Code128(barcode_value, writer=SVGWriter()).write(buffer, options={'module_width': 0.6, 'quiet_zone': 1})
+            Code128(barcode_value, writer=SVGWriter()).write(buffer, options={'module_width': 0.4, 'quiet_zone': 0.5})
             svg_content = buffer.getvalue().decode('utf-8')
 
-            # Clean up SVG for WeasyPrint compatibility
-            # Remove unsupported properties
-            svg_content = re.sub(r'fill="[^"]*"', '', svg_content)
-            svg_content = re.sub(r'text-anchor="[^"]*"', '', svg_content)
-            svg_content = re.sub(r'font-family="[^"]*"', '', svg_content)
-            svg_content = re.sub(r'font-size="[^"]*"', '', svg_content)
+            # Simple cleanup for WeasyPrint compatibility
+            # Remove problematic attributes that cause warnings
+            svg_content = svg_content.replace('fill="black"', '')
+            svg_content = svg_content.replace('text-anchor="middle"', '')
+            svg_content = svg_content.replace('font-family="monospace"', '')
+            svg_content = svg_content.replace('font-size="11"', '')
 
-            # Fix duplicate IDs by making them unique
-            svg_content = re.sub(r'id="([^"]*)"', lambda m: f'id="{m.group(1)}_{barcode_value}"', svg_content)
-
-            # Add WeasyPrint-compatible styling
-            svg_content = re.sub(r'<svg([^>]*)>', r'<svg\1 style="font-family: monospace; font-size: 8px;">', svg_content)
+            # Make IDs unique to avoid conflicts
+            svg_content = svg_content.replace('id="barcode_group"', f'id="barcode_group_{barcode_value}"')
 
             return svg_content
         except Exception as e:
             current_app.logger.error(f"Error generating barcode for {barcode_value}: {e}")
-            return f'<text x="0" y="15" style="font-family: monospace; font-size: 8px;">Error: {str(e)}</text>'
+            return f'<text x="10" y="20" font-family="monospace" font-size="10">Error</text>'
 
     products_dict = []
     for p in products_to_print:
@@ -505,11 +503,44 @@ def imprimir_codigos_barra():
     # Render the HTML template with the products
     html_string = render_template('inventario/imprimir_codigos.html', products=products_dict, company_info=company_info)
 
-    # Create a PDF from the HTML string
-    pdf = HTML(string=html_string).write_pdf()
+    # Create PDF with timeout and error handling
+    try:
+        # Add CSS to avoid fontTools issues
+        css_string = """
+        @page { size: A4; margin: 3mm; }
+        body { font-family: monospace; font-size: 8pt; }
+        """
 
-    # Return the PDF as a response
-    return Response(pdf, mimetype='application/pdf', headers={'Content-Disposition': 'inline; filename=codigos_de_barra.pdf'})
+        # Create PDF with timeout
+        start_time = time.time()
+        html_doc = HTML(string=html_string)
+        pdf = html_doc.write_pdf()
+
+        # Check if generation took too long (more than 25 seconds for safety)
+        if time.time() - start_time > 25:
+            current_app.logger.warning("PDF generation took longer than expected")
+
+        # Return the PDF as a response
+        return Response(pdf, mimetype='application/pdf', headers={'Content-Disposition': 'inline; filename=codigos_de_barra.pdf'})
+
+    except Exception as e:
+        current_app.logger.error(f"Error generating PDF: {str(e)}")
+        # Return a simple error PDF
+        error_html = f"""
+        <html>
+        <body>
+            <h1>Error generando PDF</h1>
+            <p>{str(e)}</p>
+            <p>Intente con menos productos o contacte al administrador.</p>
+        </body>
+        </html>
+        """
+        try:
+            error_pdf = HTML(string=error_html).write_pdf()
+            return Response(error_pdf, mimetype='application/pdf', headers={'Content-Disposition': 'inline; filename=error.pdf'})
+        except:
+            # If even error PDF fails, return plain text
+            return Response(f"Error generando PDF: {str(e)}", mimetype='text/plain')
 
 
 @routes_blueprint.route('/inventario/existencias')
