@@ -22,7 +22,7 @@
                         Filtrar
                     </button>
                 </div>
-                <button type="submit" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors">
+                <button type="submit" id="print-btn" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors">
                     <i class="fas fa-print mr-2"></i>Imprimir Seleccionados
                 </button>
             </div>
@@ -129,6 +129,27 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(data => {
                 updateTable(data.products);
             });
+    });
+
+    // Validación de límite de productos
+    const printForm = document.getElementById('print-form');
+    const printBtn = document.getElementById('print-btn');
+
+    printForm.addEventListener('submit', function(e) {
+        const selectedCheckboxes = document.querySelectorAll('.product-checkbox:checked');
+        if (selectedCheckboxes.length > 100) {
+            e.preventDefault();
+            alert('No se pueden imprimir más de 100 productos a la vez. Por favor, seleccione menos productos.');
+            return false;
+        }
+        if (selectedCheckboxes.length === 0) {
+            e.preventDefault();
+            alert('Por favor, seleccione al menos un producto para imprimir.');
+            return false;
+        }
+        // Mostrar indicador de carga
+        printBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generando PDF...';
+        printBtn.disabled = true;
     });
 
     // Generación inicial de códigos de barras

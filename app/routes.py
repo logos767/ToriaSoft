@@ -465,82 +465,131 @@ def imprimir_codigos_barra():
         flash('No se seleccionó ningún producto para imprimir.', 'warning')
         return redirect(url_for('main.codigos_barra'))
 
+    # Limitar a máximo 100 productos para evitar timeouts
+    if len(product_ids) > 100:
+        flash('No se pueden imprimir más de 100 productos a la vez. Por favor, seleccione menos productos.', 'warning')
+        return redirect(url_for('main.codigos_barra'))
+
     products_to_print = Product.query.filter(Product.id.in_(product_ids)).all()
     company_info = CompanyInfo.query.first()
     current_rate = get_cached_exchange_rate() or 0.0
 
     def generate_weasyprint_compatible_svg(barcode_value):
-        """Generate SVG barcode compatible with WeasyPrint"""
+        """Generate SVG barcode compatible with WeasyPrint - Optimized version"""
         try:
-            # Generate barcode with basic SVG writer
+            # Validate barcode before processing
+            if not barcode_value or not barcode_value.strip():
+                return '<text x="10" y="20" font-family="monospace" font-size="8">Sin código</text>'
+
+            # Generate barcode with optimized settings for speed
             buffer = BytesIO()
-            Code128(barcode_value, writer=SVGWriter()).write(buffer, options={'module_width': 0.4, 'quiet_zone': 0.5})
+            Code128(barcode_value.strip(), writer=SVGWriter()).write(
+                buffer,
+                options={
+                    'module_width': 0.3,  # Reduced for better fit
+                    'quiet_zone': 0.3,    # Reduced quiet zone
+                    'font_size': 0,       # Remove text to save space
+                    'text_distance': 0
+                }
+            )
             svg_content = buffer.getvalue().decode('utf-8')
 
-            # Simple cleanup for WeasyPrint compatibility
-            # Remove problematic attributes that cause warnings
-            svg_content = svg_content.replace('fill="black"', '')
-            svg_content = svg_content.replace('text-anchor="middle"', '')
-            svg_content = svg_content.replace('font-family="monospace"', '')
-            svg_content = svg_content.replace('font-size="11"', '')
+            # Fast string replacements for WeasyPrint compatibility
+            replacements = [
+                ('fill="black"', ''),
+                ('text-anchor="middle"', ''),
+                ('font-family="monospace"', ''),
+                ('font-size="11"', ''),
+                ('id="barcode_group"', f'id="barcode_group_{hash(barcode_value) % 1000}"')
+            ]
 
-            # Make IDs unique to avoid conflicts
-            svg_content = svg_content.replace('id="barcode_group"', f'id="barcode_group_{barcode_value}"')
+            for old, new in replacements:
+                svg_content = svg_content.replace(old, new)
 
             return svg_content
         except Exception as e:
             current_app.logger.error(f"Error generating barcode for {barcode_value}: {e}")
-            return f'<text x="10" y="20" font-family="monospace" font-size="10">Error</text>'
+            return f'<text x="10" y="20" font-family="monospace" font-size="8">Error</text>'
 
+    # Generar códigos de barras con logging de progreso
+    current_app.logger.info(f"Iniciando generación de códigos de barras para {len(products_to_print)} productos")
     products_dict = []
-    for p in products_to_print:
+    for i, p in enumerate(products_to_print):
+        if i % 20 == 0:  # Log cada 20 productos
+            current_app.logger.info(f"Procesando producto {i+1}/{len(products_to_print)}: {p.name}")
+
         barcode_svg = ""
         if p.barcode:
             barcode_svg = generate_weasyprint_compatible_svg(p.barcode)
         price_ves = p.price_usd if p.price_usd else 0
         products_dict.append({'id': p.id, 'name': p.name, 'barcode': p.barcode, 'barcode_svg': barcode_svg, 'price_ves': price_ves})
 
+    current_app.logger.info("Generación de códigos de barras completada")
+
     # Render the HTML template with the products
     html_string = render_template('inventario/imprimir_codigos.html', products=products_dict, company_info=company_info)
 
-    # Create PDF with timeout and error handling
+    # Create PDF with enhanced timeout and error handling
     try:
+        current_app.logger.info("Iniciando generación de PDF")
+
         # Add CSS to avoid fontTools issues
         css_string = """
         @page { size: A4; margin: 3mm; }
         body { font-family: monospace; font-size: 8pt; }
         """
 
-        # Create PDF with timeout
+        # Create PDF with timeout monitoring
         start_time = time.time()
         html_doc = HTML(string=html_string)
-        pdf = html_doc.write_pdf()
 
-        # Check if generation took too long (more than 25 seconds for safety)
-        if time.time() - start_time > 25:
-            current_app.logger.warning("PDF generation took longer than expected")
+        # Set a more aggressive timeout for PDF writing
+        import signal
+
+        def timeout_handler(signum, frame):
+            raise TimeoutError("PDF generation timeout")
+
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(20)  # 20 second timeout
+
+        try:
+            pdf = html_doc.write_pdf()
+            signal.alarm(0)  # Cancel alarm
+        except TimeoutError:
+            signal.alarm(0)
+            raise TimeoutError("PDF generation exceeded 20 seconds")
+
+        generation_time = time.time() - start_time
+        current_app.logger.info(f"PDF generado exitosamente en {generation_time:.2f} segundos")
 
         # Return the PDF as a response
         return Response(pdf, mimetype='application/pdf', headers={'Content-Disposition': 'inline; filename=codigos_de_barra.pdf'})
 
+    except TimeoutError as e:
+        current_app.logger.error(f"PDF generation timeout: {str(e)}")
+        error_message = "La generación del PDF tomó demasiado tiempo. Intente con menos productos (máximo 50 recomendado)."
     except Exception as e:
         current_app.logger.error(f"Error generating PDF: {str(e)}")
-        # Return a simple error PDF
-        error_html = f"""
-        <html>
-        <body>
-            <h1>Error generando PDF</h1>
-            <p>{str(e)}</p>
-            <p>Intente con menos productos o contacte al administrador.</p>
-        </body>
-        </html>
-        """
-        try:
-            error_pdf = HTML(string=error_html).write_pdf()
-            return Response(error_pdf, mimetype='application/pdf', headers={'Content-Disposition': 'inline; filename=error.pdf'})
-        except:
-            # If even error PDF fails, return plain text
-            return Response(f"Error generando PDF: {str(e)}", mimetype='text/plain')
+        error_message = f"Error generando PDF: {str(e)}. Intente con menos productos o contacte al administrador."
+
+    # Return a simple error PDF
+    error_html = f"""
+    <html>
+    <head><style>body {{ font-family: monospace; font-size: 12pt; text-align: center; margin: 50px; }}</style></head>
+    <body>
+        <h1>Error generando PDF</h1>
+        <p>{error_message}</p>
+        <p>Número de productos seleccionados: {len(products_to_print)}</p>
+        <p>Recomendación: Seleccione máximo 50 productos por vez.</p>
+    </body>
+    </html>
+    """
+    try:
+        error_pdf = HTML(string=error_html).write_pdf()
+        return Response(error_pdf, mimetype='application/pdf', headers={'Content-Disposition': 'inline; filename=error.pdf'})
+    except:
+        # If even error PDF fails, return plain text
+        return Response(error_message, mimetype='text/plain')
 
 
 @routes_blueprint.route('/inventario/existencias')
