@@ -516,20 +516,32 @@ def generate_barcode_pdf_reportlab(products, company_info):
             # Barcode (bottom)
             if product['barcode']:
                 try:
-                    # Create barcode using ReportLab
+                    # Calculate available width for barcode (full label width minus small margins)
+                    available_width = label_width - 4*mm  # Leave 2mm margin on each side
+
+                    # Create barcode using ReportLab with full width
                     barcode_obj = code128.Code128(
                         product['barcode'],
-                        barWidth=0.3*mm,
-                        barHeight=6*mm,
+                        barWidth=0.25*mm,  # Slightly thinner bars to fit more
+                        barHeight=8*mm,    # Taller barcode
                         quiet=1
                     )
 
-                    # Position barcode in center bottom of label
-                    barcode_x = x + (label_width - barcode_obj.width) / 2
-                    barcode_y = y + 2*mm
+                    # Position barcode to span full width of label
+                    barcode_x = x + 2*mm  # 2mm left margin
+                    barcode_y = y + 3*mm  # Position from bottom (moved up slightly for text)
 
                     # Draw barcode on canvas
                     barcode_obj.drawOn(c, barcode_x, barcode_y)
+
+                    # Add barcode text below the barcode
+                    c.setFont("Helvetica", 4)  # Small font for barcode text
+                    barcode_text = product['barcode']
+                    text_width = c.stringWidth(barcode_text, "Helvetica", 4)
+                    text_x = x + (label_width - text_width) / 2  # Center the text
+                    text_y = barcode_y - 1*mm  # Position below barcode
+
+                    c.drawString(text_x, text_y, barcode_text)
 
                 except Exception as e:
                     current_app.logger.error(f"Error generating barcode for {product['barcode']}: {e}")
