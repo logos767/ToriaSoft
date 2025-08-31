@@ -16,7 +16,6 @@
             display: grid;
             grid-template-columns: repeat(4, 50mm);
             grid-template-rows: repeat(11, 25mm);
-            gap: 0;
             width: 210mm;
             height: 297mm; /* Altura de A4 */
             box-sizing: border-box;
@@ -26,7 +25,6 @@
             width: 50mm;
             height: 25mm;
             box-sizing: border-box;
-            padding: 2mm;
             text-align: center;
             display: flex;
             flex-direction: column;
@@ -37,7 +35,7 @@
         }
         .product-name {
             font-size: 7pt;
-            margin-bottom: 2px;
+            margin-bottom: 0px;
             overflow: hidden;
             text-overflow: ellipsis;
             max-width: 100%;
@@ -57,7 +55,7 @@
                     <div style="position: absolute; top: 2mm; right: 2mm; font-size: 6pt; font-weight: bold; text-align: right;">
                         {{ company_info.name if company_info else '' }}
                     </div>
-                    <div class="product-name" style="display: flex; justify-content: center; gap: 4px; font-size: 7pt; margin-bottom: 2px;">
+                    <div class="product-name" style="display: flex; justify-content: center; font-size: 7pt;">
                         <span>{{ product.name }}</span>
                         <span style="font-weight: normal;">${{ '%.2f'|format(product.price_ves) }}</span>
                     </div>
