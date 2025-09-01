@@ -334,7 +334,7 @@ def create_notification_for_admins(message, link):
 def inject_notifications():
     if not current_user.is_authenticated or current_user.role != 'administrador':
         return dict(unread_notifications=[], unread_notification_count=0)
-    
+
     try:
         unread_notifications = Notification.query.filter_by(user_id=current_user.id, is_read=False).order_by(Notification.created_at.desc()).limit(10).all()
         count = Notification.query.filter_by(user_id=current_user.id, is_read=False).count()
@@ -345,6 +345,26 @@ def inject_notifications():
     except Exception as e:
         current_app.logger.error(f"Error al obtener notificaciones para el usuario {current_user.id}: {e}")
         return dict(unread_notifications=[], unread_notification_count=0)
+
+@routes_blueprint.context_processor
+def inject_exchange_rates():
+    """Inyecta las tasas de cambio en el contexto de la aplicación."""
+    exchange_rates = {}
+    try:
+        response = requests.get('https://api.exchangerate-api.com/v4/latest/USD', timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            exchange_rates['VES'] = data['rates'].get('VES', None)
+            exchange_rates['EUR'] = data['rates'].get('EUR', None)
+        else:
+            current_app.logger.error(f"Error fetching exchange rates: Status code {response.status_code}")
+    except Exception as e:
+        current_app.logger.error(f"Exception fetching exchange rates: {e}")
+
+    # Obtener tasa de Binance
+    exchange_rates['USDT_VES_binance'] = obtener_tasa_p2p_binance()
+
+    return dict(exchange_rates=exchange_rates)
 
 @routes_blueprint.route('/notifications/mark-as-read', methods=['POST'])
 @login_required
