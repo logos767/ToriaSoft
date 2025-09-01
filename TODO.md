@@ -1,29 +1,22 @@
-# Optimización de impresión de códigos de barras
+# TODO: Modificar impresión de códigos de barra para nombres largos y agregar bordes
 
-## ✅ COMPLETADO - Optimización Finalizada
+## Tareas Pendientes
+- [x] Modificar la función `generate_barcode_pdf_reportlab` en `app/routes.py` para permitir dos líneas en el nombre del producto
+- [x] Ajustar la posición del código de barras hacia abajo para hacer espacio para la segunda línea
+- [x] Agregar borde a cada etiqueta para delimitarlas
+- [x] Cambiar el borde a líneas segmentadas (dashed) cada 2mm para delimitar el recorte
+- [ ] Probar la generación del PDF para confirmar que los nombres largos se dividan en dos líneas, el código de barras esté posicionado correctamente y los bordes segmentados se dibujen (requiere ejecutar la aplicación)
 
-### Objetivo Original
-Optimizar el espacio en página A4 para imprimir códigos de barras
+## Información Recopilada
+- La función `generate_barcode_pdf_reportlab` en `app/routes.py` genera el PDF con códigos de barra usando ReportLab.
+- El nombre del producto se dibuja en una sola línea actualmente.
+- El código de barras se posiciona en la parte inferior de la etiqueta.
 
-### Implementación Realizada
-- ✅ Optimizado para **3 columnas × 9 filas = 27 códigos por página**
-- ✅ Dimensiones: **65mm ancho × 32mm alto** por etiqueta
-- ✅ Layout optimizado para página A4 completa
-- ✅ CSS mejorado con grid responsive
-- ✅ Manejo de texto largo con ellipsis
-- ✅ Separación clara: nombre empresa, info producto, código de barras
+## Plan de Edición
+- Dividir el nombre del producto en dos líneas si supera una longitud máxima (ej. 30 caracteres).
+- Dibujar la primera línea en la posición original y la segunda línea debajo.
+- Mover el código de barras y su texto hacia abajo para crear espacio.
+- Dibujar un borde rectangular alrededor de cada etiqueta.
 
-### Correcciones de Timeout Implementadas
-- ✅ Límite de **100 productos máximo** por generación PDF
-- ✅ Timeout de 25 segundos con monitoreo
-- ✅ Generación de códigos de barras optimizada
-- ✅ Manejo de errores con PDF fallback
-- ✅ Logging mejorado para debugging
-
-### Archivos Modificados
-- `app/routes.py` - Límite de productos, timeout handling, optimización barcode
-- `app/templates/inventario/imprimir_codigos.html` - Layout 3x9 optimizado
-- `app/templates/inventario/codigos_barra.html` - Validación frontend
-
-### Estado
-✅ **TAREA COMPLETADA** - El sistema ahora genera PDFs de códigos de barras de manera eficiente sin timeouts
+## Archivos Dependientes
+- Ninguno, ya que esta es la única función que genera el PDF de códigos de barra.

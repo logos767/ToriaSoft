@@ -463,7 +463,7 @@ import io
 def generate_barcode_pdf_reportlab(products, company_info):
     """
     Generate PDF with barcodes using ReportLab for better performance.
-    Layout: 3 columns x 9 rows = 27 labels per page
+    Layout: 4 columns x 10 rows = 40 labels per page
     """
     # Create PDF buffer
     buffer = io.BytesIO()
@@ -473,21 +473,21 @@ def generate_barcode_pdf_reportlab(products, company_info):
     margin = 3 * mm
 
     # Label dimensions (same as HTML template)
-    label_width = 65 * mm
-    label_height = 32 * mm
+    label_width = 51 * mm
+    label_height = 29 * mm
 
     # Create PDF canvas directly for more control
     c = canvas.Canvas(buffer, pagesize=A4)
     c.setFont("Helvetica", 6)
 
-    # Process products in batches of 27 (3x9 grid)
-    for i in range(0, len(products), 27):
-        batch = products[i:i+27]
+    # Process products in batches of 40 (4x10 grid)
+    for i in range(0, len(products), 40):
+        batch = products[i:i+40]
 
         for j, product in enumerate(batch):
             # Calculate position in grid
-            col = j % 3
-            row = j // 3
+            col = j % 4
+            row = j // 4
 
             # Calculate position coordinates
             x = margin + col * label_width
@@ -495,25 +495,50 @@ def generate_barcode_pdf_reportlab(products, company_info):
 
             # Company name (top right)
             if company_info and company_info.name:
-                c.setFont("Helvetica-Bold", 7)
+                c.setFont("Helvetica-Bold", 8)
                 company_name = company_info.name[:20]
                 # Right align company name
-                text_width = c.stringWidth(company_name, "Helvetica-Bold", 6)
-                c.drawString(x + label_width - text_width - mm, y + label_height - 6*mm, company_name)
+                text_width = c.stringWidth(company_name, "Helvetica-Bold", 8)
+                c.drawString(x + 1*mm, y + label_height - 3*mm, company_name)
 
-            # Product name (centered)
-            c.setFont("Helvetica", 6)
-            product_name = product['name'][:30]  # Limit length
-            text_width = c.stringWidth(product_name, "Helvetica", 6)
-            c.drawString(x + (label_width - text_width) / 2, y + label_height - 18*mm, product_name)
+            # Product name (centered, allow two lines for long names)
+            c.setFont("Helvetica", 8)
+            product_name = product['name'][:60]  # Allow longer names
+            if len(product_name) > 30:
+                # Split into two lines
+                words = product_name.split()
+                line1 = ""
+                line2 = ""
+                for word in words:
+                    if len(line1 + " " + word) <= 30:
+                        line1 += " " + word if line1 else word
+                    else:
+                        line2 += " " + word if line2 else word
+                if not line2:
+                    # If can't split nicely, force split
+                    line1 = product_name[:30]
+                    line2 = product_name[30:]
+            else:
+                line1 = product_name
+                line2 = ""
 
-            # Price (below product name)
-            c.setFont("Helvetica-Bold", 6)
+            # Draw first line
+            text_width = c.stringWidth(line1, "Helvetica", 8)
+            c.drawString(x + (label_width - text_width) / 2, y + label_height - 6*mm, line1)
+
+            # Draw second line if exists
+            if line2:
+                text_width = c.stringWidth(line2, "Helvetica", 8)
+                c.drawString(x + (label_width - text_width) / 2, y + label_height - 9*mm, line2)
+
+            # Price (below product name, adjust position if two lines)
+            c.setFont("Helvetica-Bold", 9)
             price_text = f"${product['price_ves']:.2f}"
-            text_width = c.stringWidth(price_text, "Helvetica-Bold", 7)
-            c.drawString(x + (label_width - text_width), y + label_height - 18*mm, price_text)
+            text_width = c.stringWidth(price_text, "Helvetica-Bold", 9)
+            price_y = y + label_height - 3*mm
+            c.drawString(x + label_width - text_width - 2*mm, price_y, price_text)
 
-            # Barcode (bottom)
+            # Barcode (bottom, lowered to make space)
             if product['barcode']:
                 try:
                     # Calculate available width for barcode (full label width minus small margins)
@@ -522,24 +547,24 @@ def generate_barcode_pdf_reportlab(products, company_info):
                     # Create barcode using ReportLab with full width
                     barcode_obj = code128.Code128(
                         product['barcode'],
-                        barWidth=0.6*mm,  # Slightly thinner bars to fit more
-                        barHeight=20*mm,    # Taller barcode
+                        barWidth=0.45*mm,  # Slightly thinner bars to fit more
+                        barHeight=12*mm,    # Taller barcode
                         quiet=1
                     )
 
-                    # Position barcode to span full width of label
-                    barcode_x = x + 2*mm  # 2mm left margin
-                    barcode_y = y + 3*mm  # Position from bottom (moved up slightly for text)
+                    # Position barcode to span full width of label, lowered
+                    barcode_x = x - 4*mm  # 2mm left margin
+                    barcode_y = y + 6*mm  # Lowered from 6mm to 3mm to make space
 
                     # Draw barcode on canvas
                     barcode_obj.drawOn(c, barcode_x, barcode_y)
 
                     # Add barcode text below the barcode
-                    c.setFont("Helvetica", 6)  # Small font for barcode text
+                    c.setFont("Helvetica", 12)  # Small font for barcode text
                     barcode_text = product['barcode']
-                    text_width = c.stringWidth(barcode_text, "Helvetica", 6)
+                    text_width = c.stringWidth(barcode_text, "Helvetica", 12)
                     text_x = x + (label_width - text_width) / 2  # Center the text
-                    text_y = barcode_y - 1*mm  # Position below barcode
+                    text_y = barcode_y - 4*mm  # Position below barcode
 
                     c.drawString(text_x, text_y, barcode_text)
 
@@ -549,8 +574,14 @@ def generate_barcode_pdf_reportlab(products, company_info):
                     c.setFont("Helvetica-Bold", 6)
                     c.drawString(x + 2*mm, y + 4*mm, "Error")
 
+            # Draw dashed border around the label with thinner lines and dash pattern for segmentation
+            c.setLineWidth(0.5)
+            c.setDash(2 * mm, 2 * mm)  # 2mm dash, 2mm gap
+            c.rect(x, y, label_width, label_height, stroke=1, fill=0)
+            c.setDash()  # reset dash pattern to solid
+
         # Start new page if there are more products
-        if i + 27 < len(products):
+        if i + 40 < len(products):
             c.showPage()
             c.setFont("Helvetica", 6)
 

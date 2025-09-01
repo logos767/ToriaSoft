@@ -30,39 +30,81 @@
                 <a href="{{ url_for('main.dashboard') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
                     <i class="fas fa-tachometer-alt mr-2"></i> Dashboard
                 </a>
-                <a href="{{ url_for('main.inventory_list') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
-                    <i class="fas fa-boxes mr-2"></i> Inventario
-                </a>
-                <a href="{{ url_for('main.codigos_barra') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
-                    <i class="fas fa-barcode mr-2"></i> Códigos de Barra
-                </a>
-                <a href="{{ url_for('main.client_list') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
-                    <i class="fas fa-users mr-2"></i> Clientes
-                </a>
-                <a href="{{ url_for('main.provider_list') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
-                    <i class="fas fa-truck mr-2"></i> Proveedores
-                </a>
-                <a href="{{ url_for('main.purchase_list') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
-                    <i class="fas fa-shopping-basket mr-2"></i> Compras
-                </a>
-                <a href="{{ url_for('main.order_list') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
-                    <i class="fas fa-shopping-cart mr-2"></i> Órdenes
-                </a>
-                <a href="{{ url_for('main.movement_list') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
-                    <i class="fas fa-exchange-alt mr-2"></i> Movimientos
-                </a>
-                <a href="{{ url_for('main.estadisticas') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
-                    <i class="fas fa-chart-line mr-2"></i> Estadísticas
-                </a>
-                {% if current_user.role == 'administrador' %}
-                <a href="{{ url_for('main.company_settings') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
-                    <i class="fas fa-cogs mr-2"></i> Configuración de Empresa
-                </a>
-                {% endif %}
+
+                <details class="group">
+                    <summary class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
+                        <i class="fas fa-shopping-basket mr-2"></i> Compras
+                    </summary>
+                    <div class="ml-4 mt-2 space-y-1">
+                        <a href="{{ url_for('main.new_purchase') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-plus mr-2"></i> Nueva Orden de Compra
+                        </a>
+                        <a href="{{ url_for('main.purchase_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-list mr-2"></i> Lista de Ordenes de Compra
+                        </a>
+                        <a href="{{ url_for('main.provider_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-truck mr-2"></i> Proveedores
+                        </a>
+                    </div>
+                </details>
+
+                <details class="group">
+                    <summary class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
+                        <i class="fas fa-shopping-cart mr-2"></i> Ventas
+                    </summary>
+                    <div class="ml-4 mt-2 space-y-1">
+                        <a href="{{ url_for('main.new_order') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-plus mr-2"></i> Nueva Orden de Entrega
+                        </a>
+                        <a href="{{ url_for('main.order_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-list mr-2"></i> Lista de Ordenes de Entrega
+                        </a>
+                        <a href="{{ url_for('main.client_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-users mr-2"></i> Clientes
+                        </a>
+                        <a href="#" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-file-invoice mr-2"></i> Facturas
+                        </a>
+                        <a href="{{ url_for('main.estadisticas') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-chart-line mr-2"></i> Estadísticas
+                        </a>
+                    </div>
+                </details>
+
+                <details class="group">
+                    <summary class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
+                        <i class="fas fa-boxes mr-2"></i> Inventario
+                    </summary>
+                    <div class="ml-4 mt-2 space-y-1">
+                        <a href="{{ url_for('main.inventory_stock') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-list mr-2"></i> Existencias
+                        </a>
+                        <a href="{{ url_for('main.movement_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-exchange-alt mr-2"></i> Movimientos
+                        </a>
+                        <a href="{{ url_for('main.new_product') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-plus mr-2"></i> Nuevo Producto
+                        </a>
+                        <a href="{{ url_for('main.cargar_excel') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-upload mr-2"></i> Cargar Productos
+                        </a>
+                    </div>
+                </details>
+
                 {% if current_user.is_authenticated and current_user.role == 'administrador' %}
-                <li>
-                    <a href="{{ url_for('main.cost_list') }}"><i class="fas fa-calculator"></i><span>Estructura de Costos</span></a>
-                </li>
+                <details class="group">
+                    <summary class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
+                        <i class="fas fa-calculator mr-2"></i> Costos
+                    </summary>
+                    <div class="ml-4 mt-2 space-y-1">
+                        <a href="{{ url_for('main.cost_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-list mr-2"></i> Resumen
+                        </a>
+                        <a href="{{ url_for('main.cost_structure_config') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-cogs mr-2"></i> Configuración de Costos
+                        </a>
+                    </div>
+                </details>
                 {% endif %}
             </nav>
         </div>

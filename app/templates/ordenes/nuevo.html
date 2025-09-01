@@ -48,7 +48,11 @@
                         
                         <div class="flex flex-col">
                             <label class="text-sm text-gray-500">USD</label>
+                            {% if current_user.is_authenticated and current_user.role == 'administrador' %}
                             <input type="number" name="price_usd[]" placeholder="Precio USD" step="0.01" min="0" required class="w-24 shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 price-usd-input">
+                            {% else %}
+                            <span class="w-24 text-center font-bold text-gray-800">***</span>
+                            {% endif %}
                         </div>
                         <div class="flex flex-col">
                             <label class="text-sm text-gray-500">Bs</label>
@@ -109,8 +113,10 @@
             const priceUsdInput = productItem.querySelector('.price-usd-input');
             
             // Asignar el precio USD desde el atributo data-
-            priceUsdInput.value = selectedOption.dataset.priceUsd;
-            updatePriceVes(priceUsdInput);
+            if (priceUsdInput) {
+                priceUsdInput.value = selectedOption.dataset.priceUsd;
+                updatePriceVes(priceUsdInput);
+            }
             
             // Actualizar el stock en la etiqueta del producto
             const productName = selectedOption.text.split(' (')[0];
@@ -142,7 +148,12 @@
             // Limpiar valores del nuevo clon
             newProductItem.querySelector('.product-select').selectedIndex = 0;
             newProductItem.querySelector('.quantity-input').value = '';
-            newProductItem.querySelector('.price-usd-input').value = '';
+            {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+            const priceUsdInput = newProductItem.querySelector('.price-usd-input');
+            if (priceUsdInput) {
+                priceUsdInput.value = '';
+            }
+            {% endif %}
 
             // Habilitar el botón de eliminar
             const removeBtn = newProductItem.querySelector('.remove-product-btn');
@@ -199,7 +210,16 @@
             
             document.querySelectorAll('.product-item').forEach(productItem => {
                 const quantity = parseFloat(productItem.querySelector('.quantity-input').value) || 0;
-                const priceUsd = parseFloat(productItem.querySelector('.price-usd-input').value) || 0;
+                const priceUsdInput = productItem.querySelector('.price-usd-input');
+                let priceUsd = 0;
+                if (priceUsdInput) {
+                    priceUsd = parseFloat(priceUsdInput.value) || 0;
+                } else {
+                    // For non-admin users, use the default price from the selected option
+                    const selectElement = productItem.querySelector('.product-select');
+                    const selectedOption = selectElement.options[selectElement.selectedIndex];
+                    priceUsd = parseFloat(selectedOption.dataset.priceUsd) || 0;
+                }
                 const priceVes = priceUsd * currentRate;
                 
                 subtotal += quantity * priceVes;
@@ -247,7 +267,12 @@
 
                     // Limpiar otros valores
                     newProductItem.querySelector('.quantity-input').value = '1';
-                    newProductItem.querySelector('.price-usd-input').value = product.price_usd;
+                    {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+                    const priceUsdInput = newProductItem.querySelector('.price-usd-input');
+                    if (priceUsdInput) {
+                        priceUsdInput.value = product.price_usd;
+                    }
+                    {% endif %}
 
                     // Habilitar botón de eliminar
                     const removeBtn = newProductItem.querySelector('.remove-product-btn');
