@@ -928,12 +928,17 @@ def order_list():
 def order_detail(order_id):
     order = Order.query.get_or_404(order_id)
     company_info = CompanyInfo.query.first()
+    iva_rate = 0.16
+    subtotal = sum(item.price * item.quantity for item in order.items)
+    iva = iva_rate * subtotal
     # CORRECCIÓN: Usar la nueva función
     current_rate = get_cached_exchange_rate() or 0.0
-    return render_template('ordenes/detalle_orden.html', 
-                           title=f'Orden #{order.id}', 
+    return render_template('ordenes/detalle_orden.html',
+                           title=f'Orden #{order.id}',
                            order=order,
                            company_info=company_info,
+                           subtotal=subtotal,
+                           iva=iva,
                            current_rate=current_rate)
 
 @routes_blueprint.route('/ordenes/nuevo', methods=['GET', 'POST'])
@@ -968,7 +973,8 @@ def new_order():
                     continue
 
                 if product.stock < quantity:
-                    raise ValueError(f'Stock insuficiente para el producto: {product.name}')
+                    current_app.logger.warning(f"Intento de venta con stock insuficiente - Producto: {product.name} (ID: {product.id}), Stock disponible: {product.stock}, Cantidad solicitada: {quantity}")
+                    raise ValueError(f'Stock insuficiente para el producto "{product.name}". Stock disponible: {product.stock}, Cantidad solicitada: {quantity}. Por favor, ajuste la cantidad o contacte al administrador para reponer inventario.')
 
                 price_ves = float(p_usd) * current_rate
                 
@@ -1046,13 +1052,77 @@ def estadisticas():
         func.sum(Order.total_amount).label('total_sales')
     ).filter(extract('year', Order.date_created) == extract('year', func.now())).group_by('month').order_by('month').all()
 
+    # Consultar costos mensuales desde compras
+    costs_by_month = db.session.query(
+        extract('month', Purchase.date_created).label('month'),
+        func.sum(Purchase.total_cost).label('total_costs')
+    ).filter(extract('year', Purchase.date_created) == extract('year', func.now())).group_by('month').order_by('month').all()
+
+    # Obtener estructura de costos para gastos
+    cost_structure = CostStructure.query.first()
+
     top_products_data = {'labels': [p[0] for p in top_products], 'values': [p[1] for p in top_products]}
     least_products_data = {'labels': [p[0] for p in least_products], 'values': [p[1] for p in least_products]}
     frequent_clients_data = {'labels': [c[0] for c in frequent_clients], 'values': [c[1] for c in frequent_clients]}
-    
+
     months_names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
     monthly_sales = {int(s[0]): s[1] for s in sales_by_month}
+    monthly_costs = {int(c[0]): c[1] for c in costs_by_month}
+
     sales_data_complete = {'labels': months_names, 'values': [monthly_sales.get(i + 1, 0) for i in range(12)]}
+
+    # Calcular ganancias y pérdidas mensuales
+    monthly_profits = []
+    total_profit = 0
+    total_loss = 0
+    months_with_profit = 0
+    months_with_loss = 0
+
+    for i in range(12):
+        month = i + 1
+        sales = monthly_sales.get(month, 0)
+        costs = monthly_costs.get(month, 0)
+
+        # Calcular gastos mensuales
+        expenses = 0
+        if cost_structure:
+            # Gastos fijos distribuidos mensualmente
+            fixed_expenses = (cost_structure.monthly_rent or 0) + \
+                           (cost_structure.monthly_utilities or 0) + \
+                           (cost_structure.monthly_fixed_taxes or 0)
+            monthly_fixed_expenses = fixed_expenses / 12
+
+            # Gastos variables basados en ventas
+            variable_expenses = sales * ((cost_structure.default_sales_commission_percent or 0) + \
+                                       (cost_structure.default_marketing_percent or 0))
+            expenses = monthly_fixed_expenses + variable_expenses
+
+        # Calcular ganancia/pérdida del mes
+        profit_loss = sales - costs - expenses
+        monthly_profits.append(profit_loss)
+
+        if profit_loss > 0:
+            total_profit += profit_loss
+            months_with_profit += 1
+        elif profit_loss < 0:
+            total_loss += abs(profit_loss)
+            months_with_loss += 1
+
+    # Preparar datos para el gráfico de ganancias/pérdidas
+    profit_loss_data = {
+        'labels': months_names,
+        'values': monthly_profits
+    }
+
+    # Resumen de ganancias y pérdidas
+    profit_loss_summary = {
+        'total_profit': total_profit,
+        'total_loss': total_loss,
+        'net_result': total_profit - total_loss,
+        'months_with_profit': months_with_profit,
+        'months_with_loss': months_with_loss,
+        'average_monthly_result': (total_profit - total_loss) / 12 if 12 > 0 else 0
+    }
     
     # CORRECCIÓN: Usar la nueva función
     current_rate = get_cached_exchange_rate() or 0.0
@@ -1063,6 +1133,8 @@ def estadisticas():
                            least_products=least_products_data,
                            frequent_clients=frequent_clients_data,
                            sales_by_month=sales_data_complete,
+                           profit_loss_data=profit_loss_data,
+                           profit_loss_summary=profit_loss_summary,
                            current_rate=current_rate)
 
 # Nueva ruta para cargar productos desde un archivo de Excel
@@ -1531,12 +1603,12 @@ def edit_product_cost(product_id):
 def print_delivery_note(order_id):
     order = Order.query.get_or_404(order_id)
     company_info = CompanyInfo.query.first()
-    
+
     iva_rate = 0.16
-    subtotal = order.total_amount / (1 + iva_rate)
-    iva = order.total_amount - subtotal
-    
-    return render_template('ordenes/imprimir_nota.html', 
+    subtotal = sum(item.price * item.quantity for item in order.items)
+    iva = iva_rate * subtotal
+
+    return render_template('ordenes/imprimir_nota.html',
                            order=order,
                            company_info=company_info,
                            subtotal=subtotal,
@@ -1567,3 +1639,32 @@ def api_exchange_rate():
         return jsonify(rate=rate)
     else:
         return jsonify(error="No se pudo obtener la tasa de cambio"), 500
+
+@routes_blueprint.route('/api/search_clients')
+@login_required
+def api_search_clients():
+    """API endpoint to search clients by cedula/rif or name."""
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify(clients=[])
+
+    # Search by cedula_rif or name (case insensitive, partial match)
+    clients = Client.query.filter(
+        or_(
+            Client.cedula_rif.ilike(f'%{query}%'),
+            Client.name.ilike(f'%{query}%')
+        )
+    ).limit(10).all()
+
+    clients_data = []
+    for client in clients:
+        clients_data.append({
+            'id': client.id,
+            'name': client.name,
+            'cedula_rif': client.cedula_rif,
+            'email': client.email,
+            'phone': client.phone,
+            'address': client.address
+        })
+
+    return jsonify(clients=clients_data)

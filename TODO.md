@@ -1,22 +1,17 @@
-# TODO: Modificar impresión de códigos de barra para nombres largos y agregar bordes
+# TODO: Agregar detalles de subtotal, IVA y total a detalle_orden.html
 
-## Tareas Pendientes
-- [x] Modificar la función `generate_barcode_pdf_reportlab` en `app/routes.py` para permitir dos líneas en el nombre del producto
-- [x] Ajustar la posición del código de barras hacia abajo para hacer espacio para la segunda línea
-- [x] Agregar borde a cada etiqueta para delimitarlas
-- [x] Cambiar el borde a líneas segmentadas (dashed) cada 2mm para delimitar el recorte
-- [ ] Probar la generación del PDF para confirmar que los nombres largos se dividan en dos líneas, el código de barras esté posicionado correctamente y los bordes segmentados se dibujen (requiere ejecutar la aplicación)
+## Completed Tasks
+- [x] Modify `order_detail` route in `app/routes.py` to calculate and pass `subtotal` and `iva` to the template
+- [x] Update `app/templates/ordenes/detalle_orden.html` to display subtotal, IVA (16%), and total instead of just the total amount
 
-## Información Recopilada
-- La función `generate_barcode_pdf_reportlab` en `app/routes.py` genera el PDF con códigos de barra usando ReportLab.
-- El nombre del producto se dibuja en una sola línea actualmente.
-- El código de barras se posiciona en la parte inferior de la etiqueta.
+## Summary of Changes
+- Added IVA calculation (16% of subtotal) in the `order_detail` route
+- Passed `subtotal` and `iva` variables to the `detalle_orden.html` template
+- Replaced the single "Monto Total" display with a breakdown showing:
+  - Subtotal: Bs. [amount]
+  - IVA (16%): Bs. [amount]
+  - Total: Bs. [amount] (highlighted in green)
 
-## Plan de Edición
-- Dividir el nombre del producto en dos líneas si supera una longitud máxima (ej. 30 caracteres).
-- Dibujar la primera línea en la posición original y la segunda línea debajo.
-- Mover el código de barras y su texto hacia abajo para crear espacio.
-- Dibujar un borde rectangular alrededor de cada etiqueta.
-
-## Archivos Dependientes
-- Ninguno, ya que esta es la única función que genera el PDF de códigos de barra.
+## Next Steps
+- Test the order detail page to verify the amounts display correctly
+- Ensure the calculations match those in `imprimir_nota.html` for consistency

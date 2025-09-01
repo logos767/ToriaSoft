@@ -11,7 +11,7 @@
             </div>
             <div class="mb-4">
                 <label for="cedula_rif" class="block text-gray-700 font-bold mb-2">Cédula/RIF (opcional)</label>
-                <input type="text" id="cedula_rif" name="cedula_rif" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="cedula_rif" name="cedula_rif" value="{{ request.args.get('cedula_rif', '') }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
             <div class="mb-4">
                 <label for="email" class="block text-gray-700 font-bold mb-2">Email (opcional)</label>

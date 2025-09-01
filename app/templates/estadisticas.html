@@ -22,6 +22,42 @@
             <h2 class="text-xl font-semibold text-gray-700 mb-4">Top 5 Clientes Frecuentes</h2>
             <canvas id="frequentClientsChart"></canvas>
         </div>
+
+        <!-- Gráfico de Ganancias y Pérdidas Mensuales -->
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Ganancias y Pérdidas Mensuales</h2>
+            <canvas id="profitLossChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Resumen de Ganancias y Pérdidas -->
+    <div class="bg-white p-6 rounded-lg shadow-md mt-8">
+        <h2 class="text-2xl font-semibold text-gray-700 mb-6">Resumen Anual de Ganancias y Pérdidas</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Ganancias Totales -->
+            <div class="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
+                <h3 class="text-lg font-semibold text-green-800 mb-2">Ganancias Totales</h3>
+                <p class="text-2xl font-bold text-green-600">{{ "{:,.2f}".format(profit_loss_summary.total_profit) }} Bs</p>
+                <p class="text-sm text-green-700">{{ profit_loss_summary.months_with_profit }} meses con ganancias</p>
+            </div>
+
+            <!-- Pérdidas Totales -->
+            <div class="bg-red-50 p-4 rounded-lg border-l-4 border-red-500">
+                <h3 class="text-lg font-semibold text-red-800 mb-2">Pérdidas Totales</h3>
+                <p class="text-2xl font-bold text-red-600">{{ "{:,.2f}".format(profit_loss_summary.total_loss) }} Bs</p>
+                <p class="text-sm text-red-700">{{ profit_loss_summary.months_with_loss }} meses con pérdidas</p>
+            </div>
+
+            <!-- Resultado Neto -->
+            <div class="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
+                <h3 class="text-lg font-semibold text-blue-800 mb-2">Resultado Neto</h3>
+                <p class="text-2xl font-bold {{ 'text-green-600' if profit_loss_summary.net_result >= 0 else 'text-red-600' }}">
+                    {{ "{:,.2f}".format(profit_loss_summary.net_result) }} Bs
+                </p>
+                <p class="text-sm text-blue-700">Promedio mensual: {{ "{:,.2f}".format(profit_loss_summary.average_monthly_result) }} Bs</p>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -32,6 +68,7 @@
         const salesByMonthData = {{ sales_by_month | tojson }};
         const topProductsData = {{ top_products | tojson }};
         const frequentClientsData = {{ frequent_clients | tojson }};
+        const profitLossData = {{ profit_loss_data | tojson }};
 
         // Gráfico de Ventas Mensuales
         new Chart(document.getElementById('salesByMonthChart'), {
@@ -104,6 +141,62 @@
                 scales: {
                     y: {
                         beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // Gráfico de Ganancias y Pérdidas Mensuales
+        new Chart(document.getElementById('profitLossChart'), {
+            type: 'bar',
+            data: {
+                labels: profitLossData.labels,
+                datasets: [{
+                    label: 'Ganancia/Pérdida (Bs)',
+                    data: profitLossData.values,
+                    backgroundColor: profitLossData.values.map(value =>
+                        value >= 0 ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+                    ),
+                    borderColor: profitLossData.values.map(value =>
+                        value >= 0 ? 'rgba(34, 197, 94, 1)' : 'rgba(239, 68, 68, 1)'
+                    ),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += new Intl.NumberFormat('es-VE', {
+                                    style: 'currency',
+                                    currency: 'VES'
+                                }).format(context.parsed.y);
+                                return label;
+                            }
+                        }
                     }
                 }
             }

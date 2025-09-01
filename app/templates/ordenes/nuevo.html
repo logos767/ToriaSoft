@@ -8,65 +8,100 @@
 
     <div class="bg-white p-6 rounded-lg shadow-md">
         <form method="POST" action="{{ url_for('main.new_order') }}">
-            <!-- Información de la orden -->
+            <!-- Información de la orden y escáner -->
             <div class="mb-6">
-                <h2 class="text-xl font-semibold text-gray-700 mb-2">Información de la Orden</h2>
-                <label for="client_id" class="block text-gray-700 font-bold mb-2">Cliente:</label>
-                <select id="client_id" name="client_id" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {% for client in clients %}
-                        <option value="{{ client.id }}">{{ client.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Información de la Orden</h2>
 
-            <!-- Escáner de código de barras -->
-            <div class="mb-6">
-                <h2 class="text-xl font-semibold text-gray-700 mb-2">Escáner de Código de Barras</h2>
-                <div class="flex items-center space-x-4">
-                    <input type="text" id="barcode-input" placeholder="Escanea o ingresa código de barras" class="flex-1 shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <button type="button" id="scan-barcode-btn" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
-                        <i class="fas fa-barcode mr-2"></i>Agregar Producto
-                    </button>
+                <div class="flex justify-between items-start">
+                    <!-- Información del cliente -->
+                    <div class="w-1/2 pr-4">
+                        <label for="client_search" class="block text-gray-700 font-bold mb-2">Cliente (Cédula o RIF):</label>
+                        <input type="text" id="client_search" name="client_search" autocomplete="off" placeholder="Escribe cédula o RIF para buscar cliente" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                        <input type="hidden" id="client_id" name="client_id" required>
+                        <div id="client_suggestions" class="border border-gray-300 rounded mt-1 max-h-32 overflow-y-auto bg-white hidden"></div>
+                        <div id="client_info" class="mt-3 p-3 border border-gray-300 rounded bg-gray-50 hidden">
+                            <div class="font-semibold mb-1">Cliente Seleccionado:</div>
+                            <div><strong>Nombre:</strong> <span id="client_name"></span></div>
+                            <div><strong>Cédula/RIF:</strong> <span id="client_cedula_rif"></span></div>
+                            <div><strong>Email:</strong> <span id="client_email"></span></div>
+                            <div><strong>Teléfono:</strong> <span id="client_phone"></span></div>
+                            <div><strong>Dirección:</strong> <span id="client_address"></span></div>
+                        </div>
+                    </div>
+
+                    <!-- Escáner de código de barras y agregar producto -->
+                    <div class="w-1/2 pl-4">
+                        <label class="block text-gray-700 font-bold mb-2">Escáner de Código de Barras:</label>
+                        <div class="flex items-center space-x-2 mb-4">
+                            <input type="text" id="barcode-input" placeholder="Código de barras" class="flex-1 shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <button type="button" id="scan-barcode-btn" class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 transition-colors">
+                                <i class="fas fa-barcode mr-1"></i>Agregar
+                            </button>
+                        </div>
+                        <button type="button" id="add-product-btn" class="bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600 transition-colors">
+                            <i class="fas fa-plus mr-2"></i>Agregar Otro Producto
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <!-- Lista de productos -->
             <div id="product-list" class="mb-6">
-                <h2 class="text-xl font-semibold text-gray-700 mb-2">Productos</h2>
-                <div class="space-y-4">
-                    <!-- Fila de ejemplo para clonar -->
-                    <div class="product-item flex items-center space-x-4 border p-4 rounded-lg bg-gray-50">
-                        <div class="flex-1">
-                            <select name="product_id[]" required class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 product-select">
-                                {% for product in products %}
-                                    <option value="{{ product.id }}" data-price-usd="{{ product.price_usd }}" data-stock="{{ product.stock }}" data-codigo="{{ product.codigo_producto }}">{{ product.name }} (Stock: {{ product.stock }})</option>
-                                {% endfor %}
-                            </select>
-                            <div class="text-sm text-gray-500 mt-1 codigo-producto-display"></div>
-                        </div>
-                        <input type="number" name="quantity[]" placeholder="Cantidad" min="1" required class="w-24 shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 quantity-input">
-                        
-                        <div class="flex flex-col">
-                            <label class="text-sm text-gray-500">USD</label>
-                            {% if current_user.is_authenticated and current_user.role == 'administrador' %}
-                            <input type="number" name="price_usd[]" placeholder="Precio USD" step="0.01" min="0" required class="w-24 shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 price-usd-input">
-                            {% else %}
-                            <span class="w-24 text-center font-bold text-gray-800">***</span>
-                            {% endif %}
-                        </div>
-                        <div class="flex flex-col">
-                            <label class="text-sm text-gray-500">Bs</label>
-                            <span class="price-ves-display w-24 text-center font-bold text-gray-800">0.00</span>
-                        </div>
-                        
-                        <button type="button" class="bg-red-500 text-white p-2 rounded remove-product-btn hover:bg-red-600 transition-colors"><i class="fas fa-trash"></i></button>
-                    </div>
-                </div>
-                <div class="mt-4">
-                    <button type="button" id="add-product-btn" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
-                        <i class="fas fa-plus mr-2"></i>Agregar Otro Producto
-                    </button>
-                </div>
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Productos</h2>
+                <table class="table table-compact w-full border-collapse border border-gray-300">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="border border-gray-300 px-2 py-1 text-left">Producto</th>
+                            <th class="border border-gray-300 px-2 py-1 text-left">Cantidad</th>
+                            <th class="border border-gray-300 px-2 py-1 text-left">Precio USD</th>
+                            <th class="border border-gray-300 px-2 py-1 text-left">Precio Bs</th>
+                            <th class="border border-gray-300 px-2 py-1 text-left">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Fila de ejemplo para clonar -->
+                        <tr class="product-item bg-gray-50">
+                            <td class="px-2 py-1">
+                                <select name="product_id[]" required class="w-full shadow appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 product-select">
+                                    {% for product in products %}
+                                        {% if product.stock > 0 %}
+                                            <option value="{{ product.id }}" data-price-usd="{{ product.price_usd }}" data-stock="{{ product.stock }}" data-codigo="{{ product.codigo_producto }}"
+                                                    class="{% if product.stock < 5 %}stock-low{% elif product.stock < 20 %}stock-medium{% else %}stock-high{% endif %}">
+                                                {{ product.name }} (Stock: {{ product.stock }})
+                                                {% if product.stock < 5 %}
+                                                    <span class="text-red-600 font-bold">⚠️ STOCK BAJO</span>
+                                                {% elif product.stock < 20 %}
+                                                    <span class="text-yellow-600">⚡ STOCK MEDIO</span>
+                                                {% else %}
+                                                    <span class="text-green-600">✅ STOCK BUENO</span>
+                                                {% endif %}
+                                            </option>
+                                        {% else %}
+                                            <option value="{{ product.id }}" disabled data-price-usd="{{ product.price_usd }}" data-stock="{{ product.stock }}" data-codigo="{{ product.codigo_producto }}" class="stock-out">
+                                                {{ product.name }} (AGOTADO - Stock: {{ product.stock }})
+                                            </option>
+                                        {% endif %}
+                                    {% endfor %}
+                                </select>
+                                <div class="text-sm text-gray-500 mt-1 codigo-producto-display"></div>
+                            </td>
+                            <td class="px-2 py-1">
+                                <input type="number" name="quantity[]" placeholder="Cantidad" min="1" required class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 quantity-input">
+                            </td>
+                            <td class="px-2 py-1">
+                                {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+                                <input type="number" name="price_usd[]" placeholder="Precio" step="0.01" min="0" required class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 price-usd-input">
+                                {% else %}
+                                <span class="w-24 text-center font-bold text-gray-800">***</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-2 py-1 text-center font-bold text-gray-800 price-ves-display">0.00</td>
+                            <td class="px-2 py-1 text-center">
+                                <button type="button" class="bg-red-500 text-white py-1 px-2 rounded remove-product-btn hover:bg-red-600 transition-colors"><i class="fas fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
 
             <!-- Resumen de la orden -->
@@ -94,14 +129,127 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const productList = document.querySelector('#product-list .space-y-4');
+        const clientSearchInput = document.getElementById('client_search');
+        const clientSuggestions = document.getElementById('client_suggestions');
+        const clientIdInput = document.getElementById('client_id');
+        const clientInfoDiv = document.getElementById('client_info');
+        const clientNameSpan = document.getElementById('client_name');
+        const clientCedulaRifSpan = document.getElementById('client_cedula_rif');
+        const clientEmailSpan = document.getElementById('client_email');
+        const clientPhoneSpan = document.getElementById('client_phone');
+        const clientAddressSpan = document.getElementById('client_address');
+
+        let selectedClient = null;
+        let debounceTimeout = null;
+
+        function clearClientInfo() {
+            clientNameSpan.textContent = '';
+            clientCedulaRifSpan.textContent = '';
+            clientEmailSpan.textContent = '';
+            clientInfoDiv.classList.add('hidden');
+            clientIdInput.value = '';
+            selectedClient = null;
+        }
+
+        function showClientInfo(client) {
+            clientNameSpan.textContent = client.name || '';
+            clientCedulaRifSpan.textContent = client.cedula_rif || '';
+            clientEmailSpan.textContent = client.email || '';
+            clientPhoneSpan.textContent = client.phone || '';
+            clientAddressSpan.textContent = client.address || '';
+            clientInfoDiv.classList.remove('hidden');
+            clientIdInput.value = client.id;
+            selectedClient = client;
+        }
+
+        function fetchClientSuggestions(query) {
+            fetch(`/api/search_clients?q=${encodeURIComponent(query)}`)
+                .then(response => response.json())
+                .then(data => {
+                    clientSuggestions.innerHTML = '';
+                    if (data.clients.length > 0) {
+                        data.clients.forEach(client => {
+                            const div = document.createElement('div');
+                            div.textContent = `${client.name} - ${client.cedula_rif || 'Sin Cédula/RIF'}`;
+                            div.classList.add('cursor-pointer', 'px-3', 'py-1', 'hover:bg-blue-200');
+                            div.dataset.client = JSON.stringify(client); // Store client data
+                            div.addEventListener('click', () => {
+                                clientSearchInput.value = `${client.name} - ${client.cedula_rif || ''}`;
+                                clientSuggestions.classList.add('hidden');
+                                showClientInfo(client);
+                            });
+                            clientSuggestions.appendChild(div);
+                        });
+                        clientSuggestions.classList.remove('hidden');
+                    } else {
+                        clientSuggestions.classList.add('hidden');
+                        clearClientInfo();
+                    }
+                })
+                .catch(() => {
+                    clientSuggestions.classList.add('hidden');
+                    clearClientInfo();
+                });
+        }
+
+        clientSearchInput.addEventListener('input', () => {
+            const query = clientSearchInput.value.trim();
+            clearClientInfo();
+            clientIdInput.value = '';
+            if (debounceTimeout) {
+                clearTimeout(debounceTimeout);
+            }
+            if (query.length === 0) {
+                clientSuggestions.classList.add('hidden');
+                return;
+            }
+            debounceTimeout = setTimeout(() => {
+                fetchClientSuggestions(query);
+            }, 300);
+        });
+
+        clientSearchInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                const cedula_rif = clientSearchInput.value.trim();
+                if (cedula_rif.length === 0) return;
+
+                // Check if there are visible suggestions
+                const suggestions = clientSuggestions.querySelectorAll('div');
+                if (suggestions.length > 0) {
+                    // Select the first suggestion
+                    const firstSuggestion = suggestions[0];
+                    const clientData = JSON.parse(firstSuggestion.dataset.client || '{}');
+                    if (clientData.id) {
+                        clientSearchInput.value = `${clientData.name} - ${clientData.cedula_rif || ''}`;
+                        clientSuggestions.classList.add('hidden');
+                        showClientInfo(clientData);
+                    }
+                } else {
+                    // No suggestions, redirect to new client creation
+                    window.location.href = `/clientes/nuevo?cedula_rif=${encodeURIComponent(cedula_rif)}`;
+                }
+            }
+        });
+
+        // Initialize product list and other existing JS code below (unchanged)...
+
+        const productList = document.querySelector('#product-list tbody');
         const addProductBtn = document.getElementById('add-product-btn');
         let currentRate = {{ current_rate }};
+
+        // Remove default product row and store as template
+        const defaultRow = productList.querySelector('tr.product-item');
+        let productTemplate = null;
+        if (defaultRow) {
+            productTemplate = defaultRow.cloneNode(true);
+            defaultRow.remove();
+        }
 
         // Función para actualizar el precio en Bolívares
         function updatePriceVes(priceUsdInput) {
             const priceUsd = parseFloat(priceUsdInput.value) || 0;
-            const priceVesDisplay = priceUsdInput.closest('.product-item').querySelector('.price-ves-display');
+            const priceVesDisplay = priceUsdInput.closest('tr.product-item').querySelector('.price-ves-display');
             const priceVes = (priceUsd * currentRate).toFixed(2);
             priceVesDisplay.textContent = priceVes;
         }
@@ -111,22 +259,92 @@
             const selectElement = productItem.querySelector('.product-select');
             const selectedOption = selectElement.options[selectElement.selectedIndex];
             const priceUsdInput = productItem.querySelector('.price-usd-input');
-            
+            const quantityInput = productItem.querySelector('.quantity-input');
+
             // Asignar el precio USD desde el atributo data-
             if (priceUsdInput) {
                 priceUsdInput.value = selectedOption.dataset.priceUsd;
                 updatePriceVes(priceUsdInput);
             }
-            
+
+            // Configurar validación de cantidad según stock disponible
+            if (quantityInput && selectedOption.dataset.stock) {
+                const availableStock = parseInt(selectedOption.dataset.stock);
+                quantityInput.max = availableStock;
+                quantityInput.placeholder = `Máx: ${availableStock}`;
+
+                // Validar cantidad actual si existe
+                const currentQuantity = parseInt(quantityInput.value) || 0;
+                if (currentQuantity > availableStock) {
+                    quantityInput.value = availableStock;
+                    showStockWarning(productItem, `Cantidad ajustada al stock disponible: ${availableStock}`);
+                }
+            }
+
             // Actualizar el stock en la etiqueta del producto
             const productName = selectedOption.text.split(' (')[0];
             selectedOption.text = `${productName} (Stock: ${selectedOption.dataset.stock})`;
         }
 
+        // Función para mostrar advertencias de stock
+        function showStockWarning(productItem, message) {
+            // Remover advertencias anteriores
+            const existingWarning = productItem.querySelector('.stock-warning');
+            if (existingWarning) {
+                existingWarning.remove();
+            }
+
+            // Crear nueva advertencia
+            const warningDiv = document.createElement('div');
+            warningDiv.className = 'stock-warning text-red-600 text-sm font-semibold mt-1';
+            warningDiv.textContent = `⚠️ ${message}`;
+
+            // Insertar después del select
+            const selectElement = productItem.querySelector('.product-select');
+            selectElement.parentNode.insertBefore(warningDiv, selectElement.nextSibling);
+
+            // Remover advertencia después de 5 segundos
+            setTimeout(() => {
+                if (warningDiv.parentNode) {
+                    warningDiv.remove();
+                }
+            }, 5000);
+        }
+
+        // Función para validar cantidad en tiempo real
+        function validateQuantityInput(quantityInput) {
+            const productItem = quantityInput.closest('tr.product-item');
+            const selectElement = productItem.querySelector('.product-select');
+            const selectedOption = selectElement.options[selectElement.selectedIndex];
+
+            if (!selectedOption || !selectedOption.dataset.stock) return;
+
+            const availableStock = parseInt(selectedOption.dataset.stock);
+            const requestedQuantity = parseInt(quantityInput.value) || 0;
+
+            // Remover clases de validación anteriores
+            quantityInput.classList.remove('border-red-500', 'border-green-500');
+
+            if (requestedQuantity > availableStock) {
+                quantityInput.classList.add('border-red-500');
+                showStockWarning(productItem, `Stock insuficiente. Disponible: ${availableStock}, Solicitado: ${requestedQuantity}`);
+                // No permitir valores superiores al stock
+                quantityInput.value = availableStock;
+                updateOrderSummary();
+            } else if (requestedQuantity > 0) {
+                quantityInput.classList.add('border-green-500');
+            }
+
+            // Mostrar advertencia si el stock está bajo
+            if (availableStock < 5 && requestedQuantity > 0) {
+                showStockWarning(productItem, `¡Atención! Stock bajo (${availableStock} unidades disponibles)`);
+            }
+        }
+
         // Event listener para actualizar el precio en Bs al cambiar el producto
         productList.addEventListener('change', function(event) {
             if (event.target.classList.contains('product-select')) {
-                initializeProductItem(event.target.closest('.product-item'));
+                initializeProductItem(event.target.closest('tr.product-item'));
             }
         });
         
@@ -138,13 +356,12 @@
         });
 
         // Inicializar el primer producto
-        document.querySelectorAll('.product-item').forEach(initializeProductItem);
+        document.querySelectorAll('tr.product-item').forEach(initializeProductItem);
 
         // Event listener para agregar un nuevo producto
         addProductBtn.addEventListener('click', function() {
-            const firstProductItem = productList.querySelector('.product-item');
-            const newProductItem = firstProductItem.cloneNode(true);
-            
+            const newProductItem = productTemplate.cloneNode(true);
+
             // Limpiar valores del nuevo clon
             newProductItem.querySelector('.product-select').selectedIndex = 0;
             newProductItem.querySelector('.quantity-input').value = '';
@@ -162,14 +379,14 @@
 
             // Inicializar el nuevo clon
             initializeProductItem(newProductItem);
-            
+
             productList.appendChild(newProductItem);
         });
 
         // Event listener para eliminar una fila de producto
         productList.addEventListener('click', function(event) {
             if (event.target.classList.contains('remove-product-btn') || event.target.closest('.remove-product-btn')) {
-                const productItem = event.target.closest('.product-item');
+                const productItem = event.target.closest('tr.product-item');
                 if (productList.childElementCount > 1) {
                     productItem.remove();
                     updateOrderSummary();
@@ -187,19 +404,24 @@
         }
 
         // Actualizar códigos de producto al inicializar
-        document.querySelectorAll('.product-item').forEach(updateProductCodeDisplay);
+        document.querySelectorAll('tr.product-item').forEach(updateProductCodeDisplay);
 
         // Event listener para actualizar código al cambiar producto
         productList.addEventListener('change', function(event) {
             if (event.target.classList.contains('product-select')) {
-                updateProductCodeDisplay(event.target.closest('.product-item'));
+                updateProductCodeDisplay(event.target.closest('tr.product-item'));
                 updateOrderSummary();
             }
         });
 
         // Event listener para actualizar resumen al cambiar cantidad o precio
         productList.addEventListener('input', function(event) {
-            if (event.target.classList.contains('quantity-input') || event.target.classList.contains('price-usd-input')) {
+            if (event.target.classList.contains('quantity-input')) {
+                // Validar cantidad contra stock disponible
+                validateQuantityInput(event.target);
+                updateOrderSummary();
+            } else if (event.target.classList.contains('price-usd-input')) {
+                updatePriceVes(event.target);
                 updateOrderSummary();
             }
         });
@@ -208,7 +430,7 @@
         function updateOrderSummary() {
             let subtotal = 0;
             
-            document.querySelectorAll('.product-item').forEach(productItem => {
+            document.querySelectorAll('tr.product-item').forEach(productItem => {
                 const quantity = parseFloat(productItem.querySelector('.quantity-input').value) || 0;
                 const priceUsdInput = productItem.querySelector('.price-usd-input');
                 let priceUsd = 0;
@@ -252,44 +474,73 @@
                     return response.json();
                 })
                 .then(product => {
-                    // Crear nueva fila de producto
-                    const firstProductItem = productList.querySelector('.product-item');
-                    const newProductItem = firstProductItem.cloneNode(true);
-                    
-                    // Seleccionar el producto en el dropdown
-                    const selectElement = newProductItem.querySelector('.product-select');
-                    for (let i = 0; i < selectElement.options.length; i++) {
-                        if (selectElement.options[i].value == product.id) {
-                            selectElement.selectedIndex = i;
-                            break;
+                    // Verificar si el producto tiene stock disponible
+                    if (product.stock <= 0) {
+                        alert(`⚠️ Producto "${product.name}" agotado. Stock disponible: ${product.stock}`);
+                        document.getElementById('barcode-input').focus();
+                        return;
+                    }
+
+                    // Verificar si el producto ya existe en la lista
+                    let existingProductItem = null;
+                    document.querySelectorAll('tr.product-item').forEach(item => {
+                        const selectElement = item.querySelector('.product-select');
+                        if (selectElement.value == product.id) {
+                            existingProductItem = item;
                         }
+                    });
+
+                    if (existingProductItem) {
+                        // Si el producto ya existe, incrementar la cantidad
+                        const quantityInput = existingProductItem.querySelector('.quantity-input');
+                        const currentQuantity = parseInt(quantityInput.value) || 0;
+                        const newQuantity = currentQuantity + 1;
+
+                        // Verificar que no exceda el stock disponible
+                        if (newQuantity > product.stock) {
+                            alert(`⚠️ No se puede agregar más unidades. Stock disponible: ${product.stock}, Cantidad actual: ${currentQuantity}`);
+                            document.getElementById('barcode-input').focus();
+                            return;
+                        }
+
+                        quantityInput.value = newQuantity;
+
+                        // Validar la cantidad y actualizar resumen
+                        validateQuantityInput(quantityInput);
+                        updateOrderSummary();
+                    } else {
+                        // Si no existe, crear nueva fila de producto
+                        const newProductItem = productTemplate.cloneNode(true);
+
+                        // Seleccionar el producto en el dropdown
+                        const selectElement = newProductItem.querySelector('.product-select');
+                        for (let i = 0; i < selectElement.options.length; i++) {
+                            if (selectElement.options[i].value == product.id) {
+                                selectElement.selectedIndex = i;
+                                break;
+                            }
+                        }
+
+                        // Habilitar botón de eliminar
+                        const removeBtn = newProductItem.querySelector('.remove-product-btn');
+                        removeBtn.disabled = false;
+                        removeBtn.style.display = 'inline-block';
+
+                        // Inicializar el nuevo producto
+                        initializeProductItem(newProductItem);
+                        updateProductCodeDisplay(newProductItem);
+
+                        // Establecer cantidad predeterminada a 1
+                        newProductItem.querySelector('.quantity-input').value = '1';
+
+                        // Agregar a la lista
+                        productList.appendChild(newProductItem);
+
+                        // Actualizar resumen
+                        updateOrderSummary();
                     }
 
-                    // Limpiar otros valores
-                    newProductItem.querySelector('.quantity-input').value = '1';
-                    {% if current_user.is_authenticated and current_user.role == 'administrador' %}
-                    const priceUsdInput = newProductItem.querySelector('.price-usd-input');
-                    if (priceUsdInput) {
-                        priceUsdInput.value = product.price_usd;
-                    }
-                    {% endif %}
-
-                    // Habilitar botón de eliminar
-                    const removeBtn = newProductItem.querySelector('.remove-product-btn');
-                    removeBtn.disabled = false;
-                    removeBtn.style.display = 'inline-block';
-
-                    // Inicializar el nuevo producto
-                    initializeProductItem(newProductItem);
-                    updateProductCodeDisplay(newProductItem);
-                    
-                    // Agregar a la lista
-                    productList.appendChild(newProductItem);
-                    
-                    // Actualizar resumen
-                    updateOrderSummary();
-                    
-                    // Limpiar input de código de barras
+                    // Limpiar input de código de barras y devolver el cursor
                     document.getElementById('barcode-input').value = '';
                     document.getElementById('barcode-input').focus();
                 })

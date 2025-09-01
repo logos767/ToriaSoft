@@ -114,9 +114,9 @@
         <thead>
             <tr>
                 <th>Cant.</th>
-                <th>Descripción</th>
-                <th>Precio</th>
-                <th>Total</th>
+                <th style="width: 50%;">Descripción</th>
+                <th class="text-center">Precio/U</th>
+                <th class="text-center">Total</th>
             </tr>
         </thead>
         <tbody>
@@ -124,10 +124,16 @@
             <tr>
                 <td>{{ item.quantity }}</td>
                 <td>{{ item.product.name }}</td>
-                <td>{{ "%.2f"|format(item.price) }}</td>
-                <td>{{ "%.2f"|format(item.price * item.quantity) }}</td>
+                <td class="text-center">{{ "%.2f" % item.price }}</td>
+
+            </tr>
+            <tr>
+                <td class="text-center" colspan="4" style="text-align: right; font-weight: bold; padding-left: 10px;">
+                    Bs. {{ "%.2f" % (item.price * item.quantity) }}
+                </td>
             </tr>
             {% endfor %}
+            
         </tbody>
     </table>
 
@@ -135,15 +141,15 @@
     <div class="totals">
         <div class="total-item">
             <span>Subtotal:</span>
-            <span>${{ "%.2f"|format(subtotal) }}</span>
+            <span>Bs.{{ "%.2f" % subtotal }}</span>
         </div>
         <div class="total-item">
             <span>IVA (16%):</span>
-            <span>${{ "%.2f"|format(iva) }}</span>
+            <span>Bs.{{ "%.2f" % iva }}</span>
         </div>
         <div class="total-item grand-total">
             <span>Total:</span>
-            <span>${{ "%.2f"|format(order.total_amount) }}</span>
+            <span>Bs.{{ "%.2f" % (subtotal + iva) }}</span>
         </div>
     </div>
 
