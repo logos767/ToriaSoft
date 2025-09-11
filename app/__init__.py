@@ -1,12 +1,8 @@
-import eventlet
-eventlet.monkey_patch()
-
 import logging
 import os
 import secrets
 from dotenv import load_dotenv
 from flask import Flask
-from apscheduler.schedulers.background import BackgroundScheduler
 
 
 # Import extensions
@@ -20,16 +16,52 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def schedule_exchange_rate_update(app):
-    def update_rate():
-        with app.app_context():
-            logger.info("Executing scheduled exchange rate update...")
-            fetch_and_update_exchange_rate()
+def initial_exchange_rate_fetch(app):
+    """Fetch exchange rate once on application startup."""
+    with app.app_context():
+        logger.info("Performing initial exchange rate fetch...")
+        rate = fetch_and_update_exchange_rate()
+        if rate:
+            logger.info(f"Initial exchange rate set to: {rate}")
+        else:
+            logger.warning("Could not fetch initial exchange rate. The application might not work as expected.")
 
-    scheduler = BackgroundScheduler(daemon=True)
-    scheduler.add_job(update_rate, 'cron', hour=6, minute=0)
-    scheduler.start()
-    logger.info("Scheduled exchange rate update to run daily at 6:00 AM.")
+def create_initial_users(app):
+    """Creates the default users if they don't exist when the app starts."""
+    with app.app_context():
+        from .models import User
+        from .extensions import bcrypt
+
+        # Using a single commit for efficiency
+        users_to_add = []
+
+        # Admin user
+        if not User.query.filter_by(username='admin').first():
+            logger.info("Creating default admin user...")
+            hashed_password = bcrypt.generate_password_hash('admin123').decode('utf-8')
+            users_to_add.append(User(username='admin', password=hashed_password, role='administrador'))
+
+        # Additional admin user
+        if not User.query.filter_by(username='Luis_Marin').first():
+            logger.info("Creating additional admin user Luis_Marin...")
+            hashed_password = bcrypt.generate_password_hash('Luis123').decode('utf-8')
+            users_to_add.append(User(username='Luis_Marin', password=hashed_password, role='administrador'))
+
+        # Salesperson users
+        sales_users_data = [
+            {'username': 'vendedora1', 'password': 'Vendedora123', 'role': 'empleado'},
+            {'username': 'vendedora2', 'password': 'Vendedora456', 'role': 'empleado'}
+        ]
+        for user_data in sales_users_data:
+            if not User.query.filter_by(username=user_data['username']).first():
+                logger.info(f"Creating sales user {user_data['username']}...")
+                hashed_password = bcrypt.generate_password_hash(user_data['password']).decode('utf-8')
+                users_to_add.append(User(username=user_data['username'], password=hashed_password, role=user_data['role']))
+        
+        if users_to_add:
+            db.session.add_all(users_to_add)
+            db.session.commit()
+            logger.info(f"Added {len(users_to_add)} new users to the database.")
 
 def create_app():
     """Application Factory Function"""
@@ -65,6 +97,11 @@ def create_app():
         from . import routes
         from . import models # Ensures models are registered with SQLAlchemy
         
+        # Create database tables if they don't exist.
+        # This is crucial for the first run or when the database is empty.
+        logger.info("Ensuring all database tables exist...")
+        db.create_all()
+        
         app.register_blueprint(routes.routes_blueprint)
 
         # Define user loader inside the factory
@@ -80,7 +117,10 @@ def create_app():
     def shutdown_session(exception=None):
         db.session.remove()
 
-    # --- Schedule exchange rate update ---
-    schedule_exchange_rate_update(app)
+    # --- Initial data fetch ---
+    initial_exchange_rate_fetch(app)
+
+    # --- Create initial users if they don't exist ---
+    create_initial_users(app)
 
     return app

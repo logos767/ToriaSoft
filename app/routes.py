@@ -1,294 +1,121 @@
 import os
 import requests
 import re
-from bs4 import BeautifulSoup
 from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, session, current_app
 from flask_login import login_user, current_user, logout_user, login_required
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, extract, or_
 import openpyxl
-from datetime import datetime
-import barcode
-from barcode.writer import SVGWriter
-from io import BytesIO
+from datetime import datetime, timedelta
+from flask import Response
+import time
+import io
 
 # Import extensions from the new extensions file
 from .extensions import db, bcrypt, socketio
 from .models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve
 
-def is_valid_ean13(barcode):
-    if not barcode or not barcode.isdigit() or len(barcode) != 13:
-        return False
-    return True
+# ReportLab imports for PDF generation
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
+from reportlab.graphics.barcode import code128
+
+def get_main_calculation_currency_info():
+    """Returns the main calculation currency and its symbol."""
+    company_info = CompanyInfo.query.first()
+    currency = company_info.calculation_currency if company_info and company_info.calculation_currency else 'USD'
+    symbol = '€' if currency == 'EUR' else '$'
+    return currency, symbol
 
 routes_blueprint = Blueprint('main', __name__)
 
 # --- INICIO DE SECCIÓN DE TASAS DE CAMBIO ---
 
-def obtener_tasa_p2p_binance():
+def obtener_tasas_exchangerate_api():
     """
-    Obtiene el precio P2P de USDT/VES directamente desde la API de Binance.
-    Este método es más robusto que el scraping.
+    Obtiene las tasas de cambio desde exchangerate-api.com.
+    Retorna un diccionario con las tasas de interés.
     """
-    current_app.logger.info("Obteniendo tasa P2P desde la API de Binance...")
-    api_url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
-    }
-    payload = {
-        "proMerchantAds": False,
-        "payTypes": ["Bancamiga"],
-        "page": 1,
-        "rows": 10,
-        "countries": [],
-        "tradeType": "BUY",
-        "asset": "USDT",
-        "fiat": "VES",
-        "publisherType": None
-    }
+    current_app.logger.info("Obteniendo tasas desde exchangerate-api.com...")
+    api_url = "https://api.exchangerate-api.com/v4/latest/USD"
     try:
-        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+        response = requests.get(api_url, timeout=10)
         response.raise_for_status()
         data = response.json()
 
-        if not data or not data.get('data'):
-            current_app.logger.warning("La respuesta de la API de Binance no contiene datos.")
+        if not data or 'rates' not in data:
+            current_app.logger.warning("La respuesta de la API de exchangerate-api no contiene datos de tasas.")
             return None
 
-        prices = [float(adv['adv']['price']) for adv in data['data']]
-        
-        if not prices:
-            current_app.logger.error("No se pudieron extraer precios de la respuesta de la API.")
+        rates = data.get('rates')
+        usd_ves_rate = rates.get('VES')
+        usd_eur_rate = rates.get('EUR')
+
+        if not usd_ves_rate or not usd_eur_rate:
+            current_app.logger.error("No se pudieron encontrar las tasas VES o EUR en la respuesta.")
             return None
-        
-        # Calculamos el promedio de los 10 primeros para mayor estabilidad
-        average_price = sum(prices[:10]) / len(prices[:10])
-        current_app.logger.info(f"API de Binance exitosa. Promedio: {average_price:.2f}")
-        return average_price
+
+        # 1 EUR = (1 / usd_eur_rate) USD
+        # 1 USD = usd_ves_rate VES
+        # 1 EUR = (1 / usd_eur_rate) * usd_ves_rate VES
+        eur_ves_rate = usd_ves_rate / usd_eur_rate
+
+        current_app.logger.info(f"API de exchangerate-api exitosa. USD/VES: {usd_ves_rate}, EUR/VES: {eur_ves_rate}")
+        return {
+            'USD': usd_ves_rate,
+            'EUR': eur_ves_rate
+        }
 
     except requests.exceptions.RequestException as e:
-        current_app.logger.error(f"Falló la petición a la API de Binance: {e}")
+        current_app.logger.error(f"Falló la petición a la API de exchangerate-api: {e}")
         return None
     except (ValueError, TypeError, KeyError) as e:
-        current_app.logger.error(f"Error procesando la respuesta de la API de Binance: {e}")
+        current_app.logger.error(f"Error procesando la respuesta de la API de exchangerate-api: {e}")
         return None
 
-# --- INICIO DE SECCIÓN DE TASAS DE CAMBIO ---
-
-def obtener_tasa_p2p_binance():
+# --- NUEVAS FUNCIONES AUXILIARES ---
+def get_cached_exchange_rate(currency='USD'):
     """
-    Obtiene el precio P2P de USDT/VES directamente desde la API de Binance.
-    Este método es más robusto que el scraping.
+    Obtiene la última tasa de cambio guardada en la base de datos para una moneda específica.
     """
-    current_app.logger.info("Obteniendo tasa P2P desde la API de Binance...")
-    api_url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
-    }
-    payload = {
-        "proMerchantAds": False,
-        "payTypes": ["Bancamiga"],
-        "page": 1,
-        "rows": 10,
-        "countries": [],
-        "tradeType": "BUY",
-        "asset": "USDT",
-        "fiat": "VES",
-        "publisherType": None
-    }
     try:
-        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+        cached_rate = ExchangeRate.query.filter_by(currency=currency).order_by(ExchangeRate.date_updated.desc()).first()
+        if cached_rate:
+            return cached_rate.rate
+    except Exception as e:
+        current_app.logger.error(f"Error al obtener la tasa de cambio '{currency}' de la base de datos: {e}")
+        db.session.rollback()
+    
+    current_app.logger.warning(f"No se encontró una tasa de cambio para '{currency}' en la base de datos.")
+    return None
 
-        if not data or not data.get('data'):
-            current_app.logger.warning("La respuesta de la API de Binance no contiene datos.")
-            return None
-
-        prices = [float(adv['adv']['price']) for adv in data['data']]
-        
-        if not prices:
-            current_app.logger.error("No se pudieron extraer precios de la respuesta de la API.")
-            return None
-        
-        # Calculamos el promedio de los 10 primeros para mayor estabilidad
-        average_price = sum(prices[:10]) / len(prices[:10])
-        current_app.logger.info(f"API de Binance exitosa. Promedio: {average_price:.2f}")
-        return average_price
-
-    except requests.exceptions.RequestException as e:
-        current_app.logger.error(f"Falló la petición a la API de Binance: {e}")
-        return None
-    except (ValueError, TypeError, KeyError) as e:
-        current_app.logger.error(f"Error procesando la respuesta de la API de Binance: {e}")
-        return None
-
-def obtener_tasa_exchangemonitor():
+def fetch_and_update_exchange_rate():
     """
-    Obtiene la tasa de cambio desde ExchangeMonitor como fallback.
+    Obtiene las tasas de cambio actuales VES/USD y VES/EUR de exchangerate-api.com y las guarda en la BD.
     """
-    current_app.logger.info("Obteniendo tasa desde ExchangeMonitor...")
-    url = "https://exchangemonitor.net/venezuela/dolar-binance"
-    try:
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Encontrar el h3 que contiene el precio
-        price_tag = soup.find('h3')
-        if not price_tag:
-            current_app.logger.error("No se encontró la etiqueta de precio en ExchangeMonitor.")
-            return None
+    rates = obtener_tasas_exchangerate_api()
+
+    if rates:
+        try:
+            for currency, rate_value in rates.items():
+                exchange_rate_entry = ExchangeRate.query.filter_by(currency=currency).first()
+                if exchange_rate_entry:
+                    exchange_rate_entry.rate = rate_value
+                    exchange_rate_entry.date_updated = get_current_time_ve()
+                else:
+                    exchange_rate_entry = ExchangeRate(currency=currency, rate=rate_value)
+                    db.session.add(exchange_rate_entry)
             
-        # Extraer el texto y limpiar
-        price_text = price_tag.get_text() # "Bs.217,71 -1,12VES (-0,52%)"
-        
-        # Usar regex para encontrar el primer número decimal con coma
-        match = re.search(r'Bs\.s*([\d,\.]+)', price_text)
-        if match:
-            price_str = match.group(1).replace('.', '').replace(',', '.')
-            return float(price_str)
-        else:
-            current_app.logger.error("No se pudo extraer el precio del texto en ExchangeMonitor.")
-            return None
-
-    except requests.exceptions.RequestException as e:
-        current_app.logger.error(f"Falló la petición a ExchangeMonitor: {e}")
-        return None
-    except (ValueError, TypeError) as e:
-        current_app.logger.error(f"Error procesando la respuesta de ExchangeMonitor: {e}")
-        return None
-
-def obtener_tasa_render():
-    """
-    Obtiene la tasa de cambio desde la aplicación en Render.
-    """
-    current_app.logger.info("Obteniendo tasa desde Render...")
-    url = "https://p2p-binance-0tym.onrender.com/"
-    try:
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        
-        if data and 'transfer_price' in data:
-            current_app.logger.info(f"Tasa de Render exitosa: {data['transfer_price']}")
-            return float(data['transfer_price'])
-        else:
-            current_app.logger.error("No se pudo extraer el precio de la respuesta de Render.")
-            return None
-
-    except requests.exceptions.RequestException as e:
-        current_app.logger.error(f"Falló la petición a Render: {e}")
-        return None
-    except (ValueError, TypeError, KeyError) as e:
-        current_app.logger.error(f"Error procesando la respuesta de Render: {e}")
-        return None
-
-# --- NUEVAS FUNCIONES AUXILIARES ---
-def get_cached_exchange_rate():
-    """
-    Obtiene la última tasa de cambio guardada en la base de datos.
-    """
-    try:
-        cached_rate = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
-        if cached_rate:
-            return cached_rate.rate
-    except Exception as e:
-        current_app.logger.error(f"Error al obtener la tasa de cambio de la base de datos: {e}")
-    
-    current_app.logger.warning("No se encontró una tasa de cambio en la base de datos.")
-    return None
-
-def fetch_and_update_exchange_rate():
-    """
-    Obtiene la tasa de cambio actual VES/USD de fuentes externas y la guarda en la BD.
-    Prioriza la tasa P2P de Binance y, si falla, utiliza la de ExchangeMonitor.
-    """
-    rate = None
-    # 1. Intenta obtener la tasa de Binance primero
-    rate = obtener_tasa_p2p_binance()
-    
-    # 2. Si Binance falla, intenta con la app de Render
-    if not rate:
-        current_app.logger.warning("Falló la API de Binance, intentando con la app de Render.")
-        rate = obtener_tasa_render()
-
-    # 3. Si la app de Render falla, intenta con ExchangeMonitor
-    if not rate:
-        current_app.logger.warning("Falló la app de Render, intentando con ExchangeMonitor.")
-        rate = obtener_tasa_exchangemonitor()
-
-    # 4. Si se obtuvo una tasa de alguna API, se guarda en la BD
-    if rate:
-        try:
-            exchange_rate_entry = ExchangeRate.query.first()
-            if exchange_rate_entry:
-                exchange_rate_entry.rate = rate
-                exchange_rate_entry.date_updated = get_current_time_ve()
-            else:
-                exchange_rate_entry = ExchangeRate(rate=rate)
-                db.session.add(exchange_rate_entry)
             db.session.commit()
-            current_app.logger.info(f"Tasa de cambio actualizada en la base de datos: {rate}")
-            return rate
+            current_app.logger.info(f"Tasas de cambio actualizadas en la base de datos: {rates}")
+            return rates
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Error al guardar la tasa de cambio en la base de datos: {e}")
     
     current_app.logger.error("No se pudo obtener ninguna tasa de cambio de las APIs externas.")
     return None
-
-# --- NUEVAS FUNCIONES AUXILIARES ---
-def get_cached_exchange_rate():
-    """
-    Obtiene la última tasa de cambio guardada en la base de datos.
-    """
-    try:
-        cached_rate = ExchangeRate.query.order_by(ExchangeRate.date_updated.desc()).first()
-        if cached_rate:
-            return cached_rate.rate
-    except Exception as e:
-        current_app.logger.error(f"Error al obtener la tasa de cambio de la base de datos: {e}")
-    
-    current_app.logger.warning("No se encontró una tasa de cambio en la base de datos.")
-    return None
-
-def fetch_and_update_exchange_rate():
-    """
-    Obtiene la tasa de cambio actual VES/USD de fuentes externas y la guarda en la BD.
-    Prioriza la tasa P2P de Binance y, si falla, utiliza la de ExchangeMonitor.
-    """
-    rate = None
-    # 1. Intenta obtener la tasa de Binance primero
-    rate = obtener_tasa_p2p_binance()
-    
-    # 2. Si Binance falla, intenta con ExchangeMonitor
-    if not rate:
-        current_app.logger.warning("Falló la API de Binance, intentando con ExchangeMonitor.")
-        rate = obtener_tasa_exchangemonitor()
-
-    # 3. Si se obtuvo una tasa de alguna API, se guarda en la BD
-    if rate:
-        try:
-            exchange_rate_entry = ExchangeRate.query.first()
-            if exchange_rate_entry:
-                exchange_rate_entry.rate = rate
-                exchange_rate_entry.date_updated = get_current_time_ve()
-            else:
-                exchange_rate_entry = ExchangeRate(rate=rate)
-                db.session.add(exchange_rate_entry)
-            db.session.commit()
-            current_app.logger.info(f"Tasa de cambio actualizada en la base de datos: {rate}")
-            return rate
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Error al guardar la tasa de cambio en la base de datos: {e}")
-    
-    current_app.logger.error("No se pudo obtener ninguna tasa de cambio de las APIs externas.")
-    return None
-
 
 # --- FIN DE SECCIÓN DE TASAS DE CAMBIO ---
 
@@ -344,27 +171,20 @@ def inject_notifications():
         )
     except Exception as e:
         current_app.logger.error(f"Error al obtener notificaciones para el usuario {current_user.id}: {e}")
+        db.session.rollback()
         return dict(unread_notifications=[], unread_notification_count=0)
 
 @routes_blueprint.context_processor
-def inject_exchange_rates():
-    """Inyecta las tasas de cambio en el contexto de la aplicación."""
-    exchange_rates = {}
-    try:
-        response = requests.get('https://api.exchangerate-api.com/v4/latest/USD', timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            exchange_rates['VES'] = data['rates'].get('VES', None)
-            exchange_rates['EUR'] = data['rates'].get('EUR', None)
-        else:
-            current_app.logger.error(f"Error fetching exchange rates: Status code {response.status_code}")
-    except Exception as e:
-        current_app.logger.error(f"Exception fetching exchange rates: {e}")
-
-    # Obtener tasa de Binance
-    exchange_rates['USDT_VES_binance'] = obtener_tasa_p2p_binance()
-
-    return dict(exchange_rates=exchange_rates)
+def inject_current_rate():
+    """Injects the current exchange rate and currency info into the context for all templates."""
+    currency, symbol = get_main_calculation_currency_info()
+    rate = get_cached_exchange_rate(currency) or 0.0
+    
+    return dict(
+        current_rate=rate, 
+        calculation_currency=currency, 
+        currency_symbol=symbol
+    )
 
 @routes_blueprint.route('/notifications/mark-as-read', methods=['POST'])
 @login_required
@@ -420,9 +240,6 @@ def dashboard():
     total_clients = Client.query.count()
     total_orders = Order.query.count()
     
-    # CORRECCIÓN: Usar la nueva función para obtener la tasa
-    current_rate = get_cached_exchange_rate() or 0.0
-
     recent_products = Product.query.order_by(Product.id.desc()).limit(5).all()
     recent_orders = Order.query.order_by(Order.date_created.desc()).limit(5).all()
 
@@ -432,8 +249,7 @@ def dashboard():
                            total_clients=total_clients,
                            total_orders=total_orders,
                            recent_products=recent_products,
-                           recent_orders=recent_orders,
-                           current_rate=current_rate)
+                           recent_orders=recent_orders)
 
 # Rutas de productos (Inventario)
 @routes_blueprint.route('/inventario/lista')
@@ -441,22 +257,18 @@ def dashboard():
 def inventory_list():
     products = Product.query.all()
     user_role = current_user.role if current_user.is_authenticated else 'invitado'
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate() or 0.0
     return render_template('inventario/lista.html',
                            title='Lista de Inventario',
                            products=products,
-                           user_role=user_role,
-                           current_rate=current_rate)
+                           user_role=user_role)
 
 @routes_blueprint.route('/inventario/codigos_barra', methods=['GET'])
 @login_required
 def codigos_barra():
     products = Product.query.all()
-    current_rate = get_cached_exchange_rate() or 0.0
-    return render_template('inventario/codigos_barra.html', title='Imprimir Códigos de Barra', products=products, current_rate=current_rate)
+    return render_template('inventario/codigos_barra.html', title='Imprimir Códigos de Barra', products=products)
 
-@routes_blueprint.route('/inventario/codigos_barra_api', methods=['GET'])
+@routes_blueprint.route('/inventario/codigos_barra_api', methods=['GET']) # type: ignore
 @login_required
 def codigos_barra_api():
     search_term = request.args.get('search', '').lower()
@@ -469,18 +281,7 @@ def codigos_barra_api():
     products = query.all()
     return jsonify(products=[{'id': p.id, 'name': p.name, 'barcode': p.barcode} for p in products])
 
-from flask import Response
-import re
-import time
-
-# ReportLab imports for PDF generation
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
-from reportlab.pdfgen import canvas
-from reportlab.graphics.barcode import code128
-import io
-
-def generate_barcode_pdf_reportlab(products, company_info):
+def generate_barcode_pdf_reportlab(products, company_info, currency_symbol):
     """
     Generate PDF with barcodes using ReportLab for better performance.
     Layout: 4 columns x 10 rows = 40 labels per page
@@ -553,7 +354,7 @@ def generate_barcode_pdf_reportlab(products, company_info):
 
             # Price (below product name, adjust position if two lines)
             c.setFont("Helvetica-Bold", 9)
-            price_text = f"${product['price_ves']:.2f}"
+            price_text = f"{currency_symbol}{product['price_foreign']:.2f}"
             text_width = c.stringWidth(price_text, "Helvetica-Bold", 9)
             price_y = y + label_height - 3*mm
             c.drawString(x + label_width - text_width - 2*mm, price_y, price_text)
@@ -630,7 +431,8 @@ def imprimir_codigos_barra():
 
     products_to_print = Product.query.filter(Product.id.in_(product_ids)).all()
     company_info = CompanyInfo.query.first()
-    current_rate = get_cached_exchange_rate() or 0.0
+    
+    _, currency_symbol = get_main_calculation_currency_info()
 
 
 
@@ -638,12 +440,12 @@ def imprimir_codigos_barra():
     current_app.logger.info(f"Preparando datos para generación de PDF con {len(products_to_print)} productos")
     products_dict = []
     for p in products_to_print:
-        price_ves = p.price_usd if p.price_usd else 0
+        price_foreign = p.price_usd if p.price_usd else 0
         products_dict.append({
             'id': p.id,
             'name': p.name,
             'barcode': p.barcode,
-            'price_ves': price_ves
+            'price_foreign': price_foreign
         })
 
     current_app.logger.info("Datos preparados, iniciando generación de PDF con ReportLab")
@@ -652,8 +454,7 @@ def imprimir_codigos_barra():
     try:
         start_time = time.time()
 
-        # Use the new ReportLab function
-        pdf_data = generate_barcode_pdf_reportlab(products_dict, company_info)
+        pdf_data = generate_barcode_pdf_reportlab(products_dict, company_info, currency_symbol)
 
         generation_time = time.time() - start_time
         current_app.logger.info(f"PDF generado exitosamente con ReportLab en {generation_time:.2f} segundos")
@@ -691,17 +492,13 @@ def imprimir_codigos_barra():
 @login_required
 def inventory_stock():
     products = Product.query.all()
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate() or 0.0
-    return render_template('inventario/existencias.html', title='Existencias', products=products, current_rate=current_rate)
+    return render_template('inventario/existencias.html', title='Existencias', products=products)
 
 @routes_blueprint.route('/inventario/producto/<int:product_id>')
 @login_required
 def product_detail(product_id):
     product = Product.query.get_or_404(product_id)
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate() or 0.0
-    return render_template('inventario/detalle_producto.html', title=product.name, product=product, current_rate=current_rate)
+    return render_template('inventario/detalle_producto.html', title=product.name, product=product)
 
 @routes_blueprint.route('/inventario/nuevo', methods=['GET', 'POST'])
 @login_required
@@ -717,13 +514,14 @@ def new_product():
             color = request.form.get('color')
             codigo_producto = request.form.get('codigo_producto')
             marca = request.form.get('marca')
+            grupo = request.form.get('grupo')
             cost_usd = float(request.form.get('cost_usd'))
             price_usd = float(request.form.get('price_usd'))
 
             new_prod = Product(
                 name=name, description=description, barcode=barcode, qr_code=qr_code,
                 image_url=image_url, size=size, color=color, cost_usd=cost_usd, price_usd=price_usd, stock=0,
-                codigo_producto=codigo_producto, marca=marca
+                codigo_producto=codigo_producto, marca=marca, grupo=grupo
             )
             db.session.add(new_prod)
             db.session.commit()
@@ -732,17 +530,14 @@ def new_product():
         except (ValueError, IntegrityError) as e:
             db.session.rollback()
             flash(f'Error al crear el producto: {str(e)}', 'danger')
-    # CORRECCIÓN: Usar la nueva función
-    return render_template('inventario/nuevo.html', title='Nuevo Producto', current_rate=get_cached_exchange_rate() or 0.0)
+    return render_template('inventario/nuevo.html', title='Nuevo Producto')
 
 # Rutas de clientes
 @routes_blueprint.route('/clientes/lista')
 @login_required
 def client_list():
     clients = Client.query.all()
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate() or 0.0
-    return render_template('clientes/lista.html', title='Lista de Clientes', clients=clients, current_rate=current_rate)
+    return render_template('clientes/lista.html', title='Lista de Clientes', clients=clients)
 
 @routes_blueprint.route('/clientes/nuevo', methods=['GET', 'POST'])
 @login_required
@@ -762,17 +557,14 @@ def new_client():
         except IntegrityError:
             db.session.rollback()
             flash('Error: El email ya está registrado.', 'danger')
-    # CORRECCIÓN: Usar la nueva función
-    return render_template('clientes/nuevo.html', title='Nuevo Cliente', current_rate=get_cached_exchange_rate() or 0.0)
+    return render_template('clientes/nuevo.html', title='Nuevo Cliente')
 
 # Rutas de proveedores
 @routes_blueprint.route('/proveedores/lista')
 @login_required
 def provider_list():
     providers = Provider.query.all()
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate() or 0.0
-    return render_template('proveedores/lista.html', title='Lista de Proveedores', providers=providers, current_rate=current_rate)
+    return render_template('proveedores/lista.html', title='Lista de Proveedores', providers=providers)
 
 @routes_blueprint.route('/proveedores/nuevo', methods=['GET', 'POST'])
 @login_required
@@ -790,33 +582,28 @@ def new_provider():
         except IntegrityError:
             db.session.rollback()
             flash('Error: Hubo un problema al crear el proveedor.', 'danger')
-    # CORRECCIÓN: Usar la nueva función
-    return render_template('proveedores/nuevo.html', title='Nuevo Proveedor', current_rate=get_cached_exchange_rate() or 0.0)
+    return render_template('proveedores/nuevo.html', title='Nuevo Proveedor')
 
 # Rutas de compras
 @routes_blueprint.route('/compras/lista')
 @login_required
 def purchase_list():
     purchases = Purchase.query.all()
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate() or 0.0
-    return render_template('compras/lista.html', title='Lista de Compras', purchases=purchases, current_rate=current_rate)
+    return render_template('compras/lista.html', title='Lista de Compras', purchases=purchases)
 
 @routes_blueprint.route('/compras/detalle/<int:purchase_id>')
 @login_required
 def purchase_detail(purchase_id):
     purchase = Purchase.query.get_or_404(purchase_id)
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate() or 0.0
-    return render_template('compras/detalle_compra.html', title=f'Compra #{purchase.id}', purchase=purchase, current_rate=current_rate)
+    return render_template('compras/detalle_compra.html', title=f'Compra #{purchase.id}', purchase=purchase)
 
 @routes_blueprint.route('/compras/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_purchase():
     providers = Provider.query.all()
     products = Product.query.all()
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate()
+    calculation_currency, _ = get_main_calculation_currency_info()
+    current_rate = get_cached_exchange_rate(calculation_currency)
 
     if current_rate is None:
         flash('No se ha podido obtener la tasa de cambio. No se pueden crear compras en este momento.', 'danger')
@@ -861,23 +648,19 @@ def new_purchase():
             db.session.rollback()
             flash(f'Error al crear la compra: {str(e)}', 'danger')
     
-    return render_template('compras/nuevo.html', title='Nueva Compra', providers=providers, products=products, current_rate=current_rate)
+    return render_template('compras/nuevo.html', title='Nueva Compra', providers=providers, products=products)
 
 # Rutas de recepciones
 @routes_blueprint.route('/recepciones/lista')
 @login_required
 def reception_list():
     receptions = Reception.query.all()
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate() or 0.0
-    return render_template('recepciones/lista.html', title='Lista de Recepciones', receptions=receptions, current_rate=current_rate)
+    return render_template('recepciones/lista.html', title='Lista de Recepciones', receptions=receptions)
 
 @routes_blueprint.route('/recepciones/nueva/<int:purchase_id>', methods=['GET', 'POST'])
 @login_required
 def new_reception(purchase_id):
     purchase = Purchase.query.get_or_404(purchase_id)
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate() or 0.0
     if request.method == 'POST':
         try:
             new_reception = Reception(purchase_id=purchase.id, status='Completada')
@@ -911,7 +694,7 @@ def new_reception(purchase_id):
             db.session.rollback()
             flash(f'Error al procesar la recepción: {str(e)}', 'danger')
 
-    return render_template('recepciones/nueva.html', title='Nueva Recepción', purchase=purchase, current_rate=current_rate)
+    return render_template('recepciones/nueva.html', title='Nueva Recepción', purchase=purchase)
 
 
 # Rutas de órdenes
@@ -919,9 +702,7 @@ def new_reception(purchase_id):
 @login_required
 def order_list():
     orders = Order.query.all()
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate() or 0.0
-    return render_template('ordenes/lista.html', title='Lista de Órdenes', orders=orders, current_rate=current_rate)
+    return render_template('ordenes/lista.html', title='Lista de Órdenes', orders=orders)
 
 @routes_blueprint.route('/ordenes/detalle/<int:order_id>')
 @login_required
@@ -931,23 +712,20 @@ def order_detail(order_id):
     iva_rate = 0.16
     subtotal = sum(item.price * item.quantity for item in order.items)
     iva = iva_rate * subtotal
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate() or 0.0
     return render_template('ordenes/detalle_orden.html',
                            title=f'Orden #{order.id}',
                            order=order,
                            company_info=company_info,
                            subtotal=subtotal,
-                           iva=iva,
-                           current_rate=current_rate)
+                           iva=iva)
 
 @routes_blueprint.route('/ordenes/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_order():
     clients = Client.query.all()
     products = Product.query.all()
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate()
+    calculation_currency, _ = get_main_calculation_currency_info()
+    current_rate = get_cached_exchange_rate(calculation_currency)
     
     if current_rate is None:
         flash('No se ha podido obtener la tasa de cambio. No se pueden crear órdenes en este momento.', 'danger')
@@ -1015,18 +793,46 @@ def new_order():
             flash(f'Error al crear la orden: {str(e)}', 'danger')
             return redirect(url_for('main.new_order'))
 
-    return render_template('ordenes/nuevo.html', title='Nueva Orden de Venta', clients=clients, products=products, current_rate=current_rate)
+    return render_template('ordenes/nuevo.html', title='Nueva Orden de Venta', clients=clients, products=products)
 
 
 # Nueva ruta para movimientos de inventario
 @routes_blueprint.route('/movimientos/lista')
 @login_required
 def movement_list():
-    movements = Movement.query.order_by(Movement.date.desc()).all()
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate() or 0.0
-    return render_template('movimientos/lista.html', title='Registro de Movimientos', movements=movements, current_rate=current_rate)
+    product_id = request.args.get('product_id', default=None, type=int)
+    start_date_str = request.args.get('start_date', default=None)
+    end_date_str = request.args.get('end_date', default=None)
 
+    query = Movement.query
+
+    if product_id:
+        query = query.filter(Movement.product_id == product_id)
+
+    if start_date_str:
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+            query = query.filter(Movement.date >= start_date)
+        except ValueError:
+            flash('Formato de fecha de inicio inválido. Use AAAA-MM-DD.', 'warning')
+            start_date_str = None
+
+    if end_date_str:
+        try:
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+            query = query.filter(Movement.date < end_date + timedelta(days=1))
+        except ValueError:
+            flash('Formato de fecha de fin inválido. Use AAAA-MM-DD.', 'warning')
+            end_date_str = None
+
+    movements = query.order_by(Movement.date.desc()).all()
+    products = Product.query.order_by(Product.name).all()
+    
+    return render_template('movimientos/lista.html', 
+                           title='Registro de Movimientos', 
+                           movements=movements, 
+                           products=products,
+                           filters={'product_id': product_id, 'start_date': start_date_str, 'end_date': end_date_str})
 
 # Nueva ruta para estadísticas (modo gerencial)
 @routes_blueprint.route('/estadisticas')
@@ -1124,9 +930,6 @@ def estadisticas():
         'average_monthly_result': (total_profit - total_loss) / 12 if 12 > 0 else 0
     }
     
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate() or 0.0
-
     return render_template('estadisticas.html',
                            title='Estadísticas Gerenciales',
                            top_products=top_products_data,
@@ -1134,8 +937,7 @@ def estadisticas():
                            frequent_clients=frequent_clients_data,
                            sales_by_month=sales_data_complete,
                            profit_loss_data=profit_loss_data,
-                           profit_loss_summary=profit_loss_summary,
-                           current_rate=current_rate)
+                           profit_loss_summary=profit_loss_summary)
 
 # Nueva ruta para cargar productos desde un archivo de Excel
 @routes_blueprint.route('/inventario/cargar_excel', methods=['GET', 'POST'])
@@ -1159,11 +961,15 @@ def cargar_excel():
             flash('Formato de archivo no válido. Solo se aceptan archivos .xlsx.', 'danger')
             return redirect(request.url)
 
-        filepath = os.path.join('/tmp', file.filename)
+        # Use a temporary directory within the instance path for cross-platform compatibility
+        upload_dir = os.path.join(current_app.instance_path, 'uploads')
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        filepath = os.path.join(upload_dir, file.filename)
         file.save(filepath)
 
         try:
-            workbook = openpyxl.load_workbook(filepath)
+            workbook = openpyxl.load_workbook(filepath, data_only=True)
             sheet = workbook.active
             
             new_products = []
@@ -1183,6 +989,7 @@ def cargar_excel():
                 marca = str(row[7]).strip() if len(row) > 7 and row[7] is not None else ''
                 color = str(row[8]).strip() if len(row) > 8 and row[8] is not None else ''
                 talla = str(row[9]).strip() if len(row) > 9 and row[9] is not None else ''
+                grupo = str(row[10]).strip() if len(row) > 10 and row[10] is not None else ''
 
                 product = Product.query.filter_by(barcode=barcode).first()
 
@@ -1204,7 +1011,9 @@ def cargar_excel():
                         'new_color': color,
                         'old_color': product.color,
                         'new_talla': talla,
-                        'old_talla': product.size
+                        'old_talla': product.size,
+                        'new_grupo': grupo,
+                        'old_grupo': product.grupo
                     })
                 else:
                     new_products.append(Product(
@@ -1218,6 +1027,7 @@ def cargar_excel():
                         marca=marca,
                         color=color,
                         size=talla,
+                        grupo=grupo,
                         estimated_monthly_sales=100
                     ))
 
@@ -1241,8 +1051,7 @@ def cargar_excel():
             if os.path.exists(filepath):
                 os.remove(filepath)
     
-    # CORRECCIÓN: Usar la nueva función
-    return render_template('inventario/cargar_excel.html', title='Cargar Inventario desde Excel', current_rate=get_cached_exchange_rate() or 0.0)
+    return render_template('inventario/cargar_excel.html', title='Cargar Inventario desde Excel')
 
 @routes_blueprint.route('/inventario/cargar_excel_confirmar', methods=['GET', 'POST'])
 @login_required
@@ -1252,9 +1061,6 @@ def cargar_excel_confirmar():
         return redirect(url_for('main.inventory_list'))
         
     pending_updates = session.get('pending_updates', [])
-    # CORRECCIÓN: Usar la nueva función
-    current_rate = get_cached_exchange_rate() or 0.0
-
     if request.method == 'POST':
         try:
             if pending_updates:
@@ -1269,7 +1075,8 @@ def cargar_excel_confirmar():
                         'codigo_producto': update['new_codigo_producto'],
                         'marca': update['new_marca'],
                         'color': update['new_color'],
-                        'size': update['new_talla']
+                        'size': update['new_talla'],
+                        'grupo': update['new_grupo']
                     }
                     for update in pending_updates
                 ]
@@ -1287,8 +1094,7 @@ def cargar_excel_confirmar():
 
     return render_template('inventario/cargar_excel_confirmar.html', 
                            title='Confirmar Actualización de Inventario',
-                           updates=pending_updates,
-                           current_rate=current_rate)
+                           updates=pending_updates)
 
 # Rutas de configuración de empresa
 @routes_blueprint.route('/configuracion/empresa', methods=['GET', 'POST'])
@@ -1306,6 +1112,7 @@ def company_settings():
         address = request.form.get('address')
         phone_numbers = request.form.get('phone_numbers')
         logo_file = request.files.get('logo_file')
+        calculation_currency = request.form.get('calculation_currency')
         
         try:
             if company_info:
@@ -1313,6 +1120,7 @@ def company_settings():
                 company_info.rif = rif
                 company_info.address = address
                 company_info.phone_numbers = phone_numbers
+                company_info.calculation_currency = calculation_currency
                 
                 # Handle logo file upload
                 if logo_file and logo_file.filename:
@@ -1333,7 +1141,13 @@ def company_settings():
                 db.session.commit()
                 flash('Información de la empresa actualizada exitosamente!', 'success')
             else:
-                new_info = CompanyInfo(name=name, rif=rif, address=address, phone_numbers=phone_numbers)
+                new_info = CompanyInfo(
+                    name=name, 
+                    rif=rif, 
+                    address=address, 
+                    phone_numbers=phone_numbers,
+                    calculation_currency=calculation_currency
+                )
                 db.session.add(new_info)
                 db.session.flush()  # Get the ID for the new company info
                 
@@ -1364,8 +1178,7 @@ def company_settings():
             db.session.rollback()
             flash(f'Ocurrió un error al guardar la información: {str(e)}', 'danger')
 
-    # CORRECCIÓN: Usar la nueva función
-    return render_template('configuracion/empresa.html', title='Configuración de Empresa', company_info=company_info, current_rate=get_cached_exchange_rate() or 0.0)
+    return render_template('configuracion/empresa.html', title='Configuración de Empresa', company_info=company_info)
 
 # Rutas de Estructura de Costos
 @routes_blueprint.route('/costos/lista')
@@ -1428,9 +1241,7 @@ def cost_list():
 
     return render_template('costos/lista.html',
                            title='Estructura de Costos',
-                           products_data=products_with_costs,
-                           # CORRECCIÓN: Usar la nueva función
-                           current_rate=get_cached_exchange_rate() or 0.0)
+                           products_data=products_with_costs)
 
 
 @routes_blueprint.route('/costos/configuracion', methods=['GET', 'POST'])
@@ -1461,16 +1272,20 @@ def cost_structure_config():
             db.session.rollback()
             flash(f'Error al guardar la configuración. Verifique que los valores sean números. Error: {e}', 'danger')
 
-    current_rate = get_cached_exchange_rate()
-    manual_rate_required = current_rate is None
+    usd_rate = get_cached_exchange_rate('USD')
+    eur_rate = get_cached_exchange_rate('EUR')
+    manual_rate_required = usd_rate is None or eur_rate is None
     if manual_rate_required:
         flash('No se pudo obtener la tasa de cambio de las APIs. Por favor, ingrese un valor manualmente.', 'warning')
 
     return render_template('costos/configuracion.html',
                            title='Configurar Costos Generales',
                            cost_structure=cost_structure,
-                           current_rate=current_rate or 0.0,
-                           manual_rate_required=manual_rate_required)
+                           usd_rate=usd_rate or 0.0,
+                           eur_rate=eur_rate or 0.0,
+                           manual_rate_required=manual_rate_required,
+                           exchange_rate_info_usd=ExchangeRate.query.filter_by(currency='USD').first(),
+                           exchange_rate_info_eur=ExchangeRate.query.filter_by(currency='EUR').first())
 
 
 @routes_blueprint.route('/costos/update_rate', methods=['POST'])
@@ -1481,14 +1296,15 @@ def update_exchange_rate():
         return redirect(url_for('main.dashboard'))
 
     try:
+        currency = request.form.get('currency')
         manual_rate = float(request.form.get('manual_rate'))
-        if manual_rate > 0:
-            exchange_rate_entry = ExchangeRate.query.first()
+        if manual_rate > 0 and currency in ['USD', 'EUR']:
+            exchange_rate_entry = ExchangeRate.query.filter_by(currency=currency).first()
             if exchange_rate_entry:
                 exchange_rate_entry.rate = manual_rate
                 exchange_rate_entry.date_updated = get_current_time_ve()
             else:
-                exchange_rate_entry = ExchangeRate(rate=manual_rate)
+                exchange_rate_entry = ExchangeRate(currency=currency, rate=manual_rate)
                 db.session.add(exchange_rate_entry)
             db.session.commit()
             flash('Tasa de cambio actualizada manualmente.', 'success')
@@ -1595,8 +1411,7 @@ def edit_product_cost(product_id):
     return render_template('costos/editar.html',
                            title=f'Editar Costos de {product.name}',
                            product=product,
-                           break_even_data=break_even_data,
-                           current_rate=get_cached_exchange_rate() or 0.0)
+                           break_even_data=break_even_data)
 
 @routes_blueprint.route('/ordenes/imprimir/<int:order_id>')
 @login_required
@@ -1633,8 +1448,8 @@ def api_product_by_barcode(barcode):
 
 @routes_blueprint.route('/api/exchange_rate')
 def api_exchange_rate():
-    # CORRECCIÓN: Usar la nueva función
-    rate = get_cached_exchange_rate()
+    # CORRECCIÓN: Usar la nueva función para obtener la tasa en USD
+    rate = get_cached_exchange_rate('USD')
     if rate:
         return jsonify(rate=rate)
     else:

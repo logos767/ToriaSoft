@@ -39,6 +39,7 @@ class Product(db.Model):
     color = db.Column(db.String(120), nullable=True)
     codigo_producto = db.Column(db.String(50), nullable=True)
     marca = db.Column(db.String(50), nullable=True)
+    grupo = db.Column(db.String(50), nullable=True, index=True)
     profit_margin = db.Column(db.Float, nullable=False, default=0.20) # Margen de utilidad (ej. 20%)
     specific_freight_cost = db.Column(db.Float, nullable=False, default=0) # Costo de flete específico por unidad
     estimated_monthly_sales = db.Column(db.Integer, nullable=False, default=1) # Ventas estimadas para distribuir costos fijos
@@ -157,17 +158,19 @@ class CompanyInfo(db.Model):
     address = db.Column(db.String(200), nullable=True)
     phone_numbers = db.Column(db.String(100), nullable=True)
     logo_filename = db.Column(db.String(200), nullable=True)
+    calculation_currency = db.Column(db.String(3), nullable=False, default='USD')
 
     def __repr__(self):
         return f"CompanyInfo('{self.name}', '{self.rif}')"
 
 class ExchangeRate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    currency = db.Column(db.String(3), unique=True, nullable=False)
     rate = db.Column(db.Float, nullable=False)
     date_updated = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
 
     def __repr__(self):
-        return f"ExchangeRate(rate='{self.rate}', date='{self.date_updated}')"
+        return f"ExchangeRate(currency='{self.currency}', rate='{self.rate}', date='{self.date_updated}')"
 
 class CostStructure(db.Model):
     id = db.Column(db.Integer, primary_key=True)
