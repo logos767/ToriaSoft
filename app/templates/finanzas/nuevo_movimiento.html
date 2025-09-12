@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-lg">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-plus-circle mr-2"></i>{{ title }}</h1>
+        <a href="{{ url_for('main.bank_movement_detail', bank_id=account.id) if account_type == 'bank' else url_for('main.cashbox_movement_detail', cash_box_id=account.id) }}" class="text-blue-500 hover:underline">
+            <i class="fas fa-arrow-left mr-1"></i> Volver a movimientos
+        </a>
+    </div>
+
+    <div class="bg-white p-8 rounded-lg shadow-md">
+        <div class="bg-blue-50 p-4 rounded-lg mb-6">
+            <p class="font-semibold">Cuenta: <span class="font-bold text-blue-800">{{ account.name }}</span></p>
+        </div>
+
+        <form method="POST" action="{{ url_for('main.new_financial_movement', account_type=account_type, account_id=account.id) }}">
+            <div class="mb-4">
+                <label for="description" class="block text-gray-700 font-bold mb-2">Descripción</label>
+                <input type="text" id="description" name="description" required placeholder="Ej: Depósito inicial, Pago de servicio, Retiro" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            
+            <div class="mb-4">
+                <label for="movement_type" class="block text-gray-700 font-bold mb-2">Tipo de Movimiento</label>
+                <select id="movement_type" name="movement_type" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="Ingreso">Ingreso (Añadir fondos)</option>
+                    <option value="Egreso">Egreso (Retirar fondos)</option>
+                </select>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="mb-4">
+                    <label for="amount" class="block text-gray-700 font-bold mb-2">Monto</label>
+                    <input type="number" id="amount" name="amount" step="0.01" min="0.01" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label for="currency" class="block text-gray-700 font-bold mb-2">Moneda</label>
+                    <select id="currency" name="currency" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        {% if account_type == 'bank' %}
+                        <option value="VES" selected>VES</option>
+                        {% else %}
+                        <option value="VES">VES</option>
+                        <option value="USD">USD</option>
+                        {% endif %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end mt-4">
+                <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
+                    <i class="fas fa-save mr-2"></i>Registrar Movimiento
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

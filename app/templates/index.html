@@ -76,8 +76,8 @@
                         <a href="{{ url_for('main.product_detail', product_id=product.id) }}" class="text-blue-600 hover:underline font-medium">{{ product.name }}</a>
                         <p class="text-sm text-gray-500">
                             Código: {{ product.barcode }} |
-                            <!-- Costo: ${{ "%.2f"|format(product.cost_usd) }} |-->
-                            Precio: Bs. {{ "%.2f"|format(product.price_usd * current_rate) }} |
+                            Precio: {{ currency_symbol }}{{ "%.2f"|format(product.price_usd) }} |
+                            Precio Bs: {{ "%.2f"|format(product.price_usd * current_rate) }} |
                             Existencias: {{ product.stock }}
                         </p>
                     </div>

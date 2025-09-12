@@ -89,7 +89,8 @@ class Order(db.Model):
     total_amount = db.Column(db.Float, nullable=False, default=0.0)
 
     # Relaciones
-    items = db.relationship('OrderItem', backref='order', lazy=True)
+    items = db.relationship('OrderItem', backref='order', lazy=True, cascade="all, delete-orphan")
+    payments = db.relationship('Payment', backref='order', lazy=True, cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"Order('{self.id}', '{self.total_amount}')"
@@ -100,10 +101,93 @@ class OrderItem(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Float, nullable=False) # Precio en VES en el momento de la venta
+    cost_at_sale_ves = db.Column(db.Float, nullable=True) # Costo unitario en VES en el momento de la venta
 
     def __repr__(self):
         return f"OrderItem('{self.order_id}', '{self.product_id}', '{self.quantity}')"
-        
+
+class Bank(db.Model):
+    __tablename__ = 'banks'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    account_number = db.Column(db.String(20), nullable=True, unique=True)
+    balance = db.Column(db.Float, nullable=False, default=0.0) # Stored in VES
+    
+    payments = db.relationship('Payment', backref='bank', lazy=True)
+    pos_terminals = db.relationship('PointOfSale', backref='bank', lazy=True)
+
+    def __repr__(self):
+        return f"Bank('{self.name}')"
+
+class PointOfSale(db.Model):
+    __tablename__ = 'points_of_sale'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey('banks.id'), nullable=False)
+    
+    payments = db.relationship('Payment', backref='pos', lazy=True)
+
+    def __repr__(self):
+        return f"PointOfSale('{self.name}')"
+
+class CashBox(db.Model):
+    __tablename__ = 'cash_boxes'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    balance_ves = db.Column(db.Float, nullable=False, default=0.0)
+    balance_usd = db.Column(db.Float, nullable=False, default=0.0)
+    
+    payments = db.relationship('Payment', backref='cash_box', lazy=True)
+
+    def __repr__(self):
+        return f"CashBox('{self.name}')"
+
+class Payment(db.Model):
+    __tablename__ = 'payments'
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+    amount_paid = db.Column(db.Float, nullable=False) # The amount in the currency it was paid
+    currency_paid = db.Column(db.String(3), nullable=False) # 'VES', 'USD'
+    amount_ves_equivalent = db.Column(db.Float, nullable=False) # The equivalent in VES for the order total
+    method = db.Column(db.String(50), nullable=False) # 'transferencia', 'pago_movil', 'punto_de_venta', 'efectivo_usd', 'efectivo_ves'
+    reference = db.Column(db.String(100), nullable=True)
+    date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
+    
+    # Destination of funds
+    bank_id = db.Column(db.Integer, db.ForeignKey('banks.id'), nullable=True)
+    pos_id = db.Column(db.Integer, db.ForeignKey('points_of_sale.id'), nullable=True)
+    cash_box_id = db.Column(db.Integer, db.ForeignKey('cash_boxes.id'), nullable=True)
+
+    def __repr__(self):
+        return f"Payment('{self.id}', '{self.method}', '{self.amount_ves_equivalent}')"
+
+class ManualFinancialMovement(db.Model):
+    __tablename__ = 'manual_financial_movements'
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
+    description = db.Column(db.String(255), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    currency = db.Column(db.String(3), nullable=False) # 'VES', 'USD'
+    movement_type = db.Column(db.String(20), nullable=False) # 'Ingreso', 'Egreso'
+    received_by = db.Column(db.String(100), nullable=True) # Who received the money
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    status = db.Column(db.String(20), nullable=False, default='Aprobado', index=True) # Pendiente, Aprobado, Rechazado
+    approved_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    date_approved = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # Foreign keys to the accounts
+    bank_id = db.Column(db.Integer, db.ForeignKey('banks.id'), nullable=True)
+    cash_box_id = db.Column(db.Integer, db.ForeignKey('cash_boxes.id'), nullable=True)
+    
+    # Relationships
+    bank = db.relationship('Bank', backref=db.backref('manual_movements', lazy='dynamic'))
+    cash_box = db.relationship('CashBox', backref=db.backref('manual_movements', lazy='dynamic'))
+    created_by_user = db.relationship('User', backref=db.backref('financial_movements_created', lazy='dynamic'), foreign_keys=[created_by_user_id])
+    approved_by_user = db.relationship('User', backref=db.backref('financial_movements_approved', lazy='dynamic'), foreign_keys=[approved_by_user_id])
+
+    def __repr__(self):
+        return f"ManualFinancialMovement('{self.description}', '{self.amount} {self.currency}')"
+
 class Purchase(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'), nullable=False)

@@ -20,9 +20,17 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="mb-4">
-                        <label for="profit_margin" class="block text-gray-700 font-bold mb-2">Margen de Utilidad Deseado (%)</label>
-                        <input type="number" step="0.01" id="profit_margin" name="profit_margin" value="{{ (product.profit_margin or 0) * 100 }}" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <p class="text-sm text-gray-500 mt-1">Introduzca el porcentaje de ganancia que desea obtener. Ej: 25 para 25%.</p>
+                        <label for="price_usd" class="block text-gray-700 font-bold mb-2">Precio de Venta (USD)</label>
+                        <input type="number" step="0.01" id="price_usd" name="price_usd" value="{{ "%.2f"|format(product.price_usd) }}" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <p class="text-sm text-gray-500 mt-1">Este es el precio de venta final del producto.</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-gray-700 font-bold mb-2">Margen de Utilidad Calculado</label>
+                        <p class="text-lg font-bold pt-2 {% if (product.profit_margin or 0) < 0 %}text-red-600{% elif (product.profit_margin or 0) < 0.05 %}text-yellow-600{% else %}text-green-600{% endif %}">
+                            {{ "%.2f"|format((product.profit_margin or 0) * 100) }}%
+                        </p>
+                        <p class="text-sm text-gray-500 mt-1">Se calcula en base al precio de venta y los costos.</p>
                     </div>
 
                     <div class="mb-4">

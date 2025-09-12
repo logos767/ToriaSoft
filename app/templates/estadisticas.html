@@ -2,61 +2,131 @@
 
 {% block content %}
 <div class="container mx-auto p-4">
-    <h1 class="text-3xl font-bold text-gray-800 mb-6"><i class="fas fa-chart-line mr-2"></i>Estadísticas Gerenciales</h1>
+    <h1 class="text-3xl font-bold text-gray-800 mb-6"><i class="fas fa-chart-line mr-2"></i>{{ title }}</h1>
+
+    <!-- Filtros de Período -->
+    <div class="bg-white p-4 rounded-lg shadow-md mb-6">
+        <form method="GET" action="{{ url_for('main.estadisticas') }}" id="stats-filter-form">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div>
+                    <label for="period" class="block text-sm font-medium text-gray-700">Ver por</label>
+                    <select name="period" id="period" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        <option value="monthly" {% if filters.period == 'monthly' %}selected{% endif %}>Mensual (Año Actual)</option>
+                        <option value="daily" {% if filters.period == 'daily' %}selected{% endif %}>Diario</option>
+                        <option value="custom" {% if filters.period == 'custom' %}selected{% endif %}>Rango Personalizado</option>
+                    </select>
+                </div>
+
+                <div id="daily-filter" class="{% if filters.period != 'daily' %}hidden{% endif %}">
+                    <label for="date" class="block text-sm font-medium text-gray-700">Seleccionar Día</label>
+                    <input type="date" name="date" id="date" value="{{ filters.start_date }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                </div>
+
+                <div id="custom-filter" class="md:col-span-2 grid grid-cols-2 gap-4 {% if filters.period != 'custom' %}hidden{% endif %}">
+                    <div>
+                        <label for="start_date" class="block text-sm font-medium text-gray-700">Desde</label>
+                        <input type="date" name="start_date" id="start_date" value="{{ filters.start_date }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="end_date" class="block text-sm font-medium text-gray-700">Hasta</label>
+                        <input type="date" name="end_date" id="end_date" value="{{ filters.end_date }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                </div>
+
+                <div class="flex items-end space-x-2">
+                    <button type="submit" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors w-full text-center">
+                        <i class="fas fa-filter mr-2"></i>Aplicar
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Resumen Total del Período -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+        <h2 class="text-2xl font-semibold text-gray-700 mb-6">Resumen del Período Seleccionado</h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 text-center">
+            <div class="bg-blue-50 p-3 rounded-lg">
+                <h3 class="text-sm font-semibold text-blue-800">Ventas Totales</h3>
+                <p class="text-xl font-bold text-blue-600">{{ "{:,.2f}".format(total_summary.sales) }} Bs</p>
+            </div>
+            <div class="bg-yellow-50 p-3 rounded-lg">
+                <h3 class="text-sm font-semibold text-yellow-800">Costo Mercancía (CMV)</h3>
+                <p class="text-xl font-bold text-yellow-600">{{ "{:,.2f}".format(total_summary.cogs) }} Bs</p>
+            </div>
+            <div class="bg-indigo-50 p-3 rounded-lg">
+                <h3 class="text-sm font-semibold text-indigo-800">Utilidad Bruta</h3>
+                <p class="text-xl font-bold text-indigo-600">{{ "{:,.2f}".format(total_summary.gross_profit) }} Bs</p>
+            </div>
+            <div class="bg-orange-50 p-3 rounded-lg">
+                <h3 class="text-sm font-semibold text-orange-800">Gastos Variables</h3>
+                <p class="text-xl font-bold text-orange-600">{{ "{:,.2f}".format(total_summary.variable_expenses) }} Bs</p>
+            </div>
+            <div class="bg-gray-100 p-3 rounded-lg">
+                <h3 class="text-sm font-semibold text-gray-800">Gastos Fijos</h3>
+                <p class="text-xl font-bold text-gray-600">{{ "{:,.2f}".format(total_summary.fixed_expenses) }} Bs</p>
+            </div>
+            <div class="p-3 rounded-lg {{ 'bg-green-100' if total_summary.net_profit >= 0 else 'bg-red-100' }}">
+                <h3 class="text-sm font-semibold {{ 'text-green-800' if total_summary.net_profit >= 0 else 'text-red-800' }}">Utilidad Neta</h3>
+                <p class="text-xl font-bold {{ 'text-green-600' if total_summary.net_profit >= 0 else 'text-red-600' }}">{{ "{:,.2f}".format(total_summary.net_profit) }} Bs</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráfico de Ganancias y Pérdidas -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">Desglose de Resultados por Período</h2>
+        <canvas id="profitLossChart"></canvas>
+    </div>
+
+    <!-- Tabla de Desglose -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">Tabla de Resultados Detallados</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Período</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ventas</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">CMV</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Utilidad Bruta</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">G. Variables</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">G. Fijos</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Utilidad Neta</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for period, data in stats_data.items()|sort %}
+                    <tr>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{{ period }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-gray-700">{{ "{:,.2f}".format(data.sales) }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-red-600">({{ "{:,.2f}".format(data.cogs) }})</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right font-semibold {{ 'text-green-700' if data.gross_profit >= 0 else 'text-red-700' }}">{{ "{:,.2f}".format(data.gross_profit) }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-orange-600">({{ "{:,.2f}".format(data.variable_expenses) }})</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-gray-500">({{ "{:,.2f}".format(data.fixed_expenses) }})</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right font-bold {{ 'text-green-700' if data.net_profit >= 0 else 'text-red-700' }}">{{ "{:,.2f}".format(data.net_profit) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-gray-500">No hay datos de ventas para el período seleccionado.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
     
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <!-- Gráfico de Ventas Mensuales -->
-        <div class="bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">Ventas por Mes</h2>
-            <canvas id="salesByMonthChart"></canvas>
-        </div>
-        
         <!-- Gráfico de Productos más vendidos -->
         <div class="bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">Top 5 Productos Vendidos</h2>
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Top 5 Productos Vendidos (por Cantidad)</h2>
             <canvas id="topProductsChart"></canvas>
         </div>
         
         <!-- Gráfico de Clientes más frecuentes -->
         <div class="bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">Top 5 Clientes Frecuentes</h2>
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Top 5 Clientes Frecuentes (por # de Órdenes)</h2>
             <canvas id="frequentClientsChart"></canvas>
-        </div>
-
-        <!-- Gráfico de Ganancias y Pérdidas Mensuales -->
-        <div class="bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">Ganancias y Pérdidas Mensuales</h2>
-            <canvas id="profitLossChart"></canvas>
-        </div>
-    </div>
-
-    <!-- Resumen de Ganancias y Pérdidas -->
-    <div class="bg-white p-6 rounded-lg shadow-md mt-8">
-        <h2 class="text-2xl font-semibold text-gray-700 mb-6">Resumen Anual de Ganancias y Pérdidas</h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Ganancias Totales -->
-            <div class="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
-                <h3 class="text-lg font-semibold text-green-800 mb-2">Ganancias Totales</h3>
-                <p class="text-2xl font-bold text-green-600">{{ "{:,.2f}".format(profit_loss_summary.total_profit) }} Bs</p>
-                <p class="text-sm text-green-700">{{ profit_loss_summary.months_with_profit }} meses con ganancias</p>
-            </div>
-
-            <!-- Pérdidas Totales -->
-            <div class="bg-red-50 p-4 rounded-lg border-l-4 border-red-500">
-                <h3 class="text-lg font-semibold text-red-800 mb-2">Pérdidas Totales</h3>
-                <p class="text-2xl font-bold text-red-600">{{ "{:,.2f}".format(profit_loss_summary.total_loss) }} Bs</p>
-                <p class="text-sm text-red-700">{{ profit_loss_summary.months_with_loss }} meses con pérdidas</p>
-            </div>
-
-            <!-- Resultado Neto -->
-            <div class="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
-                <h3 class="text-lg font-semibold text-blue-800 mb-2">Resultado Neto</h3>
-                <p class="text-2xl font-bold {{ 'text-green-600' if profit_loss_summary.net_result >= 0 else 'text-red-600' }}">
-                    {{ "{:,.2f}".format(profit_loss_summary.net_result) }} Bs
-                </p>
-                <p class="text-sm text-blue-700">Promedio mensual: {{ "{:,.2f}".format(profit_loss_summary.average_monthly_result) }} Bs</p>
-            </div>
         </div>
     </div>
 </div>
@@ -64,34 +134,24 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Datos de la plantilla
-        const salesByMonthData = {{ sales_by_month | tojson }};
-        const topProductsData = {{ top_products | tojson }};
-        const frequentClientsData = {{ frequent_clients | tojson }};
-        const profitLossData = {{ profit_loss_data | tojson }};
+        // Lógica para mostrar/ocultar filtros de fecha
+        const periodSelect = document.getElementById('period');
+        const dailyFilter = document.getElementById('daily-filter');
+        const customFilter = document.getElementById('custom-filter');
 
-        // Gráfico de Ventas Mensuales
-        new Chart(document.getElementById('salesByMonthChart'), {
-            type: 'bar',
-            data: {
-                labels: salesByMonthData.labels,
-                datasets: [{
-                    label: 'Ventas Totales (Bs)',
-                    data: salesByMonthData.values,
-                    backgroundColor: 'rgba(59, 130, 246, 0.5)',
-                    borderColor: 'rgba(59, 130, 246, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
+        function toggleDateFilters() {
+            const selectedPeriod = periodSelect.value;
+            dailyFilter.classList.toggle('hidden', selectedPeriod !== 'daily');
+            customFilter.classList.toggle('hidden', selectedPeriod !== 'custom');
+        }
+
+        periodSelect.addEventListener('change', toggleDateFilters);
+        toggleDateFilters(); // Run on page load
+
+        // Datos de la plantilla
+        const topProductsData = {{ top_products_data | tojson }};
+        const frequentClientsData = {{ frequent_clients_data | tojson }};
+        const profitLossChartData = {{ profit_loss_chart_data | tojson }};
         
         // Gráfico de Top Productos
         new Chart(document.getElementById('topProductsChart'), {
@@ -129,7 +189,7 @@
             data: {
                 labels: frequentClientsData.labels,
                 datasets: [{
-                    label: 'Número de Órdenes',
+                    label: '# de Órdenes',
                     data: frequentClientsData.values,
                     backgroundColor: 'rgba(255, 205, 86, 0.5)',
                     borderColor: 'rgba(255, 205, 86, 1)',
@@ -146,21 +206,35 @@
             }
         });
 
-        // Gráfico de Ganancias y Pérdidas Mensuales
+        // Gráfico de Resultados por Período
         new Chart(document.getElementById('profitLossChart'), {
-            type: 'bar',
+            type: 'line',
             data: {
-                labels: profitLossData.labels,
-                datasets: [{
-                    label: 'Ganancia/Pérdida (Bs)',
-                    data: profitLossData.values,
-                    backgroundColor: profitLossData.values.map(value =>
-                        value >= 0 ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
-                    ),
-                    borderColor: profitLossData.values.map(value =>
-                        value >= 0 ? 'rgba(34, 197, 94, 1)' : 'rgba(239, 68, 68, 1)'
-                    ),
-                    borderWidth: 1
+                labels: profitLossChartData.labels,
+                datasets: [
+                    {
+                        label: 'Ventas (Bs)',
+                        data: profitLossChartData.sales,
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        fill: true,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Costo Mercancía (Bs)',
+                        data: profitLossChartData.cogs,
+                        borderColor: 'rgba(239, 68, 68, 1)',
+                        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                        fill: true,
+                        tension: 0.1
+                    },
+                    {
+                    label: 'Utilidad Neta (Bs)',
+                    data: profitLossChartData.net_profit,
+                    borderColor: 'rgba(34, 197, 94, 1)',
+                    borderWidth: 1,
+                    fill: false,
+                    type: 'bar'
                 }]
             },
             options: {
@@ -168,17 +242,10 @@
                 scales: {
                     y: {
                         beginAtZero: true,
-                        grid: {
-                            color: 'rgba(0, 0, 0, 0.1)'
-                        }
-                    },
-                    x: {
-                        grid: {
-                            color: 'rgba(0, 0, 0, 0.1)'
-                        }
                     }
                 },
                 plugins: {
+                    title: { display: true, text: 'Comparativa de Ventas, Costos y Utilidad Neta' },
                     legend: {
                         display: true,
                         position: 'top'
@@ -191,8 +258,8 @@
                                     label += ': ';
                                 }
                                 label += new Intl.NumberFormat('es-VE', {
-                                    style: 'currency',
-                                    currency: 'VES'
+                                    style: 'decimal',
+                                    minimumFractionDigits: 2
                                 }).format(context.parsed.y);
                                 return label;
                             }

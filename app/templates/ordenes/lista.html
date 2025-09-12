@@ -25,11 +25,11 @@
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for order in orders %}
                     <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{{ order.id }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{{ order.id|order_id_format }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ order.client.name }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ order.date_created.strftime('%d/%m/%Y %H:%M:%S') }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">Bs. {{ "%.2f"|format(order.total_amount) }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ order.date_created|ve_datetime }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Bs. {{ "%.2f"|format(order.total_amount) }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">{{ order.status }}</span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">

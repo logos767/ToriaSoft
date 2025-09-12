@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recibo de Retiro #{{ movement.id }}</title>
+    <style>
+        @page {
+            size: 80mm auto; /* Ancho típico de impresora térmica */
+            margin: 3mm;
+        }
+
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 10pt;
+            color: #000;
+        }
+
+        .receipt-container {
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .header, .footer {
+            text-align: center;
+            margin-bottom: 5mm;
+        }
+
+        .header h2 {
+            margin: 0;
+            font-size: 12pt;
+        }
+        .header p {
+            margin: 1mm 0;
+        }
+
+        .content {
+            margin-top: 5mm;
+        }
+
+        .content p {
+            margin: 2mm 0;
+        }
+
+        .content .item {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .amount {
+            font-size: 14pt;
+            font-weight: bold;
+            text-align: center;
+            border-top: 1px dashed #000;
+            border-bottom: 1px dashed #000;
+            padding: 3mm 0;
+            margin: 5mm 0;
+        }
+
+        .signatures {
+            margin-top: 10mm;
+        }
+
+        .signature-block {
+            margin-top: 15mm;
+            text-align: center;
+        }
+
+        .signature-line {
+            border-top: 1px solid #000;
+            width: 80%;
+            margin: 0 auto;
+        }
+
+        @media print {
+            .no-print {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="receipt-container">
+        <div class="header">
+            {% if company_info and company_info.name %}
+                <h2>{{ company_info.name }}</h2>
+                <p>RIF: {{ company_info.rif }}</p>
+            {% endif %}
+            <h3 style="margin-top: 5mm; font-size: 11pt;">RECIBO DE RETIRO DE EFECTIVO</h3>
+        </div>
+
+        <div class="content">
+            <div class="item"><span>Fecha:</span><span>{{ movement.date|ve_datetime(fmt='%d/%m/%Y') }}</span></div>
+            <div class="item"><span>Hora:</span><span>{{ movement.date|ve_datetime(fmt='%H:%M:%S') }}</span></div>
+            <div class="item"><span>Recibo Nro:</span><span>{{ movement.id }}</span></div>
+            <div class="item"><span>Caja:</span><span>{{ movement.cash_box.name }}</span></div>
+
+            <div class="amount">MONTO: {{ "%.2f"|format(movement.amount) }} {{ movement.currency }}</div>
+
+            <p><strong>Motivo:</strong></p>
+            <p>{{ movement.description }}</p>
+
+            <div class="signatures">
+                <div class="signature-block"><div class="signature-line"></div><p>Entregado por:</p><p>{{ movement.created_by_user.username if movement.created_by_user else 'N/A' }}</p></div>
+                <div class="signature-block"><div class="signature-line"></div><p>Recibido por:</p><p>{{ movement.received_by }}</p></div>
+                {% if movement.approved_by_user and movement.approved_by_user_id != movement.created_by_user_id %}
+                <div class="signature-block">
+                    <div class="signature-line"></div>
+                    <p>Aprobado por:</p>
+                    <p>{{ movement.approved_by_user.username }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="footer"><p style="margin-top: 10mm;">.</p></div>
+    </div>
+
+    <div class="no-print" style="text-align: center; margin-top: 15mm;">
+        <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px;">Imprimir Recibo</button>
+        <a href="{{ url_for('main.new_order') }}" style="display: block; margin-top: 10px;">Volver</a>
+    </div>
+
+    <script>
+        window.onload = function() { window.print(); };
+        window.onafterprint = function() { window.location.href = "{{ url_for('main.new_order') }}"; };
+    </script>
+</body>
+</html>

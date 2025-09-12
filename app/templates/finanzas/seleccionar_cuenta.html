@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <h1 class="text-3xl font-bold text-gray-800 mb-6"><i class="fas fa-list-ul mr-2"></i>{{ title }}</h1>
+    
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <p class="text-gray-600 mb-4">Seleccione una cuenta para ver sus movimientos detallados.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for account in accounts %}
+            <a href="{{ url_for(detail_route, bank_id=account.id) if account_type == 'bank' else url_for(detail_route, cash_box_id=account.id) }}" 
+               class="block p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-blue-100 hover:border-blue-400 transition-colors">
+                <div class="font-bold text-lg text-gray-800">{{ account.name }}</div>
+                {% if account_type == 'bank' %}
+                <div class="text-sm text-gray-500">{{ account.account_number }}</div>
+                <div class="text-right font-semibold text-green-600 mt-2">Bs. {{ "%.2f"|format(account.balance) }}</div>
+                {% elif account_type == 'cash_box' %}
+                <div class="text-right font-semibold mt-2">
+                    <span class="text-green-600">Bs. {{ "%.2f"|format(account.balance_ves) }}</span> / 
+                    <span class="text-blue-600">${{ "%.2f"|format(account.balance_usd) }}</span>
+                </div>
+                {% endif %}
+            </a>
+            {% else %}
+            <p class="text-gray-500 col-span-full">No hay cuentas de este tipo registradas.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -3,38 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nota de Entrega #{{ order.id }}</title>
+    <title>Nota de Entrega #{{ order.id|order_id_format }}</title>
     <style>
         @page {
-            size: 80mm auto;
-            margin: 0;
+            size: 55mm auto;
+            margin: 2mm;
         }
 
         body {
-            width: 80mm;
-            margin: 0;
-            padding: 5mm;
+            width: 45mm; /* 58mm - 2mm margin left - 2mm margin right */
+            padding: 0;
             font-family: 'Courier New', Courier, monospace;
-            font-size: 10px;
+            font-size: 12px;
             color: #000;
+            font-weight: bold;
+
         }
         
         .header, .footer {
             text-align: center;
-            margin-bottom: 5mm;
+            margin-bottom: 0;
         }
 
         .header img {
-            max-width: 50mm;
+            max-width: 44mm;
             height: auto;
-            margin-bottom: 2mm;
+            margin-bottom: 0;
         }
 
         .info {
             border-top: 1px dashed #000;
-            border-bottom: 1px dashed #000;
-            padding: 3mm 0;
-            margin-bottom: 3mm;
         }
 
         .info-item {
@@ -45,18 +43,24 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 3mm;
+            margin-bottom: 1mm;
         }
 
         table th, table td {
             text-align: left;
-            padding: 1px 0;
+            padding: 0.5mm 0;
+            vertical-align: top;
+        }
+
+        th {
+            font-weight: bold;
         }
         
         .totals {
             text-align: right;
             border-top: 1px dashed #000;
-            padding-top: 3mm;
+            margin-top: 1mm;
+            padding-top: 1mm;
         }
 
         .totals .total-item {
@@ -66,7 +70,7 @@
         }
 
         .totals .grand-total {
-            font-size: 1.2em;
+            font-size: 1.3em;
             font-weight: bold;
         }
 
@@ -81,10 +85,10 @@
 <body>
     <!-- Encabezado de la empresa -->
     <div class="header">
-        {% if company_info.logo_url %}
-            <img src="{{ company_info.logo_url }}" alt="Logo de la empresa" onerror="this.style.display='none'">
+        {% if company_info.logo_filename %}
+            <img src="{{ url_for('static', filename=company_info.logo_filename, _external=True) }}" alt="Logo de la empresa" style="display='none'">
         {% endif %}
-        <h3>{{ company_info.name }}</h3>
+        <h3 style="font-weight: bold; font-size: 1.2em;">{{ company_info.name }}</h3>
         <p>RIF: {{ company_info.rif }}</p>
         <p>{{ company_info.address }}</p>
         <p>Tel: {{ company_info.phone_numbers }}</p>
@@ -92,73 +96,140 @@
 
     <!-- Título del documento -->
     <h2 class="text-center font-bold" style="text-align: center; font-weight: bold; font-size: 1.2em;">NOTA DE ENTREGA</h2>
-
+    <h3 class="text-center font-bold" style="text-align: center; font-weight: bold; font-size: 1.2em;"><strong>N°:</strong> {{ order.id|order_id_format }}</h3>
     <!-- Información del cliente y orden -->
     <div class="info">
-        <p><strong>Fecha:</strong> {{ order.date_created.strftime('%d/%m/%Y %H:%M:%S') }}</p>
-        <p><strong>N° de Orden:</strong> {{ order.id }}</p>
-        <p><strong>Cliente:</strong> {{ order.client.name }}</p>
+        <div class="info-item">
+            <span>Fecha:</span>
+            <span>{{ order.date_created|ve_datetime(fmt='%d/%m/%Y') }}</span>
+        </div>
+        <div class="info-item">
+            <span>Hora:</span>
+            <span>{{ order.date_created|ve_datetime(fmt='%H:%M:%S') }}</span>
+        </div>
+        <div class="info-item">
+            <strong>Cliente:</strong>
+            <span>{{ order.client.name }}</span>
+        </div>
+        
         {% if order.client.cedula_rif %}
-        <p><strong>Cédula/RIF:</strong> {{ order.client.cedula_rif }}</p>
+        <div class="info-item">
+            <strong>Cédula/RIF:</strong>
+            <span> {{ order.client.cedula_rif }}</span>
+        </div>
         {% endif %}
         {% if order.client.address %}
-        <p><strong>Dirección:</strong> {{ order.client.address }}</p>
+        <div class="info-item">
+            <strong>Dirección:</strong>
+            <span> {{ order.client.address }}</span>
+        </div>
         {% endif %}
         {% if order.client.phone %}
-        <p><strong>Teléfono:</strong> {{ order.client.phone }}</p>
+        <div class="info-item">
+            <strong>Teléfono:</strong>
+            <span> {{ order.client.phone }}</span>
+        </div>
         {% endif %}
     </div>
 
     <!-- Tabla de productos -->
     <table>
         <thead>
-            <tr>
-                <th>Cant.</th>
-                <th style="width: 50%;">Descripción</th>
-                <th class="text-center">Precio/U</th>
-                <th class="text-center">Total</th>
+            <tr style="border-top: 1px dashed #000; border-bottom: 1px dashed #000;">
+                <th style="width: 15%;">Cant.</th>
+                <th style="width: 55%;">Desc.</th>
+                <th style="text-align: right; width: 30%;">Total</th>
             </tr>
         </thead>
         <tbody>
             {% for item in order.items %}
             <tr>
-                <td>{{ item.quantity }}</td>
+                <td>{{ item.quantity }}x</td>
                 <td>{{ item.product.name }}</td>
-                <td class="text-center">{{ "%.2f" % item.price }}</td>
-
+                <td style="text-align: right;">{{ "%.2f"|format(item.price * item.quantity) }}</td>
             </tr>
-            <tr>
-                <td class="text-center" colspan="4" style="text-align: right; font-weight: bold; padding-left: 10px;">
-                    Bs. {{ "%.2f" % (item.price * item.quantity) }}
-                </td>
+            <tr style="font-size: 12px;">
+                <td></td>
+                <td colspan="2" style="padding-left: 5px;">@ {{ "%.2f"|format(item.price) }} c/u</td>
             </tr>
             {% endfor %}
-            
         </tbody>
     </table>
 
+    <!-- Información de Pago -->
+    <div class="info" style="border-top: 1px dashed #000; padding-top: 2mm; margin-top: 2mm;">
+        <p style="text-align: center; font-weight: bold;">FORMA(S) DE PAGO</p>
+        {% for payment in order.payments %}
+        <div class="info-item">
+            <span>{{ payment.method.replace('transferencia', 'Transf.').replace('punto_de_venta', 'Pto. Venta').replace('efectivo', 'Efect.').replace('_', ' ')|title }}:</span>
+            {% if payment.currency_paid == 'USD' %}
+                <span>${{ "%.2f"|format(payment.amount_paid) }}</span>
+            {% elif payment.currency_paid == 'EUR' %}
+                <span>€{{ "%.2f"|format(payment.amount_paid) }}</span>
+            {% else %}
+                <span>Bs. {{ "%.2f"|format(payment.amount_paid) }}</span>
+            {% endif %}
+        </div>
+        {% if payment.reference %}
+        <div class="info-item" style="font-size: 10px;">
+            <span>Ref:</span>
+            <span>{{ payment.reference }}</span>
+        </div>
+        {% endif %}
+        {% endfor %}
+        {% if change > 0.01 %}
+        <div class="info-item">
+            <span>Total Pag.:</span>
+            <span>Bs. {{ "%.2f"|format(subtotal + iva + change) }}</span>
+        </div>
+        <div class="info-item">
+            <span>Cambio:</span>
+            <span>Bs. {{ "%.2f"|format(change) }}</span>
+        </div>
+        {% endif %}
+    </div>
+
     <!-- Totales -->
     <div class="totals">
-        <div class="total-item">
+        <div class="total-item" style="display: none;">
             <span>Subtotal:</span>
-            <span>Bs.{{ "%.2f" % subtotal }}</span>
+            <span>Bs. {{ "%.2f"|format(subtotal) }}</span>
         </div>
-        <div class="total-item">
+        <div class="total-item" style="display: none;">
             <span>IVA (16%):</span>
-            <span>Bs.{{ "%.2f" % iva }}</span>
+            <span>Bs. {{ "%.2f"|format(iva) }}</span>
         </div>
         <div class="total-item grand-total">
             <span>Total:</span>
-            <span>Bs.{{ "%.2f" % (subtotal + iva) }}</span>
+            <span>Bs. {{ "%.2f"|format(subtotal + iva) }}</span>
         </div>
+        
     </div>
 
     <div class="footer">
         <p>¡Gracias por su compra!</p>
+        {% if barcode_base64 %}
+        <div style="text-align: center; margin-top: 5mm;">
+            <img src="data:image/png;base64,{{ barcode_base64 }}" alt="Barcode for order {{ order.id|order_id_format }}" style="max-width: 100%; height: auto;">
+        </div>
+        {% endif %}
     </div>
 
     <div class="no-print" style="text-align: center; margin-top: 15mm;">
         <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px;">Imprimir Nota de Entrega</button>
     </div>
+
+    <script>
+        window.onload = function() {
+            // Se dispara la impresión tan pronto como la página carga.
+            window.print();
+        };
+
+        // Este evento se dispara después de que el diálogo de impresión se cierra (ya sea que el usuario imprima o cancele).
+        window.onafterprint = function() {
+            // Redirigir al usuario a la página para crear una nueva orden.
+            window.location.href = "{{ url_for('main.new_order') }}";
+        };
+    </script>
 </body>
 </html>

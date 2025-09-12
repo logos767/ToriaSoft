@@ -1,89 +1,150 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto p-4">
+<div class="container mx-auto p-4 max-w-full">
     <div class="flex items-center justify-between mb-6">
-        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-boxes mr-2"></i>Inventario</h1>
-        <div class="flex items-center space-x-2">
-            <a href="{{ url_for('main.new_product') }}" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
-                <i class="fas fa-plus mr-2"></i>Nuevo Producto
-            </a>
-            {% if user_role == 'administrador' %}
-            <a href="{{ url_for('main.cargar_excel') }}" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors">
-                <i class="fas fa-file-excel mr-2"></i>Cargar Excel
-            </a>
-            {% endif %}
+        <div class="flex items-center space-x-4">
+            <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-boxes mr-2"></i>{{ title }}</h1>
+            <!-- Botones de cambio de vista -->
+            <div class="flex items-center space-x-1">
+                <button id="list-view-btn" class="p-2 rounded-lg bg-blue-500 text-white" title="Vista de Lista">
+                    <i class="fas fa-list"></i>
+                </button>
+                <button id="grid-view-btn" class="p-2 rounded-lg bg-gray-300 text-gray-700" title="Vista de Cuadrícula">
+                    <i class="fas fa-th-large"></i>
+                </button>
+            </div>
+        </div>
+        {% if user_role == 'administrador' %}
+        <a href="{{ url_for('main.new_product') }}" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors">
+            <i class="fas fa-plus mr-2"></i>Nuevo Producto
+        </a>
+        {% endif %}
+    </div>
+
+    <!-- Filtros y Búsqueda -->
+    <div class="bg-white p-4 rounded-lg shadow-md mb-6">
+        <form method="GET" action="{{ url_for('main.inventory_list') }}">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <!-- Campo de Búsqueda -->
+                <div class="md:col-span-2">
+                    <label for="search" class="block text-sm font-medium text-gray-700">Buscar</label>
+                    <input type="text" name="search" id="search" value="{{ filters.search or '' }}" placeholder="Código, barra, nombre, marca, talla..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                </div>
+
+                <!-- Filtro por Grupo -->
+                <div>
+                    <label for="group" class="block text-sm font-medium text-gray-700">Grupo</label>
+                    <select name="group" id="group" onchange="this.form.submit()" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        <option value="">Todos los Grupos</option>
+                        {% for group in product_groups %}
+                        <option value="{{ group }}" {% if filters.group == group %}selected{% endif %}>{{ group }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Botones -->
+                <div class="flex items-end space-x-2">
+                    <button type="submit" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors w-full text-center">
+                        <i class="fas fa-filter mr-2"></i>Filtrar
+                    </button>
+                    <a href="{{ url_for('main.inventory_list') }}" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors w-full text-center">
+                        <i class="fas fa-eraser mr-2"></i>Limpiar
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Vista de Lista (Tabla) -->
+    <div id="list-view-container">
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre / Marca</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Códigos</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grupo</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Existencia</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Costo ({{ currency_symbol }})</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Precio ({{ currency_symbol }})</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for product in products %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">{{ product.name }}</div>
+                                <div class="text-sm text-gray-500">{{ product.marca or '' }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-900"><strong>Barra:</strong> {{ product.barcode }}</div>
+                                <div class="text-sm text-gray-500"><strong>Prod:</strong> {{ product.codigo_producto or 'N/A' }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.grupo or '' }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-bold {% if product.stock <= 0 %}text-red-500{% elif product.stock < 10 %}text-yellow-500{% else %}text-green-500{% endif %}">
+                                {{ product.stock }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-500">
+                                {% if user_role == 'administrador' %}
+                                    {{ currency_symbol }}{{ "%.2f"|format(product.cost_usd) }}
+                                {% else %}
+                                    <span class="text-gray-400">***</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900 font-semibold">{{ currency_symbol }}{{ "%.2f"|format(product.price_usd) }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                                <a href="{{ url_for('main.product_detail', product_id=product.id) }}" title="Ver Detalle" class="text-indigo-600 hover:text-indigo-900 mr-3"><i class="fas fa-eye"></i></a>
+                                {% if user_role == 'administrador' %}
+                                    <a href="{{ url_for('main.edit_product_cost', product_id=product.id) }}" title="Editar Costos" class="text-blue-600 hover:text-blue-900 mr-3"><i class="fas fa-edit"></i></a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="px-6 py-4 text-center text-gray-500">No se encontraron productos que coincidan con los filtros.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
-    <!-- Pestañas de vista -->
-    <div class="flex border-b border-gray-300 mb-4">
-        <a href="#" id="list-tab" class="py-2 px-4 font-semibold border-b-2 text-blue-600 border-blue-500">
-            <i class="fas fa-list-ul mr-1"></i> Lista
-        </a>
-        <a href="#" id="grid-tab" class="py-2 px-4 text-gray-500 font-semibold hover:text-gray-700 hover:border-b-2 hover:border-gray-300">
-            <i class="fas fa-th-large mr-1"></i> Cuadrícula
-        </a>
-    </div>
-
-    <!-- Contenido de la vista de lista -->
-    <div id="list-view" class="bg-white p-6 rounded-lg shadow-md">
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Existencias</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Costo (USD)</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Precio (Bs)</th>
-                        <th class="relative px-6 py-3"><span class="sr-only">Acciones</span></th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    {% for product in products %}
-                    <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ product.name }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.barcode }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.stock }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${{ "%.2f"|format(product.cost_usd) }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">Bs. {{ "%.2f"|format(product.price_usd * current_rate) }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <a href="{{ url_for('main.product_detail', product_id=product.id) }}" class="text-indigo-600 hover:text-indigo-900">Detalles</a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- Contenido de la vista de cuadrícula (oculto por defecto) -->
-    <div id="grid-view" class="hidden">
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+    <!-- Vista de Cuadrícula (Grid) -->
+    <div id="grid-view-container" class="hidden">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
             {% for product in products %}
-            <div class="bg-white rounded-lg shadow-md overflow-hidden transform hover:scale-105 transition-transform duration-300">
-                <div class="p-4">
-                    <h3 class="text-lg font-bold text-gray-800 truncate">{{ product.name }}</h3>
-                    <p class="text-sm text-gray-500 mb-2">{{ product.barcode }}</p>
+            <div class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 flex flex-col">
+                <div class="p-4 flex-grow">
+                    <h3 class="text-lg font-bold text-gray-800 truncate" title="{{ product.name }}">{{ product.name }}</h3>
+                    <p class="text-sm text-gray-500 mb-2">{{ product.marca or 'Sin marca' }}</p>
+                    <p class="text-xs text-gray-400">Cód. Barra: {{ product.barcode }}</p>
+                    <p class="text-xs text-gray-400 mb-3">Grupo: {{ product.grupo or 'N/A' }}</p>
+
                     <div class="flex justify-between items-center mb-3">
-                        <span class="text-sm text-gray-600">Existencias:</span>
-                        <span class="font-semibold text-gray-800">{{ product.stock }}</span>
+                        <span class="text-sm font-semibold">Existencia:</span>
+                        <span class="px-2 py-1 rounded-full text-xs font-bold {% if product.stock <= 0 %}bg-red-100 text-red-700{% elif product.stock < 10 %}bg-yellow-100 text-yellow-700{% else %}bg-green-100 text-green-700{% endif %}">
+                            {{ product.stock }}
+                        </span>
                     </div>
-                    <div class="border-t border-gray-200 pt-3">
-                        <div class="flex justify-between items-center mb-2">
-                            <span class="text-sm text-gray-600">Costo:</span>
-                            <span class="font-semibold text-green-600">${{ "%.2f"|format(product.cost_usd) }}</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-sm text-gray-600">Precio:</span>
-                            <span class="font-bold text-blue-600">Bs. {{ "%.2f"|format(product.price_usd * current_rate) }}</span>
-                        </div>
+
+                    <div class="text-right">
+                        <p class="text-xl font-bold text-gray-800">{{ currency_symbol }}{{ "%.2f"|format(product.price_usd) }}</p>
                     </div>
                 </div>
-                <a href="{{ url_for('main.product_detail', product_id=product.id) }}" class="block bg-gray-100 text-center py-2 text-sm font-semibold text-indigo-600 hover:bg-gray-200 transition-colors">
-                    Ver Detalles
-                </a>
+                <div class="bg-gray-50 p-3 border-t flex justify-around items-center">
+                    <a href="{{ url_for('main.product_detail', product_id=product.id) }}" title="Ver Detalle" class="text-indigo-600 hover:text-indigo-900"><i class="fas fa-eye"></i></a>
+                    {% if user_role == 'administrador' %}
+                        <a href="{{ url_for('main.edit_product_cost', product_id=product.id) }}" title="Editar Costos" class="text-blue-600 hover:text-blue-900"><i class="fas fa-edit"></i></a>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="col-span-full text-center text-gray-500 py-10">
+                No se encontraron productos que coincidan con los filtros.
             </div>
             {% endfor %}
         </div>
@@ -91,27 +152,51 @@
 </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const listTab = document.getElementById('list-tab');
-        const gridTab = document.getElementById('grid-tab');
-        const listView = document.getElementById('list-view');
-        const gridView = document.getElementById('grid-view');
+document.addEventListener('DOMContentLoaded', function () {
+    const listViewBtn = document.getElementById('list-view-btn');
+    const gridViewBtn = document.getElementById('grid-view-btn');
+    const listContainer = document.getElementById('list-view-container');
+    const gridContainer = document.getElementById('grid-view-container');
 
-        listTab.addEventListener('click', function (e) {
-            e.preventDefault();
-            listView.classList.remove('hidden');
-            gridView.classList.add('hidden');
-            listTab.classList.add('text-blue-600', 'border-blue-500');
-            gridTab.classList.remove('text-blue-600', 'border-blue-500');
-        });
+    const activeBtnClasses = ['bg-blue-500', 'text-white'];
+    const inactiveBtnClasses = ['bg-gray-300', 'text-gray-700'];
 
-        gridTab.addEventListener('click', function (e) {
-            e.preventDefault();
-            gridView.classList.remove('hidden');
-            listView.classList.add('hidden');
-            gridTab.classList.add('text-blue-600', 'border-blue-500');
-            listTab.classList.remove('text-blue-600', 'border-blue-500');
-        });
-    });
+    function showListView() {
+        listContainer.classList.remove('hidden');
+        gridContainer.classList.add('hidden');
+        
+        listViewBtn.classList.add(...activeBtnClasses);
+        listViewBtn.classList.remove(...inactiveBtnClasses);
+        
+        gridViewBtn.classList.add(...inactiveBtnClasses);
+        gridViewBtn.classList.remove(...activeBtnClasses);
+
+        localStorage.setItem('inventoryView', 'list');
+    }
+
+    function showGridView() {
+        gridContainer.classList.remove('hidden');
+        listContainer.classList.add('hidden');
+
+        gridViewBtn.classList.add(...activeBtnClasses);
+        gridViewBtn.classList.remove(...inactiveBtnClasses);
+
+        listViewBtn.classList.add(...inactiveBtnClasses);
+        listViewBtn.classList.remove(...activeBtnClasses);
+
+        localStorage.setItem('inventoryView', 'grid');
+    }
+
+    listViewBtn.addEventListener('click', showListView);
+    gridViewBtn.addEventListener('click', showGridView);
+
+    // Cargar la vista preferida al cargar la página
+    const preferredView = localStorage.getItem('inventoryView');
+    if (preferredView === 'grid') {
+        showGridView();
+    } else {
+        showListView(); // Por defecto, la vista de lista
+    }
+});
 </script>
 {% endblock %}

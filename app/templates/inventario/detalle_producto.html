@@ -38,11 +38,15 @@
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-gray-700">
                 <div>
-                    <p class="font-semibold">Costo:</p>
-                    <p class="font-bold text-green-700">${{ "%.2f"|format(product.cost_usd) }}</p>
+                    <p class="font-semibold">Costo ({{ currency_symbol }}):</p>
+                    <p class="font-bold text-green-700">{{ currency_symbol }}{{ "%.2f"|format(product.cost_usd) }}</p>
                 </div>
                 <div>
-                    <p class="font-semibold">Precio:</p>
+                    <p class="font-semibold">Precio ({{ currency_symbol }}):</p>
+                    <p class="font-bold text-blue-700">{{ currency_symbol }}{{ "%.2f"|format(product.price_usd) }}</p>
+                </div>
+                <div>
+                    <p class="font-semibold">Precio (Bs.):</p>
                     <p class="font-bold text-blue-700">Bs. {{ "%.2f"|format(product.price_usd * current_rate) }}</p>
                 </div>
                 <div>

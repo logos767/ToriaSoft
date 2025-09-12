@@ -6,20 +6,23 @@ from flask_login import login_user, current_user, logout_user, login_required
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, extract, or_
 import openpyxl
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from flask import Response
 import time
 import io
-
+import json
+import base64
 # Import extensions from the new extensions file
 from .extensions import db, bcrypt, socketio
-from .models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve
+from .models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, CashBox, Payment, ManualFinancialMovement
 
 # ReportLab imports for PDF generation
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.graphics.barcode import code128
+from reportlab.graphics import renderPM
+from reportlab.graphics.shapes import Drawing
 
 def get_main_calculation_currency_info():
     """Returns the main calculation currency and its symbol."""
@@ -175,14 +178,55 @@ def inject_notifications():
         return dict(unread_notifications=[], unread_notification_count=0)
 
 @routes_blueprint.context_processor
-def inject_current_rate():
-    """Injects the current exchange rate and currency info into the context for all templates."""
-    currency, symbol = get_main_calculation_currency_info()
-    rate = get_cached_exchange_rate(currency) or 0.0
+def inject_pending_withdrawals_count():
+    if not current_user.is_authenticated or current_user.role != 'administrador':
+        return dict(pending_withdrawals_count=0)
     
+    try:
+        count = ManualFinancialMovement.query.filter_by(status='Pendiente', movement_type='Egreso').count()
+        return dict(pending_withdrawals_count=count)
+    except Exception as e:
+        current_app.logger.error(f"Error al obtener el conteo de retiros pendientes: {e}")
+        db.session.rollback()
+        return dict(pending_withdrawals_count=0)
+
+
+@routes_blueprint.route('/set-display-currency', methods=['POST'])
+def set_display_currency():
+    """Sets the display currency in the user's session."""
+    currency = request.form.get('currency')
+    if currency in ['USD', 'EUR']:
+        session['display_currency'] = currency
+        flash(f'Moneda de cálculo cambiada a {currency}.', 'success')
+    
+    referrer = request.referrer
+    return redirect(referrer) if referrer else redirect(url_for('main.dashboard'))
+
+@routes_blueprint.context_processor
+def inject_current_rate():
+    """
+    Injects the display currency, its symbol, and its exchange rate into the context for all templates.
+    The currency is determined by session preference, falling back to company settings.
+    """
+    # 1. Determine the currency to use for display/calculation.
+    # Priority: Session > Company Setting > Default 'USD'
+    company_info = CompanyInfo.query.first()
+    default_currency = company_info.calculation_currency if company_info and company_info.calculation_currency else 'USD'
+    
+    # The session stores the user's preference for this session.
+    display_currency = session.get('display_currency', default_currency)
+
+    # 2. Get the corresponding rate and symbol.
+    rate = get_cached_exchange_rate(display_currency) or 0.0
+    symbol = '€' if display_currency == 'EUR' else '$'
+    
+    # 3. Inject into context. The templates will use these variables.
+    # 'calculation_currency' will be either 'USD' or 'EUR'.
+    # 'current_rate' will be the rate for that currency to VES.
+    # 'currency_symbol' will be '$' or '€'.
     return dict(
         current_rate=rate, 
-        calculation_currency=currency, 
+        calculation_currency=display_currency, 
         currency_symbol=symbol
     )
 
@@ -210,7 +254,10 @@ def handle_connect():
 @routes_blueprint.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('main.dashboard'))
+        if current_user.role == 'administrador':
+            return redirect(url_for('main.dashboard'))
+        else:
+            return redirect(url_for('main.new_order'))
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -218,7 +265,11 @@ def login():
         if user and bcrypt.check_password_hash(user.password, password):
             login_user(user)
             next_page = request.args.get('next')
-            return redirect(next_page) if next_page else redirect(url_for('main.dashboard'))
+            if next_page:
+                return redirect(next_page)
+            if user.role == 'administrador':
+                return redirect(url_for('main.dashboard'))
+            return redirect(url_for('main.new_order'))
         else:
             flash('Inicio de sesión fallido. Por favor, verifica tu nombre de usuario y contraseña.', 'danger')
     return render_template('login.html', title='Iniciar Sesión')
@@ -235,6 +286,9 @@ def logout():
 @login_required
 def dashboard():
     """Muestra la página principal con información de dashboard."""
+    if current_user.role != 'administrador':
+        return redirect(url_for('main.new_order'))
+
     total_products = Product.query.count()
     total_stock = db.session.query(db.func.sum(Product.stock)).scalar() or 0
     total_clients = Client.query.count()
@@ -255,24 +309,63 @@ def dashboard():
 @routes_blueprint.route('/inventario/lista')
 @login_required
 def inventory_list():
-    products = Product.query.all()
+    search_term = request.args.get('search', '').strip()
+    group_filter = request.args.get('group', '').strip()
+
+    query = Product.query
+
+    if group_filter:
+        query = query.filter(Product.grupo == group_filter)
+
+    if search_term:
+        search_pattern = f'%{search_term}%'
+        query = query.filter(or_(
+            Product.name.ilike(search_pattern),
+            Product.barcode.ilike(search_pattern),
+            Product.codigo_producto.ilike(search_pattern),
+            Product.marca.ilike(search_pattern),
+            Product.size.ilike(search_pattern)
+        ))
+
+    products = query.order_by(Product.name).all()
+    
+    # Obtener todos los grupos únicos para el menú desplegable de filtro
+    groups = db.session.query(Product.grupo).distinct().order_by(Product.grupo).all()
+    product_groups = [g[0] for g in groups if g[0]]
+
     user_role = current_user.role if current_user.is_authenticated else 'invitado'
     return render_template('inventario/lista.html',
                            title='Lista de Inventario',
                            products=products,
-                           user_role=user_role)
+                           user_role=user_role,
+                           product_groups=product_groups,
+                           filters={'search': search_term, 'group': group_filter})
 
 @routes_blueprint.route('/inventario/codigos_barra', methods=['GET'])
 @login_required
 def codigos_barra():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
+        return redirect(url_for('main.new_order'))
+
     products = Product.query.all()
-    return render_template('inventario/codigos_barra.html', title='Imprimir Códigos de Barra', products=products)
+    groups = db.session.query(Product.grupo).distinct().order_by(Product.grupo).all()
+    product_groups = [g[0] for g in groups if g[0]]
+    return render_template('inventario/codigos_barra.html', title='Imprimir Códigos de Barra', products=products, product_groups=product_groups)
 
 @routes_blueprint.route('/inventario/codigos_barra_api', methods=['GET']) # type: ignore
 @login_required
 def codigos_barra_api():
+    if current_user.role != 'administrador':
+        return jsonify(error='Acceso denegado'), 403
+
     search_term = request.args.get('search', '').lower()
+    group_filter = request.args.get('group', '').strip()
     query = Product.query
+
+    if group_filter:
+        query = query.filter(Product.grupo == group_filter)
+
     if search_term:
         query = query.filter(or_(
             Product.name.ilike(f'%{search_term}%'),
@@ -419,14 +512,13 @@ def generate_barcode_pdf_reportlab(products, company_info, currency_symbol):
 @routes_blueprint.route('/inventario/imprimir_codigos_barra', methods=['POST'])
 @login_required
 def imprimir_codigos_barra():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
+        return redirect(url_for('main.new_order'))
+
     product_ids = request.form.getlist('product_ids')
     if not product_ids:
         flash('No se seleccionó ningún producto para imprimir.', 'warning')
-        return redirect(url_for('main.codigos_barra'))
-
-    # Limitar a máximo 100 productos para evitar timeouts
-    if len(product_ids) > 100:
-        flash('No se pueden imprimir más de 100 productos a la vez. Por favor, seleccione menos productos.', 'warning')
         return redirect(url_for('main.codigos_barra'))
 
     products_to_print = Product.query.filter(Product.id.in_(product_ids)).all()
@@ -503,6 +595,10 @@ def product_detail(product_id):
 @routes_blueprint.route('/inventario/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_product():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
+        return redirect(url_for('main.new_order'))
+
     if request.method == 'POST':
         try:
             name = request.form.get('name')
@@ -563,12 +659,20 @@ def new_client():
 @routes_blueprint.route('/proveedores/lista')
 @login_required
 def provider_list():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
+        return redirect(url_for('main.new_order'))
+
     providers = Provider.query.all()
     return render_template('proveedores/lista.html', title='Lista de Proveedores', providers=providers)
 
 @routes_blueprint.route('/proveedores/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_provider():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
+        return redirect(url_for('main.new_order'))
+
     if request.method == 'POST':
         try:
             name = request.form.get('name')
@@ -588,18 +692,30 @@ def new_provider():
 @routes_blueprint.route('/compras/lista')
 @login_required
 def purchase_list():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
+        return redirect(url_for('main.new_order'))
+
     purchases = Purchase.query.all()
     return render_template('compras/lista.html', title='Lista de Compras', purchases=purchases)
 
 @routes_blueprint.route('/compras/detalle/<int:purchase_id>')
 @login_required
 def purchase_detail(purchase_id):
+    if current_user.role != 'administrador':
+        flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
+        return redirect(url_for('main.new_order'))
+
     purchase = Purchase.query.get_or_404(purchase_id)
     return render_template('compras/detalle_compra.html', title=f'Compra #{purchase.id}', purchase=purchase)
 
 @routes_blueprint.route('/compras/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_purchase():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
+        return redirect(url_for('main.new_order'))
+
     providers = Provider.query.all()
     products = Product.query.all()
     calculation_currency, _ = get_main_calculation_currency_info()
@@ -654,12 +770,20 @@ def new_purchase():
 @routes_blueprint.route('/recepciones/lista')
 @login_required
 def reception_list():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
+        return redirect(url_for('main.new_order'))
+
     receptions = Reception.query.all()
     return render_template('recepciones/lista.html', title='Lista de Recepciones', receptions=receptions)
 
 @routes_blueprint.route('/recepciones/nueva/<int:purchase_id>', methods=['GET', 'POST'])
 @login_required
 def new_reception(purchase_id):
+    if current_user.role != 'administrador':
+        flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
+        return redirect(url_for('main.new_order'))
+
     purchase = Purchase.query.get_or_404(purchase_id)
     if request.method == 'POST':
         try:
@@ -709,9 +833,9 @@ def order_list():
 def order_detail(order_id):
     order = Order.query.get_or_404(order_id)
     company_info = CompanyInfo.query.first()
-    iva_rate = 0.16
+    # IVA desactivado
     subtotal = sum(item.price * item.quantity for item in order.items)
-    iva = iva_rate * subtotal
+    iva = 0
     return render_template('ordenes/detalle_orden.html',
                            title=f'Orden #{order.id}',
                            order=order,
@@ -725,6 +849,10 @@ def new_order():
     clients = Client.query.all()
     products = Product.query.all()
     calculation_currency, _ = get_main_calculation_currency_info()
+    banks = Bank.query.order_by(Bank.name).all()
+    points_of_sale = PointOfSale.query.order_by(PointOfSale.name).all()
+    cash_boxes = CashBox.query.order_by(CashBox.name).all()
+
     current_rate = get_cached_exchange_rate(calculation_currency)
     
     if current_rate is None:
@@ -736,8 +864,21 @@ def new_order():
         product_ids = request.form.getlist('product_id[]')
         quantities = request.form.getlist('quantity[]')
         prices_usd = request.form.getlist('price_usd[]')
+        payments_data_json = request.form.get('payments_data')
+        payments_data = json.loads(payments_data_json) if payments_data_json else []
         
         try:
+            # Validar que el total pagado cubra el total de la orden
+            order_total_ves = 0
+            for q, p_usd in zip(quantities, prices_usd):
+                order_total_ves += (int(q) * float(p_usd) * current_rate)
+            # IVA desactivado. La línea de cálculo de IVA se ha eliminado.
+
+            paid_total_ves = sum(p['amount_ves_equivalent'] for p in payments_data)
+
+            if paid_total_ves < order_total_ves - 0.01: # Permitir pequeñas diferencias de redondeo
+                raise ValueError(f"El monto pagado (Bs. {paid_total_ves:.2f}) es menor que el total de la orden (Bs. {order_total_ves:.2f}).")
+
             new_order = Order(client_id=client_id, status='Pendiente', total_amount=0)
             db.session.add(new_order)
             db.session.flush()
@@ -755,12 +896,14 @@ def new_order():
                     raise ValueError(f'Stock insuficiente para el producto "{product.name}". Stock disponible: {product.stock}, Cantidad solicitada: {quantity}. Por favor, ajuste la cantidad o contacte al administrador para reponer inventario.')
 
                 price_ves = float(p_usd) * current_rate
+                cost_ves = product.cost_usd * current_rate if product.cost_usd else 0
                 
                 item = OrderItem(
                     order_id=new_order.id,
                     product_id=p_id,
                     quantity=quantity,
-                    price=price_ves
+                    price=price_ves,
+                    cost_at_sale_ves=cost_ves
                 )
                 db.session.add(item)
                 
@@ -778,22 +921,62 @@ def new_order():
                 
                 total_amount += price_ves * quantity
 
-            new_order.total_amount = total_amount
+            new_order.total_amount = total_amount # Guardar el total sin IVA
             new_order.status = 'Completada'
 
-            notification_message = f"Nueva Nota de Entrega #{new_order.id} creada."
+            # Procesar pagos
+            for payment_info in payments_data:
+                payment = Payment(
+                    order_id=new_order.id,
+                    amount_paid=payment_info['amount_paid'],
+                    currency_paid=payment_info['currency_paid'],
+                    amount_ves_equivalent=payment_info['amount_ves_equivalent'],
+                    method=payment_info['method'],
+                    reference=payment_info.get('reference'),
+                    bank_id=payment_info.get('bank_id'),
+                    pos_id=payment_info.get('pos_id'),
+                    cash_box_id=payment_info.get('cash_box_id')
+                )
+                db.session.add(payment)
+
+                # Actualizar saldos
+                if payment.bank_id:
+                    bank = Bank.query.get(payment.bank_id)
+                    if bank: bank.balance += payment.amount_ves_equivalent
+                elif payment.pos_id:
+                    pos = PointOfSale.query.get(payment.pos_id)
+                    if pos and pos.bank: pos.bank.balance += payment.amount_ves_equivalent
+                elif payment.cash_box_id:
+                    cash_box = CashBox.query.get(payment.cash_box_id)
+                    if cash_box:
+                        if payment.currency_paid == 'VES':
+                            cash_box.balance_ves += payment.amount_paid
+                        elif payment.currency_paid == 'USD':
+                            cash_box.balance_usd += payment.amount_paid
+
+            notification_message = f"Nueva Nota de Entrega #{new_order.id:09d} creada."
             notification_link = url_for('main.order_detail', order_id=new_order.id)
             create_notification_for_admins(notification_message, notification_link)
 
             db.session.commit()
-            flash('Orden de venta creada exitosamente!', 'success')
-            return redirect(url_for('main.order_list'))
+            flash('Orden de venta creada exitosamente! Preparando para imprimir...', 'success')
+            return redirect(url_for('main.print_delivery_note', order_id=new_order.id))
         except (ValueError, IntegrityError) as e:
             db.session.rollback()
             flash(f'Error al crear la orden: {str(e)}', 'danger')
             return redirect(url_for('main.new_order'))
 
-    return render_template('ordenes/nuevo.html', title='Nueva Orden de Venta', clients=clients, products=products)
+    # Obtener la última orden creada para ofrecer la opción de reimprimir
+    last_order = Order.query.order_by(Order.id.desc()).first()
+
+    return render_template('ordenes/nuevo.html', 
+                           title='Nueva Orden de Venta', 
+                           clients=clients, 
+                           products=products, 
+                           banks=banks, 
+                           points_of_sale=points_of_sale, 
+                           cash_boxes=cash_boxes,
+                           last_order=last_order)
 
 
 # Nueva ruta para movimientos de inventario
@@ -838,106 +1021,148 @@ def movement_list():
 @routes_blueprint.route('/estadisticas')
 @login_required
 def estadisticas():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
+        return redirect(url_for('main.new_order'))
+
+    # --- Date Filtering ---
+    today = get_current_time_ve().date()
+    period = request.args.get('period', 'monthly') # 'monthly', 'daily', 'custom'
+    
+    if period == 'daily':
+        start_date_str = request.args.get('date', today.strftime('%Y-%m-%d'))
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            end_date = start_date
+        except (ValueError, TypeError):
+            start_date = today
+            end_date = today
+        view_title = f"Estadísticas para {start_date.strftime('%d/%m/%Y')}"
+
+    elif period == 'custom':
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else date(today.year, 1, 1)
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date() if end_date_str else today
+        except (ValueError, TypeError):
+            start_date = date(today.year, 1, 1)
+            end_date = today
+        view_title = f"Estadísticas de {start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')}"
+
+    else: # Default to 'monthly' for the current year
+        start_date = datetime(today.year, 1, 1).date()
+        end_date = today
+        view_title = f"Estadísticas Mensuales para el Año {today.year}"
+
+    # --- Data Queries ---
+    order_items_query = db.session.query(OrderItem).join(Order).filter(
+        Order.date_created >= datetime.combine(start_date, datetime.min.time()),
+        Order.date_created <= datetime.combine(end_date, datetime.max.time())
+    )
+
+    cost_structure = CostStructure.query.first()
+    if not cost_structure:
+        flash('Por favor, configure la estructura de costos para ver estadísticas precisas.', 'warning')
+        cost_structure = CostStructure()
+
+    # --- Calculations ---
+    stats_data = {}
+
+    def get_period_key(dt):
+        if period == 'daily' or (period == 'custom' and (end_date - start_date).days < 32):
+            return dt.strftime('%Y-%m-%d')
+        return dt.strftime('%Y-%m')
+
+    for item in order_items_query.all():
+        period_key = get_period_key(item.order.date_created)
+        
+        if period_key not in stats_data:
+            stats_data[period_key] = {'sales': 0, 'cogs': 0, 'variable_expenses': 0}
+
+        item_revenue = item.quantity * item.price
+        
+        item_cogs = 0
+        if item.cost_at_sale_ves is not None:
+            item_cogs = item.quantity * item.cost_at_sale_ves
+        elif item.product and item.product.price_usd and item.product.price_usd > 0:
+            approx_rate = item.price / item.product.price_usd
+            item_cogs = item.quantity * (item.product.cost_usd or 0) * approx_rate
+        
+        var_sales_exp_pct = item.product.variable_selling_expense_percent if item.product and item.product.variable_selling_expense_percent > 0 else (cost_structure.default_sales_commission_percent or 0)
+        var_marketing_pct = item.product.variable_marketing_percent if item.product and item.product.variable_marketing_percent > 0 else (cost_structure.default_marketing_percent or 0)
+        item_variable_expense = item_revenue * (var_sales_exp_pct + var_marketing_pct)
+
+        stats_data[period_key]['sales'] += item_revenue
+        stats_data[period_key]['cogs'] += item_cogs
+        stats_data[period_key]['variable_expenses'] += item_variable_expense
+
+    current_rate_usd = get_cached_exchange_rate('USD') or 0
+    monthly_fixed_costs_usd = (cost_structure.monthly_rent or 0) + (cost_structure.monthly_utilities or 0) + (cost_structure.monthly_fixed_taxes or 0)
+    monthly_fixed_costs_ves = monthly_fixed_costs_usd * current_rate_usd
+    daily_fixed_costs_ves = monthly_fixed_costs_ves / 30.44
+
+    total_summary = {'sales': 0, 'cogs': 0, 'variable_expenses': 0, 'fixed_expenses': 0, 'gross_profit': 0, 'net_profit': 0}
+    sorted_keys = sorted(stats_data.keys())
+
+    for key in sorted_keys:
+        data = stats_data[key]
+        data['gross_profit'] = data['sales'] - data['cogs']
+        
+        is_daily_view = period == 'daily' or (period == 'custom' and (end_date - start_date).days < 32)
+        data['fixed_expenses'] = daily_fixed_costs_ves if is_daily_view else monthly_fixed_costs_ves
+        
+        data['net_profit'] = data['gross_profit'] - data['variable_expenses'] - data['fixed_expenses']
+
+        for k in total_summary:
+            if k in data: total_summary[k] += data[k]
+
+    # --- Chart Data Preparation ---
+    chart_labels = []
+    chart_sales, chart_cogs, chart_net_profit = [], [], []
+    month_names_short = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+    for key in sorted_keys:
+        # Check if the key is in 'YYYY-MM' format or 'YYYY-MM-DD' format
+        if len(key.split('-')) == 2: # It's a monthly key
+            chart_labels.append(month_names_short[int(key.split('-')[1]) - 1])
+        else: # It's a daily key
+            chart_labels.append(datetime.strptime(key, '%Y-%m-%d').strftime('%d/%m'))
+        
+        chart_sales.append(stats_data[key]['sales'])
+        chart_cogs.append(stats_data[key]['cogs'])
+        chart_net_profit.append(stats_data[key]['net_profit'])
+
+    profit_loss_chart_data = {'labels': chart_labels, 'sales': chart_sales, 'cogs': chart_cogs, 'net_profit': chart_net_profit}
+
+    # --- Other Stats (Top Products, Clients) ---
     top_products = db.session.query(
         Product.name,
-        func.sum(func.coalesce(OrderItem.quantity, 0)).label('total_sold')
-    ).outerjoin(OrderItem).group_by(Product.id).order_by(func.sum(func.coalesce(OrderItem.quantity, 0)).desc()).limit(5).all()
-
-    least_products = db.session.query(
-        Product.name,
         func.sum(OrderItem.quantity).label('total_sold')
-    ).join(OrderItem).group_by(Product.id).order_by('total_sold').limit(5).all()
+    ).join(OrderItem, OrderItem.product_id == Product.id).join(Order, Order.id == OrderItem.order_id).filter(
+        Order.date_created >= datetime.combine(start_date, datetime.min.time()),
+        Order.date_created <= datetime.combine(end_date, datetime.max.time())
+    ).group_by(Product.id).order_by(func.sum(OrderItem.quantity).desc()).limit(5).all()
 
     frequent_clients = db.session.query(
         Client.name,
         func.count(Order.id).label('total_orders')
-    ).outerjoin(Order).group_by(Client.id).order_by(func.count(Order.id).desc()).limit(5).all()
+    ).join(Order, Client.id == Order.client_id).filter(
+        Order.date_created >= datetime.combine(start_date, datetime.min.time()),
+        Order.date_created <= datetime.combine(end_date, datetime.max.time())
+    ).group_by(Client.id).order_by(func.count(Order.id).desc()).limit(5).all()
 
-    sales_by_month = db.session.query(
-        extract('month', Order.date_created).label('month'),
-        func.sum(Order.total_amount).label('total_sales')
-    ).filter(extract('year', Order.date_created) == extract('year', func.now())).group_by('month').order_by('month').all()
-
-    # Consultar costos mensuales desde compras
-    costs_by_month = db.session.query(
-        extract('month', Purchase.date_created).label('month'),
-        func.sum(Purchase.total_cost).label('total_costs')
-    ).filter(extract('year', Purchase.date_created) == extract('year', func.now())).group_by('month').order_by('month').all()
-
-    # Obtener estructura de costos para gastos
-    cost_structure = CostStructure.query.first()
-
-    top_products_data = {'labels': [p[0] for p in top_products], 'values': [p[1] for p in top_products]}
-    least_products_data = {'labels': [p[0] for p in least_products], 'values': [p[1] for p in least_products]}
+    top_products_data = {'labels': [p[0] for p in top_products], 'values': [float(p[1] or 0) for p in top_products]}
     frequent_clients_data = {'labels': [c[0] for c in frequent_clients], 'values': [c[1] for c in frequent_clients]}
-
-    months_names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-    monthly_sales = {int(s[0]): s[1] for s in sales_by_month}
-    monthly_costs = {int(c[0]): c[1] for c in costs_by_month}
-
-    sales_data_complete = {'labels': months_names, 'values': [monthly_sales.get(i + 1, 0) for i in range(12)]}
-
-    # Calcular ganancias y pérdidas mensuales
-    monthly_profits = []
-    total_profit = 0
-    total_loss = 0
-    months_with_profit = 0
-    months_with_loss = 0
-
-    for i in range(12):
-        month = i + 1
-        sales = monthly_sales.get(month, 0)
-        costs = monthly_costs.get(month, 0)
-
-        # Calcular gastos mensuales
-        expenses = 0
-        if cost_structure:
-            # Gastos fijos distribuidos mensualmente
-            fixed_expenses = (cost_structure.monthly_rent or 0) + \
-                           (cost_structure.monthly_utilities or 0) + \
-                           (cost_structure.monthly_fixed_taxes or 0)
-            monthly_fixed_expenses = fixed_expenses / 12
-
-            # Gastos variables basados en ventas
-            variable_expenses = sales * ((cost_structure.default_sales_commission_percent or 0) + \
-                                       (cost_structure.default_marketing_percent or 0))
-            expenses = monthly_fixed_expenses + variable_expenses
-
-        # Calcular ganancia/pérdida del mes
-        profit_loss = sales - costs - expenses
-        monthly_profits.append(profit_loss)
-
-        if profit_loss > 0:
-            total_profit += profit_loss
-            months_with_profit += 1
-        elif profit_loss < 0:
-            total_loss += abs(profit_loss)
-            months_with_loss += 1
-
-    # Preparar datos para el gráfico de ganancias/pérdidas
-    profit_loss_data = {
-        'labels': months_names,
-        'values': monthly_profits
-    }
-
-    # Resumen de ganancias y pérdidas
-    profit_loss_summary = {
-        'total_profit': total_profit,
-        'total_loss': total_loss,
-        'net_result': total_profit - total_loss,
-        'months_with_profit': months_with_profit,
-        'months_with_loss': months_with_loss,
-        'average_monthly_result': (total_profit - total_loss) / 12 if 12 > 0 else 0
-    }
     
     return render_template('estadisticas.html',
-                           title='Estadísticas Gerenciales',
-                           top_products=top_products_data,
-                           least_products=least_products_data,
-                           frequent_clients=frequent_clients_data,
-                           sales_by_month=sales_data_complete,
-                           profit_loss_data=profit_loss_data,
-                           profit_loss_summary=profit_loss_summary)
+                           title=view_title,
+                           stats_data=stats_data,
+                           total_summary=total_summary,
+                           profit_loss_chart_data=profit_loss_chart_data,
+                           top_products_data=top_products_data,
+                           frequent_clients_data=frequent_clients_data,
+                           filters={'period': period, 'start_date': start_date.strftime('%Y-%m-%d'), 'end_date': end_date.strftime('%Y-%m-%d')})
 
 # Nueva ruta para cargar productos desde un archivo de Excel
 @routes_blueprint.route('/inventario/cargar_excel', methods=['GET', 'POST'])
@@ -1114,6 +1339,12 @@ def company_settings():
         logo_file = request.files.get('logo_file')
         calculation_currency = request.form.get('calculation_currency')
         
+        # Validar que el RIF no esté duplicado, excepto para el registro actual
+        existing_company_with_rif = CompanyInfo.query.filter(CompanyInfo.rif == rif).first()
+        if existing_company_with_rif and (not company_info or existing_company_with_rif.id != company_info.id):
+            flash('Error: El RIF ya se encuentra registrado.', 'danger')
+            return redirect(url_for('main.company_settings'))
+
         try:
             if company_info:
                 company_info.name = name
@@ -1342,28 +1573,29 @@ def edit_product_cost(product_id):
         # Calcular costos fijos por unidad
         fixed_cost_per_unit = total_fixed_costs / total_estimated_sales
         
-        # Usar gastos variables específicos o los valores por defecto
-        var_sales_exp_pct = product.variable_selling_expense_percent if product.variable_selling_expense_percent > 0 else cost_structure.default_sales_commission_percent
-        var_marketing_pct = product.variable_marketing_percent if product.variable_marketing_percent > 0 else cost_structure.default_marketing_percent
+        # Usar gastos variables específicos o los valores por defecto (asegurando que no sean None)
+        var_sales_exp_pct = product.variable_selling_expense_percent if product.variable_selling_expense_percent > 0 else (cost_structure.default_sales_commission_percent or 0)
+        var_marketing_pct = product.variable_marketing_percent if product.variable_marketing_percent > 0 else (cost_structure.default_marketing_percent or 0)
         
-        # Calcular precio de venta (misma lógica que en cost_list)
+        # El precio de venta se toma directamente del producto
+        selling_price = product.price_usd or 0
         base_cost = (product.cost_usd or 0) + (product.specific_freight_cost or 0) + fixed_cost_per_unit
-        denominator = 1 - var_sales_exp_pct - var_marketing_pct - (product.profit_margin or 0)
-        
-        if denominator > 0:
-            selling_price = base_cost / denominator
-            product.price_usd = round(selling_price, 2)
-            
+
+        # Recalcular el margen de utilidad para mostrar el valor actual real
+        if selling_price > 0:
+            profit_margin_calc = 1 - var_sales_exp_pct - var_marketing_pct - (base_cost / selling_price)
+            product.profit_margin = profit_margin_calc
+
             # Calcular costo variable unitario
             variable_cost_per_unit = (product.cost_usd or 0) + (product.specific_freight_cost or 0) + \
                                    (selling_price * var_sales_exp_pct) + \
                                    (selling_price * var_marketing_pct)
-            
+
             # Calcular punto de equilibrio
             if selling_price > variable_cost_per_unit:
                 break_even_units = total_fixed_costs / (selling_price - variable_cost_per_unit)
                 break_even_amount = break_even_units * selling_price
-                
+
                 break_even_data = {
                     'fixed_costs_total': total_fixed_costs,
                     'fixed_cost_per_unit': fixed_cost_per_unit,
@@ -1377,27 +1609,38 @@ def edit_product_cost(product_id):
 
     if request.method == 'POST':
         try:
-            product.profit_margin = float(request.form.get('profit_margin', 0)) / 100
+            # Actualizar campos del producto desde el formulario
+            product.price_usd = float(request.form.get('price_usd', 0))
             product.specific_freight_cost = float(request.form.get('specific_freight_cost', 0))
             product.estimated_monthly_sales = int(request.form.get('estimated_monthly_sales', 1))
             product.variable_selling_expense_percent = float(request.form.get('variable_selling_expense_percent', 0)) / 100
             product.variable_marketing_percent = float(request.form.get('variable_marketing_percent', 0)) / 100
 
             if not cost_structure:
-                flash('La configuración de costos generales no existe. No se puede calcular el precio.', 'danger')
+                flash('La configuración de costos generales no existe. No se puede calcular la utilidad.', 'danger')
                 return redirect(url_for('main.cost_structure_config'))
 
+            # Recalcular componentes de costo con los nuevos datos
             total_estimated_sales = db.session.query(func.sum(Product.estimated_monthly_sales)).scalar() or 1
             if total_estimated_sales == 0: total_estimated_sales = 1
 
             total_fixed_costs = (cost_structure.monthly_rent or 0) + (cost_structure.monthly_utilities or 0) + (cost_structure.monthly_fixed_taxes or 0)
             fixed_cost_per_unit = total_fixed_costs / total_estimated_sales
             base_cost = (product.cost_usd or 0) + product.specific_freight_cost + fixed_cost_per_unit
-            denominator = 1 - product.variable_selling_expense_percent - product.variable_marketing_percent - product.profit_margin
-            if denominator <= 0:
-                raise ValueError("La suma de porcentajes de utilidad y gastos variables no puede ser 100% o más.")
-            new_selling_price = base_cost / denominator
-            product.price_usd = round(new_selling_price, 2)
+            
+            # Recalcular y guardar el nuevo margen de utilidad
+            if product.price_usd > 0:
+                new_profit_margin = 1 - product.variable_selling_expense_percent - product.variable_marketing_percent - (base_cost / product.price_usd)
+                product.profit_margin = new_profit_margin
+                # Alertar al usuario sobre utilidad baja o negativa
+                if new_profit_margin < 0:
+                    flash(f'¡Atención! Con los costos y precio de venta actuales, se está generando una pérdida. Margen de utilidad: {new_profit_margin*100:.2f}%.', 'danger')
+                elif new_profit_margin < 0.05: # Umbral de advertencia del 5%
+                    flash(f'Advertencia: El margen de utilidad es muy bajo: {new_profit_margin*100:.2f}%.', 'warning')
+            else:
+                product.profit_margin = 0
+                flash('El precio de venta debe ser un número positivo.', 'danger')
+
             db.session.commit()
             flash(f'Costos y precio del producto "{product.name}" actualizados exitosamente.', 'success')
             return redirect(url_for('main.cost_list'))
@@ -1419,15 +1662,41 @@ def print_delivery_note(order_id):
     order = Order.query.get_or_404(order_id)
     company_info = CompanyInfo.query.first()
 
-    iva_rate = 0.16
+    # IVA desactivado
     subtotal = sum(item.price * item.quantity for item in order.items)
-    iva = iva_rate * subtotal
+    iva = 0
+    order_total_with_iva = subtotal # El total es igual al subtotal
+
+    # Calculate total paid and change
+    total_paid = sum(p.amount_ves_equivalent for p in order.payments)
+    change = total_paid - order_total_with_iva if total_paid > order_total_with_iva else 0
+
+    # Helper function to generate barcode
+    def generate_order_barcode_base64(order_id_str):
+        """Generates a Code128 barcode image and returns it as a base64 string."""
+        if not order_id_str:
+            return None
+        try:
+            barcode = code128.Code128(order_id_str, barHeight=10*mm, barWidth=0.3*mm)
+            drawing = Drawing(barcode.width, barcode.height)
+            drawing.add(barcode)
+            buffer = io.BytesIO()
+            renderPM.drawToFile(drawing, buffer, fmt='PNG')
+            buffer.seek(0)
+            return base64.b64encode(buffer.getvalue()).decode('utf-8')
+        except Exception as e:
+            current_app.logger.error(f"Error generating barcode for order ID {order_id_str}: {e}")
+            return None
+
+    barcode_base64 = generate_order_barcode_base64(f"{order.id:09d}")
 
     return render_template('ordenes/imprimir_nota.html',
                            order=order,
                            company_info=company_info,
                            subtotal=subtotal,
-                           iva=iva)
+                           iva=iva,
+                           change=change,
+                           barcode_base64=barcode_base64)
 
 # Nueva ruta de API para obtener la tasa de cambio actual
 @routes_blueprint.route('/api/product_by_barcode/<barcode>')
@@ -1483,3 +1752,527 @@ def api_search_clients():
         })
 
     return jsonify(clients=clients_data)
+
+@routes_blueprint.route('/api/clientes/nuevo', methods=['POST'])
+@login_required
+def api_new_client():
+    """API endpoint to create a new client and return its data."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No se proporcionaron datos'}), 400
+
+    name = data.get('name')
+    cedula_rif = data.get('cedula_rif')
+    email = data.get('email')
+
+    if not name:
+        return jsonify({'error': 'El nombre es requerido.'}), 400
+
+    try:
+        # Check for duplicates
+        if cedula_rif and Client.query.filter_by(cedula_rif=cedula_rif).first():
+            return jsonify({'error': f'La Cédula/RIF "{cedula_rif}" ya está registrada.'}), 409
+        
+        if email and Client.query.filter_by(email=email).first():
+            return jsonify({'error': f'El email "{email}" ya está registrado.'}), 409
+
+        new_client = Client(
+            name=name,
+            cedula_rif=cedula_rif,
+            email=email,
+            phone=data.get('phone'),
+            address=data.get('address')
+        )
+        db.session.add(new_client)
+        db.session.commit()
+
+        client_data = { 'id': new_client.id, 'name': new_client.name, 'cedula_rif': new_client.cedula_rif, 'email': new_client.email, 'phone': new_client.phone, 'address': new_client.address }
+        return jsonify(client_data), 201
+
+    except IntegrityError as e:
+        db.session.rollback()
+        current_app.logger.warning(f"IntegrityError al crear cliente vía API: {e}")
+        return jsonify({'error': 'Error de base de datos. Es posible que el email o Cédula/RIF ya exista.'}), 409
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error creando nuevo cliente vía API: {e}")
+        return jsonify({'error': 'Ocurrió un error interno en el servidor.'}), 500
+
+# --- Rutas de Finanzas ---
+
+@routes_blueprint.route('/finanzas/bancos/lista')
+@login_required
+def bank_list():
+    banks = Bank.query.order_by(Bank.name).all()
+    return render_template('finanzas/bancos_lista.html', title='Lista de Bancos', banks=banks)
+
+@routes_blueprint.route('/finanzas/bancos/nuevo', methods=['GET', 'POST'])
+@login_required
+def new_bank():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+
+    if request.method == 'POST':
+        try:
+            name = request.form.get('name')
+            account_number = request.form.get('account_number')
+            initial_balance = float(request.form.get('initial_balance', 0))
+            new_bank = Bank(name=name, account_number=account_number, balance=initial_balance)
+            db.session.add(new_bank)
+            db.session.commit()
+            flash('Banco creado exitosamente!', 'success')
+            return redirect(url_for('main.bank_list'))
+        except (ValueError, IntegrityError):
+            db.session.rollback()
+            flash('Error: Ya existe un banco con ese nombre o número de cuenta.', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error inesperado: {e}', 'danger')
+    return render_template('finanzas/nuevo_banco.html', title='Nuevo Banco')
+
+@routes_blueprint.route('/finanzas/bancos/movimientos')
+@login_required
+def bank_movements():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+
+    banks = Bank.query.order_by(Bank.name).all()
+    return render_template('finanzas/seleccionar_cuenta.html', 
+                           title='Movimientos Bancarios',
+                           accounts=banks,
+                           account_type='bank',
+                           detail_route='main.bank_movement_detail')
+
+@routes_blueprint.route('/finanzas/bancos/movimientos/<int:bank_id>')
+@login_required
+def bank_movement_detail(bank_id):
+    if current_user.role != 'administrador':
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+
+    bank = Bank.query.get_or_404(bank_id)
+    
+    # Get payments related to this bank (direct transfers and POS terminals)
+    pos_ids = [pos.id for pos in bank.pos_terminals]
+    payments_query = Payment.query.filter(or_(Payment.bank_id == bank_id, Payment.pos_id.in_(pos_ids)))
+    
+    # Get manual movements
+    manual_movements_query = ManualFinancialMovement.query.filter_by(bank_id=bank_id)
+    
+    # Combine and prepare for sorting
+    combined_movements = []
+    
+    # Process payments (always income in VES)
+    for p in payments_query.all():
+        combined_movements.append({
+            'date': p.date,
+            'description': f"Pago de Orden #{p.order_id:09d}",
+            'income': p.amount_ves_equivalent,
+            'expense': 0,
+            'currency': 'VES'
+        })
+        
+    # Process manual movements
+    for m in manual_movements_query.all():
+        if m.currency != 'VES': continue
+        combined_movements.append({
+            'date': m.date,
+            'description': m.description,
+            'income': m.amount if m.movement_type == 'Ingreso' else 0,
+            'expense': m.amount if m.movement_type == 'Egreso' else 0,
+            'currency': m.currency
+        })
+        
+    # Sort all movements by date (newest first)
+    combined_movements.sort(key=lambda x: x['date'], reverse=True)
+
+    return render_template('finanzas/movimientos_bancarios.html', 
+                           title=f'Movimientos de {bank.name}', 
+                           bank=bank,
+                           movements=combined_movements)
+
+@routes_blueprint.route('/finanzas/puntos-venta/lista')
+@login_required
+def pos_list():
+    points_of_sale = PointOfSale.query.order_by(PointOfSale.name).all()
+    return render_template('finanzas/pos_lista.html', title='Puntos de Venta', points_of_sale=points_of_sale)
+
+@routes_blueprint.route('/finanzas/puntos-venta/nuevo', methods=['GET', 'POST'])
+@login_required
+def new_pos():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+
+    banks = Bank.query.order_by(Bank.name).all()
+    if request.method == 'POST':
+        try:
+            name = request.form.get('name')
+            bank_id = request.form.get('bank_id')
+            if not bank_id:
+                flash('Debe seleccionar un banco asociado.', 'danger')
+            else:
+                new_pos = PointOfSale(name=name, bank_id=bank_id)
+                db.session.add(new_pos)
+                db.session.commit()
+                flash('Punto de Venta creado exitosamente!', 'success')
+                return redirect(url_for('main.pos_list'))
+        except IntegrityError:
+            db.session.rollback()
+            flash('Error: Ya existe un punto de venta con ese nombre.', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error inesperado: {e}', 'danger')
+    return render_template('finanzas/nuevo_pos.html', title='Nuevo Punto de Venta', banks=banks)
+
+@routes_blueprint.route('/finanzas/caja/lista')
+@login_required
+def cashbox_list():
+    cash_boxes = CashBox.query.order_by(CashBox.name).all()
+    return render_template('finanzas/caja_lista.html', title='Cajas', cash_boxes=cash_boxes)
+
+@routes_blueprint.route('/finanzas/caja/nueva', methods=['GET', 'POST'])
+@login_required
+def new_cashbox():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+
+    if request.method == 'POST':
+        try:
+            name = request.form.get('name')
+            balance_ves = float(request.form.get('balance_ves', 0))
+            balance_usd = float(request.form.get('balance_usd', 0))
+            new_box = CashBox(name=name, balance_ves=balance_ves, balance_usd=balance_usd)
+            db.session.add(new_box)
+            db.session.commit()
+            flash('Caja creada exitosamente!', 'success')
+            return redirect(url_for('main.cashbox_list'))
+        except (ValueError, IntegrityError):
+            db.session.rollback()
+            flash('Error: Ya existe una caja con ese nombre.', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error inesperado: {e}', 'danger')
+    return render_template('finanzas/nueva_caja.html', title='Nueva Caja')
+
+@routes_blueprint.route('/finanzas/caja/movimientos')
+@login_required
+def cashbox_movements():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+
+    cash_boxes = CashBox.query.order_by(CashBox.name).all()
+    return render_template('finanzas/seleccionar_cuenta.html', 
+                           title='Movimientos de Caja',
+                           accounts=cash_boxes,
+                           account_type='cash_box',
+                           detail_route='main.cashbox_movement_detail')
+
+@routes_blueprint.route('/finanzas/caja/movimientos/<int:cash_box_id>')
+@login_required
+def cashbox_movement_detail(cash_box_id):
+    if current_user.role != 'administrador':
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+
+    cash_box = CashBox.query.get_or_404(cash_box_id)
+    
+    payments_query = Payment.query.filter_by(cash_box_id=cash_box_id)
+    manual_movements_query = ManualFinancialMovement.query.filter_by(cash_box_id=cash_box_id)
+    
+    movements_ves = []
+    for p in payments_query.filter_by(currency_paid='VES').all():
+        movements_ves.append({
+            'id': f'P-{p.id}', 'type': 'payment', 'obj': p,
+            'date': p.date, 'description': f"Pago de Orden #{p.order.id:09d}",
+            'income': p.amount_paid, 'expense': 0, 'status': 'Aprobado'
+        })
+    for m in manual_movements_query.filter_by(currency='VES').all():
+        desc = f"{m.description} (Por: {m.created_by_user.username if m.created_by_user else 'N/A'}, Recibe: {m.received_by or 'N/A'})"
+        movements_ves.append({
+            'id': f'M-{m.id}', 'type': 'manual', 'obj': m,
+            'date': m.date, 'description': desc,
+            'income': m.amount if m.movement_type == 'Ingreso' else 0,
+            'expense': m.amount if m.movement_type == 'Egreso' else 0,
+            'status': m.status
+        })
+    
+    movements_usd = []
+    for p in payments_query.filter_by(currency_paid='USD').all():
+        movements_usd.append({
+            'id': f'P-{p.id}', 'type': 'payment', 'obj': p,
+            'date': p.date, 'description': f"Pago de Orden #{p.order.id:09d}",
+            'income': p.amount_paid, 'expense': 0, 'status': 'Aprobado'
+        })
+    for m in manual_movements_query.filter_by(currency='USD').all():
+        desc = f"{m.description} (Por: {m.created_by_user.username if m.created_by_user else 'N/A'}, Recibe: {m.received_by or 'N/A'})"
+        movements_usd.append({
+            'id': f'M-{m.id}', 'type': 'manual', 'obj': m,
+            'date': m.date, 'description': desc,
+            'income': m.amount if m.movement_type == 'Ingreso' else 0,
+            'expense': m.amount if m.movement_type == 'Egreso' else 0,
+            'status': m.status
+        })
+        
+    movements_ves.sort(key=lambda x: x['date'], reverse=True)
+    movements_usd.sort(key=lambda x: x['date'], reverse=True)
+
+    return render_template('finanzas/movimientos_caja.html', 
+                           title=f'Movimientos de {cash_box.name}', 
+                           cash_box=cash_box,
+                           movements_ves=movements_ves,
+                           movements_usd=movements_usd)
+
+@routes_blueprint.route('/finanzas/movimiento/nuevo', methods=['GET', 'POST'])
+@login_required
+def new_financial_movement():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+
+    account_type = request.args.get('account_type')
+    account_id = request.args.get('account_id', type=int)
+
+    if not account_type or not account_id:
+        flash('Tipo de cuenta o ID no especificado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    account = None
+    if account_type == 'bank':
+        account = Bank.query.get_or_404(account_id)
+    elif account_type == 'cash_box':
+        account = CashBox.query.get_or_404(account_id)
+    else:
+        flash('Tipo de cuenta inválido.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    if request.method == 'POST':
+        try:
+            description = request.form.get('description')
+            amount = float(request.form.get('amount'))
+            currency = request.form.get('currency')
+            movement_type = request.form.get('movement_type')
+
+            if not all([description, amount, currency, movement_type]):
+                raise ValueError("Todos los campos son requeridos.")
+            if amount <= 0:
+                raise ValueError("El monto debe ser positivo.")
+
+            new_mov = ManualFinancialMovement(
+                description=description, amount=amount, currency=currency, movement_type=movement_type
+            )
+
+            if account_type == 'bank':
+                if currency != 'VES':
+                    raise ValueError("Los movimientos bancarios solo pueden ser en VES.")
+                new_mov.bank_id = account_id
+                if movement_type == 'Ingreso':
+                    account.balance += amount
+                else:
+                    account.balance -= amount
+            elif account_type == 'cash_box':
+                new_mov.cash_box_id = account_id
+                if currency == 'VES':
+                    if movement_type == 'Ingreso':
+                        account.balance_ves += amount
+                    else:
+                        account.balance_ves -= amount
+                elif currency == 'USD':
+                    if movement_type == 'Ingreso':
+                        account.balance_usd += amount
+                    else:
+                        account.balance_usd -= amount
+                else:
+                    raise ValueError("Moneda no válida para la caja.")
+
+            db.session.add(new_mov)
+            db.session.commit()
+
+            flash('Movimiento registrado exitosamente.', 'success')
+            if account_type == 'bank':
+                return redirect(url_for('main.bank_movement_detail', bank_id=account_id))
+            else:
+                return redirect(url_for('main.cashbox_movement_detail', cash_box_id=account_id))
+
+        except (ValueError, TypeError) as e:
+            db.session.rollback()
+            flash(f'Error al registrar el movimiento: {e}', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error inesperado: {e}', 'danger')
+
+    return render_template('finanzas/nuevo_movimiento.html',
+                           title='Nuevo Movimiento Manual',
+                           account=account,
+                           account_type=account_type)
+
+@routes_blueprint.route('/finanzas/caja/retiro', methods=['GET', 'POST'])
+@login_required
+def new_cash_withdrawal():
+    cash_boxes = CashBox.query.order_by(CashBox.name).all()
+
+    if request.method == 'POST':
+        try:
+            cash_box_id = request.form.get('cash_box_id', type=int)
+            amount = float(request.form.get('amount'))
+            currency = request.form.get('currency')
+            description = request.form.get('description')
+            received_by = request.form.get('received_by')
+
+            if not all([cash_box_id, amount, currency, description, received_by]):
+                raise ValueError("Todos los campos son requeridos.")
+            if amount <= 0:
+                raise ValueError("El monto debe ser positivo.")
+
+            cash_box = CashBox.query.get_or_404(cash_box_id)
+
+            # Always check balance before creating request
+            if currency == 'VES':
+                if cash_box.balance_ves < amount:
+                    raise ValueError(f"Saldo insuficiente en la caja '{cash_box.name}' para VES. Saldo actual: {cash_box.balance_ves:.2f}")
+            elif currency == 'USD':
+                if cash_box.balance_usd < amount:
+                    raise ValueError(f"Saldo insuficiente en la caja '{cash_box.name}' para USD. Saldo actual: {cash_box.balance_usd:.2f}")
+            else:
+                raise ValueError("Moneda no válida para la caja.")
+
+            is_admin = current_user.role == 'administrador'
+            
+            new_mov = ManualFinancialMovement(
+                description=description, amount=amount, currency=currency, movement_type='Egreso',
+                cash_box_id=cash_box_id, received_by=received_by, created_by_user_id=current_user.id,
+                status='Aprobado' if is_admin else 'Pendiente'
+            )
+
+            if is_admin:
+                # Admins approve their own withdrawals instantly
+                new_mov.approved_by_user_id = current_user.id
+                new_mov.date_approved = get_current_time_ve()
+                # Update balance
+                if currency == 'VES':
+                    cash_box.balance_ves -= amount
+                elif currency == 'USD':
+                    cash_box.balance_usd -= amount
+            
+            db.session.add(new_mov)
+            db.session.commit()
+
+            if is_admin:
+                flash('Retiro de efectivo registrado y aprobado exitosamente. Imprimiendo recibo...', 'success')
+                return redirect(url_for('main.print_withdrawal_receipt', movement_id=new_mov.id))
+            else:
+                # Create notification for admins
+                notification_message = f"El usuario {current_user.username} solicita aprobación para un retiro de {amount:.2f} {currency}."
+                notification_link = url_for('main.pending_withdrawals')
+                create_notification_for_admins(notification_message, notification_link)
+                
+                flash('Solicitud de retiro de efectivo enviada para aprobación.', 'info')
+                return redirect(url_for('main.my_withdrawals'))
+
+        except (ValueError, TypeError) as e:
+            db.session.rollback()
+            flash(f'Error al registrar el retiro: {e}', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error inesperado: {e}', 'danger')
+
+    return render_template('finanzas/retiro_caja.html', title='Retiro de Efectivo de Caja', cash_boxes=cash_boxes)
+
+@routes_blueprint.route('/finanzas/caja/retiro/imprimir/<int:movement_id>')
+@login_required
+def print_withdrawal_receipt(movement_id):
+    movement = ManualFinancialMovement.query.get_or_404(movement_id)
+    company_info = CompanyInfo.query.first()
+    if movement.movement_type != 'Egreso' or not movement.cash_box_id:
+        flash('Movimiento no válido para generar recibo de retiro.', 'danger')
+        return redirect(url_for('main.new_order'))
+    
+    # New check for approval
+    if movement.status != 'Aprobado':
+        flash('Este retiro aún no ha sido aprobado. No se puede imprimir el recibo.', 'warning')
+        if current_user.role == 'administrador':
+            return redirect(url_for('main.pending_withdrawals'))
+        else:
+            return redirect(url_for('main.new_order'))
+
+    return render_template('finanzas/imprimir_recibo_retiro.html', movement=movement, company_info=company_info)
+
+@routes_blueprint.route('/finanzas/mis-retiros')
+@login_required
+def my_withdrawals():
+    """Muestra las solicitudes de retiro creadas por el usuario actual."""
+    movements = ManualFinancialMovement.query.filter_by(
+        created_by_user_id=current_user.id,
+        movement_type='Egreso'
+    ).order_by(ManualFinancialMovement.date.desc()).all()
+    
+    return render_template('finanzas/mis_retiros.html', title='Mis Solicitudes de Retiro', movements=movements)
+
+@routes_blueprint.route('/finanzas/retiros-pendientes')
+@login_required
+def pending_withdrawals():
+    if current_user.role != 'administrador':
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+    
+    pending = ManualFinancialMovement.query.filter_by(status='Pendiente', movement_type='Egreso').order_by(ManualFinancialMovement.date.desc()).all()
+    
+    return render_template('finanzas/retiros_pendientes.html', title='Retiros Pendientes de Aprobación', movements=pending)
+
+@routes_blueprint.route('/finanzas/retiro/procesar/<int:movement_id>/<string:action>', methods=['POST'])
+@login_required
+def process_withdrawal(movement_id, action):
+    if current_user.role != 'administrador':
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.pending_withdrawals'))
+
+    movement = ManualFinancialMovement.query.get_or_404(movement_id)
+    if movement.status != 'Pendiente':
+        flash('Este retiro ya ha sido procesado.', 'warning')
+        return redirect(url_for('main.pending_withdrawals'))
+
+    try:
+        if action == 'approve':
+            cash_box = movement.cash_box
+            if not cash_box:
+                raise ValueError("El movimiento no está asociado a ninguna caja.")
+
+            # Final balance check
+            if movement.currency == 'VES':
+                if cash_box.balance_ves < movement.amount:
+                    raise ValueError(f"Saldo insuficiente en la caja '{cash_box.name}' para aprobar este retiro.")
+                cash_box.balance_ves -= movement.amount
+            elif movement.currency == 'USD':
+                if cash_box.balance_usd < movement.amount:
+                    raise ValueError(f"Saldo insuficiente en la caja '{cash_box.name}' para aprobar este retiro.")
+                cash_box.balance_usd -= movement.amount
+            
+            movement.status = 'Aprobado'
+            flash_message = 'Retiro aprobado y saldo de caja actualizado.'
+            flash_category = 'success'
+
+        elif action == 'reject':
+            movement.status = 'Rechazado'
+            flash_message = 'Retiro rechazado.'
+            flash_category = 'info'
+        
+        else:
+            raise ValueError("Acción no válida.")
+
+        movement.approved_by_user_id = current_user.id
+        movement.date_approved = get_current_time_ve()
+        db.session.commit()
+        flash(flash_message, flash_category)
+
+    except (ValueError, IntegrityError) as e:
+        db.session.rollback()
+        flash(f'Error al procesar el retiro: {e}', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Ocurrió un error inesperado: {e}', 'danger')
+
+    return redirect(url_for('main.pending_withdrawals'))

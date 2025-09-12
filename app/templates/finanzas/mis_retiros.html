@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-history mr-2"></i>{{ title }}</h1>
+    </div>
+
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha Solicitud</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Caja</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Recibe</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for movement in movements %}
+                    <tr>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{{ movement.date|ve_datetime(fmt='%d/%m/%y %H:%M') }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{{ movement.cash_box.name }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-right text-sm font-bold">
+                            {% if movement.currency == 'USD' %}${% else %}Bs {% endif %}
+                            {{ "%.2f"|format(movement.amount) }}
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{{ movement.received_by }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-center text-sm">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                {% if movement.status == 'Aprobado' %}bg-green-100 text-green-800
+                                {% elif movement.status == 'Pendiente' %}bg-yellow-100 text-yellow-800
+                                {% elif movement.status == 'Rechazado' %}bg-red-100 text-red-800
+                                {% endif %}">
+                                {{ movement.status }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap text-center text-sm font-medium">
+                            {% if movement.status == 'Aprobado' %}
+                            <a href="{{ url_for('main.print_withdrawal_receipt', movement_id=movement.id) }}" target="_blank" class="bg-blue-500 text-white font-bold py-1 px-3 rounded-lg hover:bg-blue-600 transition-colors text-xs">
+                                <i class="fas fa-print mr-1"></i>Imprimir
+                            </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="px-6 py-4 text-center text-gray-500">No has realizado ninguna solicitud de retiro.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

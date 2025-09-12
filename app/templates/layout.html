@@ -6,6 +6,14 @@
     <!-- Toastr CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
     <!-- ... tu CSS ... -->
+    <style>
+        /* Solución para el panel de navegación que se corta */
+        /* Esto asume que el panel de navegación es un elemento <aside> o tiene una clase .sidebar */
+        /* Permite que el panel de navegación tenga su propia barra de desplazamiento cuando el contenido es demasiado largo. */
+        aside, .sidebar {
+            overflow-y: auto;
+        }
+    </style>
 </head>
 <body>
     <!-- ... tu contenido de la barra de navegación y página ... -->

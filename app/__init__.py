@@ -113,6 +113,21 @@ def create_app():
         from .cli_commands import register_commands
         register_commands(app)
 
+        # Custom Jinja filter for Venezuela timezone formatting
+        @app.template_filter('ve_datetime')
+        def ve_datetime_filter(dt, fmt='%d/%m/%Y %H:%M:%S'):
+            if not dt:
+                return ''
+            # The datetime objects from the DB are timezone-aware (UTC).
+            # We convert them to Venezuela's timezone before formatting.
+            return dt.astimezone(models.VE_TIMEZONE).strftime(fmt)
+
+        @app.template_filter('order_id_format')
+        def order_id_format_filter(order_id):
+            if not order_id:
+                return ''
+            return f"{order_id:09d}"
+
     @app.teardown_appcontext
     def shutdown_session(exception=None):
         db.session.remove()

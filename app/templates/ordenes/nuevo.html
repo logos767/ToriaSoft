@@ -7,7 +7,7 @@
     </div>
 
     <div class="bg-white p-6 rounded-lg shadow-md">
-        <form method="POST" action="{{ url_for('main.new_order') }}">
+        <form method="POST" action="{{ url_for('main.new_order') }}" id="order-form">
             <!-- Información de la orden y escáner -->
             <div class="mb-6">
                 <h2 class="text-xl font-semibold text-gray-700 mb-4">Información de la Orden</h2>
@@ -92,7 +92,8 @@
                                 {% if current_user.is_authenticated and current_user.role == 'administrador' %}
                                 <input type="number" name="price_usd[]" placeholder="Precio" step="0.01" min="0" required class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 price-usd-input">
                                 {% else %}
-                                <span class="w-24 text-center font-bold text-gray-800">***</span>
+                                <span class="w-24 text-center font-bold text-gray-800 price-usd-display">0.00</span>
+                                <input type="hidden" name="price_usd[]" class="price-usd-hidden-for-submit">
                                 {% endif %}
                             </td>
                             <td class="px-2 py-1 text-center font-bold text-gray-800 price-ves-display">0.00</td>
@@ -107,23 +108,189 @@
             <!-- Resumen de la orden -->
             <div class="border-t pt-4 mb-6">
                 <div class="grid grid-cols-2 gap-4 max-w-md ml-auto">
-                    <div class="text-right font-semibold">Subtotal:</div>
-                    <div class="text-right" id="subtotal-display">0.00 Bs</div>
+                    <div class="text-right font-semibold hidden">Subtotal:</div>
+                    <div class="text-right hidden" id="subtotal-display">0.00 Bs</div>
                     
-                    <div class="text-right font-semibold">IVA (16%):</div>
-                    <div class="text-right" id="iva-display">0.00 Bs</div>
+                    <div class="text-right font-semibold hidden">IVA (16%):</div>
+                    <div class="text-right hidden" id="iva-display">0.00 Bs</div>
                     
-                    <div class="text-right font-bold text-lg border-t pt-2">Total:</div>
+                    <div class="text-right font-bold text-lg border-t pt-2">Total a Pagar:</div>
                     <div class="text-right font-bold text-lg border-t pt-2" id="total-display">0.00 Bs</div>
                 </div>
             </div>
 
-            <div class="flex items-center justify-end">
-                <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
-                    <i class="fas fa-save mr-2"></i>Crear Orden
-                </button>
+            <div class="flex items-center justify-between mt-6 pt-6 border-t">
+                <!-- Botón para reimprimir la última orden -->
+                <div>
+                    {% if last_order %}
+                    <a href="{{ url_for('main.print_delivery_note', order_id=last_order.id) }}" target="_blank" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
+                        <i class="fas fa-print mr-2"></i>Reimprimir Última Orden (#{{ last_order.id|order_id_format }})
+                    </a>
+                    {% endif %}
+                </div>
+
+                <!-- Botón para procesar el pago de la nueva orden -->
+                <div>
+                    <input type="hidden" name="payments_data" id="payments-data-input">
+                    <button type="button" id="process-payment-btn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
+                        <i class="fas fa-dollar-sign mr-2"></i>Procesar Pago y Crear Orden
+                    </button>
+                </div>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Payment Modal -->
+<div id="payment-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl leading-6 font-medium text-gray-900">Registrar Pago</h3>
+                <button id="close-modal-btn" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+
+            <!-- Resumen de Pago -->
+            <div class="bg-blue-50 p-4 rounded-lg mb-6 text-center">
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <p class="text-sm text-gray-600">Total a Pagar</p>
+                        <p id="modal-total-amount" class="text-2xl font-bold text-blue-800">0.00 Bs</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">Total Pagado</p>
+                        <p id="modal-paid-amount" class="text-2xl font-bold text-green-600">0.00 Bs</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">Monto Restante</p>
+                        <p id="modal-remaining-amount" class="text-2xl font-bold text-red-600">0.00 Bs</p>
+                    </div>
+                </div>
+                <!-- Vuelto Display -->
+                <div id="modal-change-display" class="mt-4 hidden text-center">
+                    <p class="text-lg text-gray-700">Vuelto a entregar:</p>
+                    <p id="modal-change-amount" class="text-3xl font-bold text-yellow-600">0.00</p>
+                </div>
+            </div>
+
+            <!-- Formulario para agregar pago -->
+            <div id="add-payment-form" class="border p-4 rounded-lg">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div>
+                    <label for="payment-method" class="block text-sm font-medium text-gray-700">Método de Pago</label>
+                    <select id="payment-method" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <option value="efectivo_ves">Efectivo (Bs)</option>
+                        <option value="efectivo_usd">Efectivo (USD)</option>
+                        <option value="transferencia">Transferencia/Pago Móvil</option>
+                        <option value="punto_de_venta">Punto de Venta</option>
+                    </select>
+                    </div>
+                    <div>
+                    <label for="payment-amount" class="block text-sm font-medium text-gray-700">Monto</label>
+                    <input type="number" id="payment-amount" step="0.01" min="0.01" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <div class="md:col-span-1"></div> <!-- Spacer -->
+                </div>
+                
+                <!-- Campos condicionales -->
+                <div id="payment-details-group" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div id="payment-reference-group" class="hidden">
+                        <label for="payment-reference" class="block text-sm font-medium text-gray-700">Referencia</label>
+                        <input type="text" id="payment-reference" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <div id="payment-bank-group" class="hidden">
+                        <label for="payment-bank" class="block text-sm font-medium text-gray-700">Banco Destino</label>
+                        <select id="payment-bank" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <option value="">Seleccione un banco</option>
+                            {% for bank in banks %}<option value="{{ bank.id }}">{{ bank.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div id="payment-pos-group" class="hidden">
+                        <label for="payment-pos" class="block text-sm font-medium text-gray-700">Punto de Venta</label>
+                        <select id="payment-pos" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <option value="">Seleccione un POS</option>
+                            {% for pos in points_of_sale %}<option value="{{ pos.id }}">{{ pos.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div id="payment-cashbox-group" class="hidden">
+                        <label for="payment-cashbox" class="block text-sm font-medium text-gray-700">Caja</label>
+                        <select id="payment-cashbox" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <option value="">Seleccione una caja</option>
+                            {% for box in cash_boxes %}<option value="{{ box.id }}">{{ box.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex justify-end mt-4">
+                    <button type="button" id="add-payment-btn-modal" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600">
+                        <i class="fas fa-plus mr-2"></i>Agregar Pago
+                    </button>
+                </div>
+            </div>
+
+            <!-- Lista de pagos agregados -->
+            <div class="mt-6">
+                <h4 class="text-lg font-medium text-gray-800 mb-2">Pagos Registrados</h4>
+                <div id="payments-list" class="space-y-2">
+                    <!-- Los pagos se agregarán aquí dinámicamente -->
+                </div>
+            </div>
+
+            <!-- Botón de Finalizar -->
+            <div class="mt-8 flex justify-end">
+                <button type="button" id="finalize-order-btn" class="bg-green-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-700 disabled:bg-gray-400" disabled>
+                    <i class="fas fa-check-circle mr-2"></i>Finalizar y Crear Orden
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- New Client Modal -->
+<div id="new-client-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl leading-6 font-medium text-gray-900">Crear Nuevo Cliente</h3>
+                <button id="close-new-client-modal-btn" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div id="new-client-modal-error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 hidden" role="alert">
+                <strong class="font-bold">Error:</strong>
+                <span class="block sm:inline" id="new-client-modal-error-message"></span>
+            </div>
+            <form id="new-client-form">
+                <div class="space-y-4">
+                    <div>
+                        <label for="new-client-name" class="block text-sm font-medium text-gray-700">Nombre Completo o Razón Social</label>
+                        <input type="text" id="new-client-name" name="name" required class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="new-client-cedula-rif" class="block text-sm font-medium text-gray-700">Cédula o RIF</label>
+                        <input type="text" id="new-client-cedula-rif" name="cedula_rif" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="new-client-email" class="block text-sm font-medium text-gray-700">Email</label>
+                        <input type="email" id="new-client-email" name="email" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="new-client-phone" class="block text-sm font-medium text-gray-700">Teléfono</label>
+                        <input type="tel" id="new-client-phone" name="phone" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="new-client-address" class="block text-sm font-medium text-gray-700">Dirección</label>
+                        <textarea id="new-client-address" name="address" rows="2" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></textarea>
+                    </div>
+                </div>
+                <div class="mt-8 flex justify-end">
+                    <button type="button" id="cancel-new-client-btn" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 mr-4">Cancelar</button>
+                    <button type="button" id="save-new-client-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700"><i class="fas fa-save mr-2"></i>Guardar Cliente</button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -138,6 +305,14 @@
         const clientEmailSpan = document.getElementById('client_email');
         const clientPhoneSpan = document.getElementById('client_phone');
         const clientAddressSpan = document.getElementById('client_address');
+
+        const newClientModal = document.getElementById('new-client-modal');
+        const closeNewClientModalBtn = document.getElementById('close-new-client-modal-btn');
+        const cancelNewClientBtn = document.getElementById('cancel-new-client-btn');
+        const saveNewClientBtn = document.getElementById('save-new-client-btn');
+        const newClientForm = document.getElementById('new-client-form');
+        const newClientModalError = document.getElementById('new-client-modal-error');
+        const newClientModalErrorMessage = document.getElementById('new-client-modal-error-message');
 
         let selectedClient = null;
         let debounceTimeout = null;
@@ -211,14 +386,16 @@
         clientSearchInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
                 event.preventDefault();
-                const cedula_rif = clientSearchInput.value.trim();
-                if (cedula_rif.length === 0) return;
+                const query = clientSearchInput.value.trim();
+                if (query.length === 0) return;
+
+                // If a client is already selected, do nothing on Enter
+                if (selectedClient) return;
 
                 // Check if there are visible suggestions
-                const suggestions = clientSuggestions.querySelectorAll('div');
-                if (suggestions.length > 0) {
+                const firstSuggestion = clientSuggestions.querySelector('div');
+                if (firstSuggestion) {
                     // Select the first suggestion
-                    const firstSuggestion = suggestions[0];
                     const clientData = JSON.parse(firstSuggestion.dataset.client || '{}');
                     if (clientData.id) {
                         clientSearchInput.value = `${clientData.name} - ${clientData.cedula_rif || ''}`;
@@ -226,10 +403,71 @@
                         showClientInfo(clientData);
                     }
                 } else {
-                    // No suggestions, redirect to new client creation
-                    window.location.href = `/clientes/nuevo?cedula_rif=${encodeURIComponent(cedula_rif)}`;
+                    // No suggestions, open the 'create new client' modal
+                    openNewClientModal();
                 }
             }
+        });
+
+        function openNewClientModal() {
+            const searchText = clientSearchInput.value.trim();
+            // Reset form
+            newClientForm.reset();
+            newClientModalError.classList.add('hidden');
+
+            // Pre-populate based on search text (very basic check for number)
+            if (!isNaN(searchText) && !isNaN(parseFloat(searchText))) {
+                document.getElementById('new-client-cedula-rif').value = searchText;
+            } else {
+                document.getElementById('new-client-name').value = searchText;
+            }
+            newClientModal.classList.remove('hidden');
+            document.getElementById('new-client-name').focus();
+        }
+
+        function closeNewClientModal() {
+            newClientModal.classList.add('hidden');
+        }
+
+        // Add listeners for the new client modal
+        closeNewClientModalBtn.addEventListener('click', closeNewClientModal);
+        cancelNewClientBtn.addEventListener('click', closeNewClientModal);
+
+        saveNewClientBtn.addEventListener('click', () => {
+            const name = document.getElementById('new-client-name').value.trim();
+            if (!name) {
+                newClientModalErrorMessage.textContent = 'El nombre del cliente es obligatorio.';
+                newClientModalError.classList.remove('hidden');
+                return;
+            }
+
+            const clientData = {
+                name: name,
+                cedula_rif: document.getElementById('new-client-cedula-rif').value.trim(),
+                email: document.getElementById('new-client-email').value.trim(),
+                phone: document.getElementById('new-client-phone').value.trim(),
+                address: document.getElementById('new-client-address').value.trim(),
+            };
+
+            fetch('/api/clientes/nuevo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(clientData)
+            })
+            .then(response => {
+                if (!response.ok) { return response.json().then(err => { throw new Error(err.error || 'Error desconocido'); }); }
+                return response.json();
+            })
+            .then(newClient => {
+                closeNewClientModal();
+                showClientInfo(newClient);
+                clientSearchInput.value = `${newClient.name} - ${newClient.cedula_rif || ''}`;
+                clientSuggestions.classList.add('hidden');
+            })
+            .catch(error => {
+                newClientModalErrorMessage.textContent = error.message;
+                newClientModalError.classList.remove('hidden');
+            });
         });
 
         // Initialize product list and other existing JS code below (unchanged)...
@@ -265,6 +503,16 @@
             if (priceUsdInput) {
                 priceUsdInput.value = selectedOption.dataset.priceUsd;
                 updatePriceVes(priceUsdInput);
+            } else {
+                // This is for non-admin
+                const priceUsd = selectedOption.dataset.priceUsd;
+                const priceUsdDisplay = productItem.querySelector('.price-usd-display');
+                const priceUsdHiddenInput = productItem.querySelector('.price-usd-hidden-for-submit');
+                const priceVesDisplay = productItem.querySelector('.price-ves-display');
+
+                if (priceUsdDisplay) priceUsdDisplay.textContent = parseFloat(priceUsd).toFixed(2);
+                if (priceUsdHiddenInput) priceUsdHiddenInput.value = priceUsd;
+                if (priceVesDisplay) priceVesDisplay.textContent = (parseFloat(priceUsd) * currentRate).toFixed(2);
             }
 
             // Configurar validación de cantidad según stock disponible
@@ -447,8 +695,8 @@
                 subtotal += quantity * priceVes;
             });
 
-            const iva = subtotal * 0.16;
-            const total = subtotal + iva;
+            const iva = 0; // IVA desactivado
+            const total = subtotal;
 
             document.getElementById('subtotal-display').textContent = subtotal.toFixed(2) + ' Bs';
             document.getElementById('iva-display').textContent = iva.toFixed(2) + ' Bs';
@@ -557,6 +805,217 @@
                 document.getElementById('scan-barcode-btn').click();
             }
         });
+
+        // --- Lógica del Modal de Pago ---
+        const paymentModal = document.getElementById('payment-modal');
+        const processPaymentBtn = document.getElementById('process-payment-btn');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const finalizeOrderBtn = document.getElementById('finalize-order-btn');
+        const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
+
+        const modalTotalAmount = document.getElementById('modal-total-amount');
+        const modalPaidAmount = document.getElementById('modal-paid-amount');
+        const modalRemainingAmount = document.getElementById('modal-remaining-amount');
+        const modalChangeDisplay = document.getElementById('modal-change-display');
+        const modalChangeAmount = document.getElementById('modal-change-amount');
+        
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentAmountInput = document.getElementById('payment-amount');
+        const paymentReferenceGroup = document.getElementById('payment-reference-group');
+        const paymentReferenceInput = document.getElementById('payment-reference');
+        const paymentBankGroup = document.getElementById('payment-bank-group');
+        const paymentBankSelect = document.getElementById('payment-bank');
+        const paymentPosGroup = document.getElementById('payment-pos-group');
+        const paymentPosSelect = document.getElementById('payment-pos');
+        const paymentCashboxGroup = document.getElementById('payment-cashbox-group');
+        const paymentCashboxSelect = document.getElementById('payment-cashbox');
+
+        const paymentsListDiv = document.getElementById('payments-list');
+        const paymentsDataInput = document.getElementById('payments-data-input');
+
+        let payments = [];
+        let orderTotal = 0;
+
+        function updatePaymentAmountInput() {
+            const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
+            let remaining = orderTotal - totalPaid;
+
+            if (remaining <= 0.01) {
+                paymentAmountInput.value = '';
+                return;
+            }
+
+            const method = paymentMethodSelect.value;
+
+            if (method === 'efectivo_usd') {
+                if (currentRate > 0) {
+                    const amountUsd = remaining / currentRate;
+                    paymentAmountInput.value = amountUsd.toFixed(2);
+                } else {
+                    paymentAmountInput.value = '0.00'; // Avoid division by zero
+                }
+            } else {
+                paymentAmountInput.value = remaining.toFixed(2);
+            }
+        }
+
+        function openPaymentModal() {
+            updateOrderSummary(); // Asegurarse de que el total está actualizado
+            orderTotal = parseFloat(document.getElementById('total-display').textContent) || 0;
+            
+            if (orderTotal <= 0) {
+                alert("Agregue productos a la orden antes de procesar el pago.");
+                return;
+            }
+
+            modalTotalAmount.textContent = orderTotal.toFixed(2) + ' Bs';
+            updatePaymentSummary(); // This will set up the initial state of the modal correctly
+            paymentModal.classList.remove('hidden');
+        }
+
+        function closePaymentModal() {
+            paymentModal.classList.add('hidden');
+            payments = []; // Limpiar pagos si se cierra el modal
+            paymentsListDiv.innerHTML = '';
+            modalChangeDisplay.classList.add('hidden');
+        }
+
+        function updatePaymentSummary() {
+            const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
+            const remaining = orderTotal - totalPaid;
+
+            modalPaidAmount.textContent = totalPaid.toFixed(2) + ' Bs';
+
+            // Handle change display
+            if (remaining < -0.001) { // Overpaid, show change
+                const change = Math.abs(remaining);
+                const changeInBs = change.toFixed(2);
+                const changeInUsd = (change / currentRate).toFixed(2);
+                modalChangeAmount.textContent = `Bs ${changeInBs} / $${changeInUsd}`;
+                modalChangeDisplay.classList.remove('hidden');
+            } else {
+                modalChangeDisplay.classList.add('hidden');
+            }
+
+            // Handle remaining amount display and input field
+            if (remaining > 0.01) { // Amount is still pending
+                modalRemainingAmount.textContent = remaining.toFixed(2) + ' Bs';
+                modalRemainingAmount.classList.remove('text-green-600');
+                modalRemainingAmount.classList.add('text-red-600');
+                finalizeOrderBtn.disabled = true;
+            } else { // Paid in full or overpaid
+                modalRemainingAmount.textContent = '0.00 Bs';
+                modalRemainingAmount.classList.remove('text-red-600');
+                modalRemainingAmount.classList.add('text-green-600');
+                finalizeOrderBtn.disabled = false;
+            }
+            updatePaymentAmountInput();
+        }
+
+        function addPayment() {
+            const method = paymentMethodSelect.value;
+            const amount = parseFloat(paymentAmountInput.value);
+            const reference = paymentReferenceInput.value;
+            const bank_id = paymentBankSelect.value;
+            const pos_id = paymentPosSelect.value;
+            const cash_box_id = paymentCashboxSelect.value;
+
+            if (!amount || amount <= 0) {
+                alert("Por favor, ingrese un monto válido.");
+                return;
+            }
+
+            // Validar selección de destino
+            if (method === 'transferencia' && !bank_id) {
+                alert("Por favor, seleccione un banco de destino.");
+                return;
+            }
+            if (method === 'punto_de_venta' && !pos_id) {
+                alert("Por favor, seleccione un punto de venta.");
+                return;
+            }
+            if (method.startsWith('efectivo') && !cash_box_id) {
+                alert("Por favor, seleccione una caja.");
+                return;
+            }
+
+            let amount_ves_equivalent = amount;
+            let currency_paid = 'VES';
+
+            if (method === 'efectivo_usd') {
+                amount_ves_equivalent = amount * currentRate;
+                currency_paid = 'USD';
+            }
+
+            const payment = {
+                method: method,
+                amount_paid: amount,
+                currency_paid: currency_paid,
+                amount_ves_equivalent: amount_ves_equivalent,
+                reference: reference,
+                bank_id: method === 'transferencia' ? parseInt(bank_id) : null,
+                pos_id: method === 'punto_de_venta' ? parseInt(pos_id) : null,
+                cash_box_id: method.startsWith('efectivo') ? parseInt(cash_box_id) : null,
+            };
+
+            payments.push(payment);
+            renderPayments();
+            updatePaymentSummary();
+
+            // Limpiar formulario de pago
+            paymentAmountInput.value = '';
+            paymentReferenceInput.value = '';
+            paymentBankSelect.selectedIndex = 0;
+            paymentPosSelect.selectedIndex = 0;
+            paymentCashboxSelect.selectedIndex = 0;
+        }
+
+        function renderPayments() {
+            paymentsListDiv.innerHTML = '';
+            payments.forEach((p, index) => {
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-center bg-gray-100 p-2 rounded';
+                let details = `${p.method.replace(/_/g, ' ')}: ${p.amount_paid.toFixed(2)} ${p.currency_paid} (Equiv. ${p.amount_ves_equivalent.toFixed(2)} Bs)`;
+                if (p.reference) {
+                    details += ` - Ref: ${p.reference}`;
+                }
+                div.innerHTML = `
+                    <span>${details}</span>
+                    <button type="button" data-index="${index}" class="remove-payment-btn text-red-500 hover:text-red-700"><i class="fas fa-times"></i></button>
+                `;
+                paymentsListDiv.appendChild(div);
+            });
+        }
+
+        processPaymentBtn.addEventListener('click', openPaymentModal);
+        closeModalBtn.addEventListener('click', closePaymentModal);
+        addPaymentBtnModal.addEventListener('click', addPayment);
+
+        paymentMethodSelect.addEventListener('change', function() {
+            const method = this.value;
+            paymentReferenceGroup.classList.toggle('hidden', method !== 'transferencia');
+            paymentBankGroup.classList.toggle('hidden', method !== 'transferencia');
+            paymentPosGroup.classList.toggle('hidden', method !== 'punto_de_venta');
+            paymentCashboxGroup.classList.toggle('hidden', !method.startsWith('efectivo'));
+            updatePaymentAmountInput();
+        });
+
+        paymentsListDiv.addEventListener('click', function(e) {
+            if (e.target.closest('.remove-payment-btn')) {
+                const index = e.target.closest('.remove-payment-btn').dataset.index;
+                payments.splice(index, 1);
+                renderPayments();
+                updatePaymentSummary();
+            }
+        });
+
+        finalizeOrderBtn.addEventListener('click', function() {
+            paymentsDataInput.value = JSON.stringify(payments);
+            document.getElementById('order-form').submit();
+        });
+
+        // Disparar el evento change al cargar para establecer el estado inicial correcto
+        paymentMethodSelect.dispatchEvent(new Event('change'));
     });
 </script>
 {% endblock %}

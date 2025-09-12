@@ -18,6 +18,14 @@
                             <i class="fas fa-search text-gray-400"></i>
                         </span>
                     </div>
+                    <div class="relative">
+                        <select id="group-filter" name="group" class="border border-gray-300 rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Todos los Grupos</option>
+                            {% for group in product_groups %}
+                            <option value="{{ group }}">{{ group }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                     <button type="button" id="filter-btn" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
                         Filtrar
                     </button>
@@ -63,6 +71,7 @@
 document.addEventListener('DOMContentLoaded', function () {
     const selectAllCheckbox = document.getElementById('select-all');
     const searchInput = document.getElementById('search-input');
+    const groupFilter = document.getElementById('group-filter');
     const filterBtn = document.getElementById('filter-btn');
     const tableBody = document.getElementById('product-table-body');
 
@@ -123,8 +132,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // Filtrado y búsqueda
     filterBtn.addEventListener('click', function() {
         const searchTerm = searchInput.value.toLowerCase();
+        const group = groupFilter.value;
         
-        fetch(`{{ url_for('main.codigos_barra_api') }}?search=${searchTerm}`)
+        fetch(`{{ url_for('main.codigos_barra_api') }}?search=${searchTerm}&group=${group}`)
             .then(response => response.json())
             .then(data => {
                 updateTable(data.products);
@@ -137,11 +147,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     printForm.addEventListener('submit', function(e) {
         const selectedCheckboxes = document.querySelectorAll('.product-checkbox:checked');
-        if (selectedCheckboxes.length > 100) {
-            e.preventDefault();
-            alert('No se pueden imprimir más de 100 productos a la vez. Por favor, seleccione menos productos.');
-            return false;
-        }
         if (selectedCheckboxes.length === 0) {
             e.preventDefault();
             alert('Por favor, seleccione al menos un producto para imprimir.');

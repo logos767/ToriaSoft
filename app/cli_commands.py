@@ -1,6 +1,6 @@
 import logging
 from flask import current_app
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from .extensions import db, bcrypt
 from .models import User, Client, Provider, Product
 
@@ -47,3 +47,18 @@ def register_commands(app):
                 db.session.commit()
 
             logger.info("Database initialization complete!")
+
+    @app.cli.command('set-order-start')
+    def set_order_start_number():
+        """Sets the starting number for the order ID sequence to 18070001."""
+        with current_app.app_context():
+            try:
+                # This command is specific to PostgreSQL.
+                # The sequence name is typically <table_name>_<id_column_name>_seq
+                db.session.execute(text("ALTER SEQUENCE order_id_seq RESTART WITH 18070001"))
+                db.session.commit()
+                logger.info("Successfully set the order ID sequence to start at 18070001.")
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"Failed to set order ID sequence: {e}")
+                logger.error("This command is likely only compatible with PostgreSQL. Make sure the 'order' table exists.")
