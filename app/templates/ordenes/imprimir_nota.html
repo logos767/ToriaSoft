@@ -86,7 +86,7 @@
     <!-- Encabezado de la empresa -->
     <div class="header">
         {% if company_info.logo_filename %}
-            <img src="{{ url_for('static', filename=company_info.logo_filename, _external=True) }}" alt="Logo de la empresa" style="display='none'">
+            <!-- E<img src="{{ url_for('static', filename=company_info.logo_filename, _external=True) }}" alt="Logo de la empresa" onerror="this.style.display='none'"> -->
         {% endif %}
         <h3 style="font-weight: bold; font-size: 1.2em;">{{ company_info.name }}</h3>
         <p>RIF: {{ company_info.rif }}</p>
