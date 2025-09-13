@@ -24,7 +24,9 @@
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for client in clients %}
                     <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ client.name }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <a href="{{ url_for('main.client_detail', client_id=client.id) }}" class="text-blue-600 hover:underline">{{ client.name }}</a>
+                        </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ client.cedula_rif or 'N/A' }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ client.phone or 'N/A' }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ client.email or 'N/A' }}</td>

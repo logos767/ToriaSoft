@@ -8,12 +8,8 @@ def get_current_time_ve():
     """Retorna la hora actual en la zona horaria de Venezuela."""
     return datetime.now(VE_TIMEZONE)
 
-from .extensions import db, login_manager
+from .extensions import db
 from flask_login import UserMixin
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
 
 class User(db.Model, UserMixin):
     __tablename__ = 'users'
@@ -87,10 +83,22 @@ class Order(db.Model):
     date_created = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
     status = db.Column(db.String(20), nullable=False, default='Pendiente')
     total_amount = db.Column(db.Float, nullable=False, default=0.0)
+    discount_usd = db.Column(db.Float, nullable=True, default=0.0)
 
     # Relaciones
     items = db.relationship('OrderItem', backref='order', lazy=True, cascade="all, delete-orphan")
     payments = db.relationship('Payment', backref='order', lazy=True, cascade="all, delete-orphan")
+
+    @property
+    def paid_amount(self):
+        """Calcula el monto total pagado para esta orden en VES."""
+        return sum(p.amount_ves_equivalent for p in self.payments)
+
+    @property
+    def due_amount(self):
+        """Calcula el monto adeudado para esta orden en VES."""
+        due = self.total_amount - self.paid_amount
+        return due if due > 0.01 else 0.0
 
     def __repr__(self):
         return f"Order('{self.id}', '{self.total_amount}')"

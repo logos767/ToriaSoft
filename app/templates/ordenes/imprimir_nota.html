@@ -98,6 +98,12 @@
     <h2 class="text-center font-bold" style="text-align: center; font-weight: bold; font-size: 1.2em;">NOTA DE ENTREGA</h2>
     <h3 class="text-center font-bold" style="text-align: center; font-weight: bold; font-size: 1.2em;"><strong>N°:</strong> {{ order.id|order_id_format }}</h3>
     <!-- Información del cliente y orden -->
+    {% set is_credit_sale = order.status == 'Crédito' %}
+    {% if order.status == 'Crédito' or order.status == 'Pagada' %}
+    <div style="text-align: center; font-weight: bold; border: 1px dashed #000; padding: 1mm; margin: 1mm 0;">
+        CONDICIÓN: CRÉDITO
+    </div>
+    {% endif %}
     <div class="info">
         <div class="info-item">
             <span>Fecha:</span>
@@ -146,11 +152,19 @@
             <tr>
                 <td>{{ item.quantity }}x</td>
                 <td>{{ item.product.name }}</td>
-                <td style="text-align: right;">{{ "%.2f"|format(item.price * item.quantity) }}</td>
+                {% if is_credit_sale and current_rate > 0 %}
+                    <td style="text-align: right;">{{ currency_symbol }}{{ "%.2f"|format((item.price * item.quantity) / current_rate) }}</td>
+                {% else %}
+                    <td style="text-align: right;">Bs. {{ "%.2f"|format(item.price * item.quantity) }}</td>
+                {% endif %}
             </tr>
             <tr style="font-size: 12px;">
                 <td></td>
-                <td colspan="2" style="padding-left: 5px;">@ {{ "%.2f"|format(item.price) }} c/u</td>
+                {% if is_credit_sale and current_rate > 0 %}
+                    <td colspan="2" style="padding-left: 5px;">@ {{ currency_symbol }}{{ "%.2f"|format(item.price / current_rate) }} c/u</td>
+                {% else %}
+                    <td colspan="2" style="padding-left: 5px;">@ Bs. {{ "%.2f"|format(item.price) }} c/u</td>
+                {% endif %}
             </tr>
             {% endfor %}
         </tbody>
@@ -177,32 +191,72 @@
         </div>
         {% endif %}
         {% endfor %}
-        {% if change > 0.01 %}
-        <div class="info-item">
-            <span>Total Pag.:</span>
-            <span>Bs. {{ "%.2f"|format(subtotal + iva + change) }}</span>
-        </div>
-        <div class="info-item">
-            <span>Cambio:</span>
-            <span>Bs. {{ "%.2f"|format(change) }}</span>
-        </div>
-        {% endif %}
     </div>
 
     <!-- Totales -->
     <div class="totals">
-        <div class="total-item" style="display: none;">
+        <div class="total-item">
             <span>Subtotal:</span>
-            <span>Bs. {{ "%.2f"|format(subtotal) }}</span>
+            {% if is_credit_sale and current_rate > 0 %}
+                <span>{{ currency_symbol }}{{ "%.2f"|format(subtotal / current_rate) }}</span>
+            {% else %}
+                <span>Bs. {{ "%.2f"|format(subtotal) }}</span>
+            {% endif %}
         </div>
+        {% if order.discount_usd > 0 %}
+        <div class="total-item">
+            <span>Descuento:</span>
+            {% if is_credit_sale and current_rate > 0 %}
+                <span>-{{ currency_symbol }}{{ "%.2f"|format((subtotal - order.total_amount) / current_rate) }}</span>
+            {% else %}
+                <span>-Bs. {{ "%.2f"|format(subtotal - order.total_amount) }}</span>
+            {% endif %}
+        </div>
+        {% endif %}
         <div class="total-item" style="display: none;">
             <span>IVA (16%):</span>
-            <span>Bs. {{ "%.2f"|format(iva) }}</span>
+            {% if is_credit_sale and current_rate > 0 %}
+                <span>{{ currency_symbol }}{{ "%.2f"|format(iva / current_rate) }}</span>
+            {% else %}
+                <span>Bs. {{ "%.2f"|format(iva) }}</span>
+            {% endif %}
         </div>
         <div class="total-item grand-total">
             <span>Total:</span>
-            <span>Bs. {{ "%.2f"|format(subtotal + iva) }}</span>
+            {% if is_credit_sale and current_rate > 0 %}
+                <span>{{ currency_symbol }}{{ "%.2f"|format(order.total_amount / current_rate) }}</span>
+            {% else %}
+                <span>Bs. {{ "%.2f"|format(order.total_amount) }}</span>
+            {% endif %}
         </div>
+        <div class="total-item">
+            <span>Total Pagado:</span>
+            {% if is_credit_sale and current_rate > 0 %}
+                <span>{{ currency_symbol }}{{ "%.2f"|format(order.paid_amount / current_rate) }}</span>
+            {% else %}
+                <span>Bs. {{ "%.2f"|format(order.paid_amount) }}</span>
+            {% endif %}
+        </div>
+        {% if change > 0.01 %}
+        <div class="total-item">
+            <span>Vuelto:</span>
+            {% if is_credit_sale and current_rate > 0 %}
+                <span>{{ currency_symbol }}{{ "%.2f"|format(change / current_rate) }}</span>
+            {% else %}
+                <span>Bs. {{ "%.2f"|format(change) }}</span>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% if order.due_amount > 0.01 %}
+        <div class="total-item grand-total" style="color: red;">
+            <span>Saldo Pendiente:</span>
+            {% if is_credit_sale and current_rate > 0 %}
+                <span>{{ currency_symbol }}{{ "%.2f"|format(order.due_amount / current_rate) }}</span>
+            {% else %}
+                <span>Bs. {{ "%.2f"|format(order.due_amount) }}</span>
+            {% endif %}
+        </div>
+        {% endif %}
         
     </div>
 

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Cargando ToriaSoft...</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            color: #333;
+        }
+        .loader-container {
+            text-align: center;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .spinner {
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1.5s linear infinite;
+            margin: 0 auto 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        h1 { font-size: 22px; }
+        p { font-size: 14px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="loader-container">
+        <div id="spinner" class="spinner"></div>
+        <div id="loading-text">
+            <h1>Iniciando ToriaSoft...</h1>
+            <p>Esperando a que el servidor esté listo. Esto puede tardar unos segundos.</p>
+        </div>
+        <div id="error-text" style="display: none;">
+            <h1>Error al iniciar ToriaSoft</h1>
+            <p>El servidor no respondió. Es posible que haya ocurrido un error durante el inicio.</p>
+            <p>Por favor, ejecuta 'stop_app.bat' e intenta iniciar la aplicación de nuevo.</p>
+        </div>
+        <p>Si la página no carga, haz clic <a href="http://127.0.0.1:5000/">aquí</a> para intentar de todos modos.</p>
+    </div>
+
+    <script>
+        function checkServerAndRedirect() {
+            const serverUrl = 'http://127.0.0.1:5000/';
+            const healthCheckUrl = 'http://127.0.0.1:5000/api/exchange_rate'; // Un endpoint ligero para verificar
+            const startTime = new Date().getTime();
+            const timeout = 25000; // 25 segundos de tiempo de espera máximo
+            const interval = 1500; // Reintentar cada 1.5 segundos
+
+            const intervalId = setInterval(() => {
+                // Verificar si se superó el tiempo de espera
+                if (new Date().getTime() - startTime > timeout) {
+                    clearInterval(intervalId);
+                    document.getElementById('spinner').style.display = 'none';
+                    document.getElementById('loading-text').style.display = 'none';
+                    document.getElementById('error-text').style.display = 'block';
+                    return;
+                }
+
+                // Intentar conectar con el servidor
+                // Usamos 'no-cors' porque solo nos importa si el puerto está abierto, no la respuesta.
+                fetch(healthCheckUrl, { mode: 'no-cors' })
+                    .then(response => {
+                        // Si la promesa se resuelve, el servidor está escuchando.
+                        clearInterval(intervalId);
+                        window.location.href = serverUrl;
+                    })
+                    .catch(err => {
+                        // El servidor aún no está listo, la consola mostrará un error de red (lo cual es normal aquí).
+                        console.log('Servidor no está listo, reintentando...');
+                    });
+            }, interval);
+        }
+
+        window.onload = checkServerAndRedirect;
+    </script>
+</body>
+</html>

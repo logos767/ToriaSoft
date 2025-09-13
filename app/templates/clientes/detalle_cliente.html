@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-7xl">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-user-tag mr-2"></i>{{ title }}</h1>
+        <a href="{{ url_for('main.client_list') }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver a Clientes</a>
+    </div>
+
+    <!-- Client Info & Accounts Receivable Summary -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <!-- Client Info -->
+        <div class="md:col-span-2 bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Información del Cliente</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-gray-600">
+                <p><strong>Nombre:</strong> {{ client.name }}</p>
+                <p><strong>Cédula/RIF:</strong> {{ client.cedula_rif or 'N/A' }}</p>
+                <p><strong>Email:</strong> {{ client.email or 'N/A' }}</p>
+                <p><strong>Teléfono:</strong> {{ client.phone or 'N/A' }}</p>
+                <p class="sm:col-span-2"><strong>Dirección:</strong> {{ client.address or 'N/A' }}</p>
+            </div>
+        </div>
+
+        <!-- Accounts Receivable -->
+        <div class="bg-white p-6 rounded-lg shadow-md flex flex-col justify-center items-center text-center">
+            <h2 class="text-xl font-semibold text-gray-700 mb-2">Cuentas por Cobrar</h2>
+            {% if total_due > 0 %}
+                <p class="text-4xl font-bold text-red-600">Bs. {{ "%.2f"|format(total_due) }}</p>
+                <p class="text-lg font-semibold text-red-500">({{ currency_symbol }}{{ "%.2f"|format(total_due / current_rate) }})</p>
+            {% else %}
+                <p class="text-4xl font-bold text-green-600">Bs. 0.00</p>
+                <p class="text-lg text-gray-500 mt-2">¡Cliente al día!</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Order History -->
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Historial de Órdenes</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Orden #</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Pagado</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Deuda</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for order in orders %}
+                    <tr class="{% if order.due_amount > 0.01 %}bg-red-50{% elif order.status == 'Pagada' %}bg-green-50{% endif %}">
+                        <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <a href="{{ url_for('main.order_detail', order_id=order.id) }}" class="text-blue-600 hover:underline">#{{ order.id|order_id_format }}</a>
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{{ order.date_created|ve_datetime(fmt='%d/%m/%Y') }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-right text-gray-800">Bs. {{ "%.2f"|format(order.total_amount) }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-right text-green-700">Bs. {{ "%.2f"|format(order.paid_amount) }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-right font-bold {% if order.due_amount > 0.01 %}text-red-600{% else %}text-gray-500{% endif %}">
+                            Bs. {{ "%.2f"|format(order.due_amount) }}
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap text-center text-sm">
+                            {% if order.status == 'Crédito' %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Crédito</span>
+                            {% elif order.status == 'Pagada' %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">Pagada</span>
+                            {% else %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">{{ order.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2">
+                            <a href="{{ url_for('main.order_detail', order_id=order.id) }}" title="Ver Detalle" class="text-indigo-600 hover:text-indigo-900"><i class="fas fa-eye"></i></a>
+                            {% if order.due_amount > 0.01 %}
+                            <button type="button" class="text-green-600 hover:text-green-800 add-payment-button" 
+                                    data-order-id="{{ order.id }}" 
+                                    data-due-amount="{{ order.due_amount }}"
+                                    title="Registrar Abono">
+                                <i class="fas fa-hand-holding-usd"></i>
+                            </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="px-6 py-10 text-center text-gray-500">Este cliente aún no tiene órdenes registradas.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden form for submitting payments -->
+<form id="payment-submission-form" method="POST" action="{{ url_for('main.client_detail', client_id=client.id) }}" class="hidden">
+    <input type="hidden" name="order_id" id="payment-form-order-id">
+    <input type="hidden" name="payments_data" id="payment-form-data-input">
+</form>
+
+
+<!-- Include the generic payment modal -->
+{% include 'shared/payment_modal.html' %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- Generic Payment Modal Logic ---
+    const paymentModal = document.getElementById('payment-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const finalizeOrderBtn = document.getElementById('finalize-order-btn');
+    const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
+
+    const modalTotalAmount = document.getElementById('modal-total-amount');
+    const modalPaidAmount = document.getElementById('modal-paid-amount');
+    const modalRemainingAmount = document.getElementById('modal-remaining-amount');
+    
+    const paymentMethodSelect = document.getElementById('payment-method');
+    const paymentAmountInput = document.getElementById('payment-amount');
+    const paymentReferenceGroup = document.getElementById('payment-reference-group');
+    const paymentBankGroup = document.getElementById('payment-bank-group');
+    const paymentPosGroup = document.getElementById('payment-pos-group');
+    const paymentCashboxGroup = document.getElementById('payment-cashbox-group');
+
+    const paymentsListDiv = document.getElementById('payments-list');
+    const paymentSubmissionForm = document.getElementById('payment-submission-form');
+    const paymentFormOrderIdInput = document.getElementById('payment-form-order-id');
+    const paymentFormDataInput = document.getElementById('payment-form-data-input');
+
+    let payments = [];
+    let orderTotal = 0;
+    let currentRate = {{ current_rate }};
+
+    function openPaymentModalForAbono(orderId, dueAmount) {
+        orderTotal = parseFloat(dueAmount);
+        payments = []; // Reset payments for each new modal opening
+        
+        document.getElementById('payment-modal-title').textContent = `Registrar Abono para Orden #${String(orderId).padStart(9, '0')}`;
+        document.getElementById('credit-sale-notice').classList.add('hidden');
+        finalizeOrderBtn.textContent = 'Registrar Abono';
+
+        paymentFormOrderIdInput.value = orderId;
+        
+        modalTotalAmount.textContent = orderTotal.toFixed(2) + ' Bs';
+        updatePaymentSummary();
+        paymentModal.classList.remove('hidden');
+    }
+
+    function closePaymentModal() {
+        paymentModal.classList.add('hidden');
+    }
+
+    function updatePaymentSummary() {
+        const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
+        const remaining = orderTotal - totalPaid;
+
+        modalPaidAmount.textContent = totalPaid.toFixed(2) + ' Bs';
+        modalRemainingAmount.textContent = Math.max(0, remaining).toFixed(2) + ' Bs';
+
+        finalizeOrderBtn.disabled = totalPaid <= 0;
+        
+        // Auto-fill amount
+        const method = paymentMethodSelect.value;
+        if (method === 'efectivo_usd' && currentRate > 0) {
+            paymentAmountInput.value = (remaining / currentRate).toFixed(2);
+        } else {
+            paymentAmountInput.value = remaining.toFixed(2);
+        }
+    }
+
+    function addPayment() {
+        // This modal only allows one payment at a time for simplicity
+        payments = []; 
+
+        const method = paymentMethodSelect.value;
+        const amount = parseFloat(paymentAmountInput.value);
+        
+        if (!amount || amount <= 0) {
+            alert("Por favor, ingrese un monto válido.");
+            return;
+        }
+
+        let amount_ves_equivalent = amount;
+        let currency_paid = 'VES';
+        if (method === 'efectivo_usd') {
+            amount_ves_equivalent = amount * currentRate;
+            currency_paid = 'USD';
+        }
+
+        const payment = {
+            method: method,
+            amount_paid: amount,
+            currency_paid: currency_paid,
+            amount_ves_equivalent: amount_ves_equivalent,
+            reference: document.getElementById('payment-reference').value,
+            bank_id: document.getElementById('payment-bank').value ? parseInt(document.getElementById('payment-bank').value) : null,
+            pos_id: document.getElementById('payment-pos').value ? parseInt(document.getElementById('payment-pos').value) : null,
+            cash_box_id: document.getElementById('payment-cashbox').value ? parseInt(document.getElementById('payment-cashbox').value) : null,
+        };
+        payments.push(payment);
+        updatePaymentSummary();
+    }
+
+    // --- Event Listeners ---
+    document.querySelectorAll('.add-payment-button').forEach(button => {
+        button.addEventListener('click', function() {
+            const orderId = this.dataset.orderId;
+            const dueAmount = this.dataset.dueAmount;
+            openPaymentModalForAbono(orderId, dueAmount);
+        });
+    });
+
+    closeModalBtn.addEventListener('click', closePaymentModal);
+    addPaymentBtnModal.addEventListener('click', addPayment);
+
+    paymentMethodSelect.addEventListener('change', function() {
+        const method = this.value;
+        paymentReferenceGroup.classList.toggle('hidden', method !== 'transferencia');
+        paymentBankGroup.classList.toggle('hidden', method !== 'transferencia');
+        paymentPosGroup.classList.toggle('hidden', method !== 'punto_de_venta');
+        paymentCashboxGroup.classList.toggle('hidden', !method.startsWith('efectivo'));
+        updatePaymentSummary();
+    });
+
+    finalizeOrderBtn.addEventListener('click', function() {
+        if (payments.length === 0) {
+            alert("Debe agregar al menos un método de pago para registrar el abono.");
+            return;
+        }
+        paymentFormDataInput.value = JSON.stringify(payments);
+        paymentSubmissionForm.submit();
+    });
+
+    // Initialize first state of conditional fields
+    paymentMethodSelect.dispatchEvent(new Event('change'));
+});
+</script>
+{% endblock %}

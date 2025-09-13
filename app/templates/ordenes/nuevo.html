@@ -110,10 +110,15 @@
                 <div class="grid grid-cols-2 gap-4 max-w-md ml-auto">
                     <div class="text-right font-semibold hidden">Subtotal:</div>
                     <div class="text-right hidden" id="subtotal-display">0.00 Bs</div>
-                    
+
                     <div class="text-right font-semibold hidden">IVA (16%):</div>
                     <div class="text-right hidden" id="iva-display">0.00 Bs</div>
-                    
+
+                    <div class="text-right font-semibold">Descuento ({{ currency_symbol }}):</div>
+                    <div class="text-right">
+                        <input type="number" id="discount-input" name="discount_usd" value="0.00" step="0.01" min="0" class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-right">
+                    </div>
+
                     <div class="text-right font-bold text-lg border-t pt-2">Total a Pagar:</div>
                     <div class="text-right font-bold text-lg border-t pt-2" id="total-display">0.00 Bs</div>
                 </div>
@@ -121,6 +126,8 @@
 
             <div class="flex items-center justify-between mt-6 pt-6 border-t">
                 <!-- Botón para reimprimir la última orden -->
+                
+
                 <div>
                     {% if last_order %}
                     <a href="{{ url_for('main.print_delivery_note', order_id=last_order.id) }}" target="_blank" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
@@ -131,8 +138,14 @@
 
                 <!-- Botón para procesar el pago de la nueva orden -->
                 <div>
+                    <div class="flex items-center">
+                        <input id="credit-sale-checkbox" name="is_credit_sale" type="checkbox" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                        <label for="credit-sale-checkbox" class="ml-2 block text-sm text-gray-900 font-bold">
+                            Venta a Crédito
+                        </label>
+                    </div>
                     <input type="hidden" name="payments_data" id="payments-data-input">
-                    <button type="button" id="process-payment-btn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
+                    <button type="button" id="process-payment-btn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition-all">
                         <i class="fas fa-dollar-sign mr-2"></i>Procesar Pago y Crear Orden
                     </button>
                 </div>
@@ -150,6 +163,17 @@
                 <button id="close-modal-btn" class="text-gray-400 hover:text-gray-600">
                     <i class="fas fa-times text-2xl"></i>
                 </button>
+            </div>
+
+            <div id="credit-sale-notice" class="hidden bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-4" role="alert">
+                <p class="font-bold">Venta a Crédito</p>
+                <p>Puede registrar un abono inicial o finalizar la orden sin pagos. El saldo pendiente se registrará en la cuenta del cliente.</p>
+            </div>
+
+            <!-- Mensaje de restricción de pago -->
+            <div id="payment-restriction-message" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4" role="alert">
+                <p class="font-bold">Atención</p>
+                <p>Debido al descuento aplicado, solo se permite el pago en Efectivo (USD).</p>
             </div>
 
             <!-- Resumen de Pago -->
@@ -240,7 +264,7 @@
 
             <!-- Botón de Finalizar -->
             <div class="mt-8 flex justify-end">
-                <button type="button" id="finalize-order-btn" class="bg-green-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-700 disabled:bg-gray-400" disabled>
+                <button type="button" id="finalize-order-btn" class="bg-green-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-all" disabled>
                     <i class="fas fa-check-circle mr-2"></i>Finalizar y Crear Orden
                 </button>
             </div>
@@ -674,6 +698,11 @@
             }
         });
 
+        // Event listener para actualizar resumen al cambiar el descuento
+        document.getElementById('discount-input').addEventListener('input', function() {
+            updateOrderSummary();
+        });
+
         // Función para calcular y actualizar el resumen de la orden
         function updateOrderSummary() {
             let subtotal = 0;
@@ -695,12 +724,16 @@
                 subtotal += quantity * priceVes;
             });
 
+            const discountInput = document.getElementById('discount-input');
+            const discountUsd = parseFloat(discountInput.value) || 0;
+            const discountVes = discountUsd * currentRate;
+
             const iva = 0; // IVA desactivado
-            const total = subtotal;
+            const total = subtotal - discountVes;
 
             document.getElementById('subtotal-display').textContent = subtotal.toFixed(2) + ' Bs';
             document.getElementById('iva-display').textContent = iva.toFixed(2) + ' Bs';
-            document.getElementById('total-display').textContent = total.toFixed(2) + ' Bs';
+            document.getElementById('total-display').textContent = Math.max(0, total).toFixed(2) + ' Bs';
         }
 
         // Inicializar resumen de la orden
@@ -810,6 +843,7 @@
         const paymentModal = document.getElementById('payment-modal');
         const processPaymentBtn = document.getElementById('process-payment-btn');
         const closeModalBtn = document.getElementById('close-modal-btn');
+        const creditSaleCheckbox = document.getElementById('credit-sale-checkbox');
         const finalizeOrderBtn = document.getElementById('finalize-order-btn');
         const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
 
@@ -818,6 +852,7 @@
         const modalRemainingAmount = document.getElementById('modal-remaining-amount');
         const modalChangeDisplay = document.getElementById('modal-change-display');
         const modalChangeAmount = document.getElementById('modal-change-amount');
+        const creditSaleNotice = document.getElementById('credit-sale-notice');
         
         const paymentMethodSelect = document.getElementById('payment-method');
         const paymentAmountInput = document.getElementById('payment-amount');
@@ -835,6 +870,7 @@
 
         let payments = [];
         let orderTotal = 0;
+        let previousPaymentMethod = paymentMethodSelect.value;
 
         function updatePaymentAmountInput() {
             const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
@@ -862,11 +898,47 @@
         function openPaymentModal() {
             updateOrderSummary(); // Asegurarse de que el total está actualizado
             orderTotal = parseFloat(document.getElementById('total-display').textContent) || 0;
-            
+
             if (orderTotal <= 0) {
                 alert("Agregue productos a la orden antes de procesar el pago.");
                 return;
             }
+
+            // Show/hide credit sale notice in modal
+            if (creditSaleCheckbox.checked) {
+                creditSaleNotice.classList.remove('hidden');
+                finalizeOrderBtn.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Finalizar y Crear Crédito';
+            } else {
+                creditSaleNotice.classList.add('hidden');
+                finalizeOrderBtn.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Finalizar y Crear Orden';
+            }
+
+            const discountUsd = parseFloat(document.getElementById('discount-input').value) || 0;
+            const paymentMethodSelect = document.getElementById('payment-method');
+            const restrictionMessage = document.getElementById('payment-restriction-message');
+
+            if (discountUsd > 0) {
+                // Restrict payment methods to cash USD
+                restrictionMessage.classList.remove('hidden');
+                for (let option of paymentMethodSelect.options) {
+                    if (option.value !== 'efectivo_usd') {
+                        option.style.display = 'none';
+                    } else {
+                        option.style.display = ''; // Ensure it's visible
+                    }
+                }
+                paymentMethodSelect.value = 'efectivo_usd';
+            } else {
+                // Ensure all options are visible if no discount
+                restrictionMessage.classList.add('hidden');
+                for (let option of paymentMethodSelect.options) {
+                    option.style.display = '';
+                }
+                // Reset to default if needed
+                paymentMethodSelect.value = 'efectivo_ves';
+            }
+            // Trigger change to update conditional fields (like cashbox, bank, etc.)
+            paymentMethodSelect.dispatchEvent(new Event('change'));
 
             modalTotalAmount.textContent = orderTotal.toFixed(2) + ' Bs';
             updatePaymentSummary(); // This will set up the initial state of the modal correctly
@@ -902,7 +974,12 @@
                 modalRemainingAmount.textContent = remaining.toFixed(2) + ' Bs';
                 modalRemainingAmount.classList.remove('text-green-600');
                 modalRemainingAmount.classList.add('text-red-600');
-                finalizeOrderBtn.disabled = true;
+                // For credit sales, the order can be finalized even with a remaining amount.
+                if (creditSaleCheckbox.checked) {
+                    finalizeOrderBtn.disabled = false;
+                } else {
+                    finalizeOrderBtn.disabled = true;
+                }
             } else { // Paid in full or overpaid
                 modalRemainingAmount.textContent = '0.00 Bs';
                 modalRemainingAmount.classList.remove('text-red-600');
@@ -990,14 +1067,39 @@
         processPaymentBtn.addEventListener('click', openPaymentModal);
         closeModalBtn.addEventListener('click', closePaymentModal);
         addPaymentBtnModal.addEventListener('click', addPayment);
-
+        
         paymentMethodSelect.addEventListener('change', function() {
-            const method = this.value;
-            paymentReferenceGroup.classList.toggle('hidden', method !== 'transferencia');
-            paymentBankGroup.classList.toggle('hidden', method !== 'transferencia');
-            paymentPosGroup.classList.toggle('hidden', method !== 'punto_de_venta');
-            paymentCashboxGroup.classList.toggle('hidden', !method.startsWith('efectivo'));
-            updatePaymentAmountInput();
+            const newMethod = this.value;
+            const amount = parseFloat(paymentAmountInput.value);
+
+            // Toggle conditional fields first
+            paymentReferenceGroup.classList.toggle('hidden', newMethod !== 'transferencia');
+            paymentBankGroup.classList.toggle('hidden', newMethod !== 'transferencia');
+            paymentPosGroup.classList.toggle('hidden', newMethod !== 'punto_de_venta');
+            paymentCashboxGroup.classList.toggle('hidden', !newMethod.startsWith('efectivo'));
+
+            if (amount && amount > 0) {
+                let newAmount = amount;
+                // From USD to VES
+                if (previousPaymentMethod === 'efectivo_usd' && newMethod !== 'efectivo_usd') {
+                    newAmount = amount * currentRate;
+                } 
+                // From VES to USD
+                else if (previousPaymentMethod !== 'efectivo_usd' && newMethod === 'efectivo_usd') {
+                    if (currentRate > 0) {
+                        newAmount = amount / currentRate;
+                    } else {
+                        newAmount = 0;
+                    }
+                }
+                paymentAmountInput.value = newAmount.toFixed(2);
+            } else {
+                // If no amount is entered, use the default behavior of filling with remaining
+                updatePaymentAmountInput();
+            }
+            
+            // Update the previous method for the next change
+            previousPaymentMethod = newMethod;
         });
 
         paymentsListDiv.addEventListener('click', function(e) {
@@ -1006,6 +1108,16 @@
                 payments.splice(index, 1);
                 renderPayments();
                 updatePaymentSummary();
+            }
+        });
+
+        creditSaleCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                processPaymentBtn.innerHTML = '<i class="fas fa-hand-holding-usd mr-2"></i>Registrar Abono / Crear Crédito';
+                processPaymentBtn.classList.replace('bg-green-500', 'bg-blue-600');
+            } else {
+                processPaymentBtn.innerHTML = '<i class="fas fa-dollar-sign mr-2"></i>Procesar Pago y Crear Orden';
+                processPaymentBtn.classList.replace('bg-blue-600', 'bg-green-500');
             }
         });
 

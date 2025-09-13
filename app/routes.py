@@ -447,7 +447,9 @@ def generate_barcode_pdf_reportlab(products, company_info, currency_symbol):
 
             # Price (below product name, adjust position if two lines)
             c.setFont("Helvetica-Bold", 9)
-            price_text = f"{currency_symbol}{product['price_foreign']:.2f}"
+            # Cambiar el símbolo de dólar a 'ref.' para las etiquetas
+            display_symbol = 'REF.' if currency_symbol == '$' else currency_symbol
+            price_text = f"{display_symbol} {product['price_foreign']:.2f}"
             text_width = c.stringWidth(price_text, "Helvetica-Bold", 9)
             price_y = y + label_height - 3*mm
             c.drawString(x + label_width - text_width - 2*mm, price_y, price_text)
@@ -526,21 +528,36 @@ def imprimir_codigos_barra():
     
     _, currency_symbol = get_main_calculation_currency_info()
 
-
-
-    # Preparar datos de productos para ReportLab
-    current_app.logger.info(f"Preparando datos para generación de PDF con {len(products_to_print)} productos")
+    # Preparar datos de productos para ReportLab, repitiendo por existencia.
     products_dict = []
-    for p in products_to_print:
-        price_foreign = p.price_usd if p.price_usd else 0
-        products_dict.append({
-            'id': p.id,
-            'name': p.name,
-            'barcode': p.barcode,
-            'price_foreign': price_foreign
-        })
+    total_labels = 0
+    MAX_LABELS = 10000  # Límite para prevenir sobrecarga del servidor.
 
-    current_app.logger.info("Datos preparados, iniciando generación de PDF con ReportLab")
+    # Primero, calcular el número total de etiquetas para verificar el límite.
+    for p in products_to_print:
+        total_labels += p.stock if p.stock and p.stock > 0 else 0
+    
+    if total_labels > MAX_LABELS:
+        flash(f'Ha intentado imprimir {total_labels} etiquetas, lo cual supera el límite de {MAX_LABELS}. Por favor, seleccione menos productos.', 'danger')
+        return redirect(url_for('main.codigos_barra'))
+
+    if total_labels == 0:
+        flash('Los productos seleccionados no tienen existencia. No se generaron códigos de barra.', 'warning')
+        return redirect(url_for('main.codigos_barra'))
+
+    # Si estamos dentro del límite, construir la lista de etiquetas.
+    for p in products_to_print:
+        if p.stock and p.stock > 0:
+            price_foreign = p.price_usd if p.price_usd else 0
+            for _ in range(p.stock):
+                products_dict.append({
+                    'id': p.id,
+                    'name': p.name,
+                    'barcode': p.barcode,
+                    'price_foreign': price_foreign
+                })
+
+    current_app.logger.info(f"Preparando datos para generación de PDF con {len(products_dict)} etiquetas para {len(products_to_print)} productos distintos.")
 
     # Generate PDF with ReportLab (more efficient)
     try:
@@ -654,6 +671,63 @@ def new_client():
             db.session.rollback()
             flash('Error: El email ya está registrado.', 'danger')
     return render_template('clientes/nuevo.html', title='Nuevo Cliente')
+
+@routes_blueprint.route('/clientes/detalle/<int:client_id>', methods=['GET', 'POST'])
+@login_required
+def client_detail(client_id):
+    client = Client.query.get_or_404(client_id)
+    
+    if request.method == 'POST':
+        # This handles adding a payment to an order from the client detail page
+        order_id = request.form.get('order_id')
+        order = Order.query.get_or_404(order_id)
+        
+        try:
+            payment_data_json = request.form.get('payments_data')
+            payment_info = json.loads(payment_data_json)[0] # Assuming one payment at a time from the modal
+
+            payment = Payment(
+                order_id=order.id,
+                amount_paid=payment_info['amount_paid'],
+                currency_paid=payment_info['currency_paid'],
+                amount_ves_equivalent=payment_info['amount_ves_equivalent'],
+                method=payment_info['method'],
+                reference=payment_info.get('reference'),
+                bank_id=payment_info.get('bank_id'),
+                pos_id=payment_info.get('pos_id'),
+                cash_box_id=payment_info.get('cash_box_id')
+            )
+            db.session.add(payment)
+            db.session.flush() # Flush to calculate new due amount
+
+            # Update order status if it's now fully paid
+            if order.due_amount <= 0.01:
+                order.status = 'Pagada'
+            
+            db.session.commit()
+            flash(f'Abono registrado exitosamente para la orden #{order.id:09d}.', 'success')
+        except (ValueError, KeyError, IndexError, TypeError) as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error registrando abono: {e}")
+            flash(f'Error al registrar el abono: {e}', 'danger')
+        return redirect(url_for('main.client_detail', client_id=client.id))
+
+    orders = Order.query.filter_by(client_id=client.id).order_by(Order.date_created.desc()).all()
+    total_due = sum(order.due_amount for order in orders if order.due_amount > 0)
+
+    # For the payment modal
+    banks = Bank.query.order_by(Bank.name).all()
+    points_of_sale = PointOfSale.query.order_by(PointOfSale.name).all()
+    cash_boxes = CashBox.query.order_by(CashBox.name).all()
+
+    return render_template('clientes/detalle_cliente.html',
+                           title=f'Detalle de Cliente: {client.name}',
+                           client=client,
+                           orders=orders,
+                           total_due=total_due,
+                           banks=banks,
+                           points_of_sale=points_of_sale,
+                           cash_boxes=cash_boxes)
 
 # Rutas de proveedores
 @routes_blueprint.route('/proveedores/lista')
@@ -865,21 +939,27 @@ def new_order():
         quantities = request.form.getlist('quantity[]')
         prices_usd = request.form.getlist('price_usd[]')
         payments_data_json = request.form.get('payments_data')
+        is_credit_sale = request.form.get('is_credit_sale') == 'on'
+        discount_usd = float(request.form.get('discount_usd', 0.0))
         payments_data = json.loads(payments_data_json) if payments_data_json else []
         
         try:
             # Validar que el total pagado cubra el total de la orden
-            order_total_ves = 0
+            order_total_ves_before_discount = 0
             for q, p_usd in zip(quantities, prices_usd):
-                order_total_ves += (int(q) * float(p_usd) * current_rate)
+                order_total_ves_before_discount += (int(q) * float(p_usd) * current_rate)
             # IVA desactivado. La línea de cálculo de IVA se ha eliminado.
+
+            discount_ves = discount_usd * current_rate
+            final_order_total_ves = order_total_ves_before_discount - discount_ves
 
             paid_total_ves = sum(p['amount_ves_equivalent'] for p in payments_data)
 
-            if paid_total_ves < order_total_ves - 0.01: # Permitir pequeñas diferencias de redondeo
-                raise ValueError(f"El monto pagado (Bs. {paid_total_ves:.2f}) es menor que el total de la orden (Bs. {order_total_ves:.2f}).")
+            if not is_credit_sale:
+                if paid_total_ves < final_order_total_ves - 0.01: # Permitir pequeñas diferencias de redondeo
+                    raise ValueError(f"El monto pagado (Bs. {paid_total_ves:.2f}) es menor que el total de la orden con descuento (Bs. {final_order_total_ves:.2f}).")
 
-            new_order = Order(client_id=client_id, status='Pendiente', total_amount=0)
+            new_order = Order(client_id=client_id, status='Pendiente', total_amount=0, discount_usd=discount_usd)
             db.session.add(new_order)
             db.session.flush()
 
@@ -921,8 +1001,17 @@ def new_order():
                 
                 total_amount += price_ves * quantity
 
-            new_order.total_amount = total_amount # Guardar el total sin IVA
-            new_order.status = 'Completada'
+            new_order.total_amount = total_amount - discount_ves # Guardar el total con descuento
+            db.session.flush() # Flush to allow due_amount property to calculate correctly
+
+            # Set order status
+            if is_credit_sale:
+                if new_order.due_amount > 0.01:
+                    new_order.status = 'Crédito'
+                else:
+                    new_order.status = 'Pagada' # Paid in full even if marked as credit
+            else:
+                new_order.status = 'Completada'
 
             # Procesar pagos
             for payment_info in payments_data:
@@ -1665,11 +1754,11 @@ def print_delivery_note(order_id):
     # IVA desactivado
     subtotal = sum(item.price * item.quantity for item in order.items)
     iva = 0
-    order_total_with_iva = subtotal # El total es igual al subtotal
+    order_total_with_iva = order.total_amount # This is the final amount after discount
 
     # Calculate total paid and change
     total_paid = sum(p.amount_ves_equivalent for p in order.payments)
-    change = total_paid - order_total_with_iva if total_paid > order_total_with_iva else 0
+    change = total_paid - order_total_with_iva if total_paid > order_total_with_iva else 0.0
 
     # Helper function to generate barcode
     def generate_order_barcode_base64(order_id_str):
