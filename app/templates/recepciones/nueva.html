@@ -1,24 +1,140 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto p-4 max-w-2xl">
-    <h1 class="text-3xl font-bold text-gray-800 mb-6"><i class="fas fa-box-open mr-2"></i>Confirmar Recepción</h1>
-    <div class="bg-white p-6 rounded-lg shadow-md">
-        <p class="text-gray-700 mb-4">
-            Estás a punto de confirmar la recepción de la <strong class="text-blue-600">Orden de Compra #{{ purchase.id }}</strong> del proveedor <strong class="text-blue-600">{{ purchase.provider.name }}</strong>.
-        </p>
-        <p class="text-gray-700 mb-6">
-            Al confirmar, las existencias de los productos de esta orden se actualizarán automáticamente en el inventario.
-        </p>
-        
-        <form method="POST" action="{{ url_for('main.new_reception', purchase_id=purchase.id) }}">
-            <div class="flex items-center justify-end">
-                <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
-                    <i class="fas fa-check mr-2"></i>Confirmar y Recibir
+<div class="container mx-auto p-2 max-w-7xl">
+    <h1 class="text-xl font-bold text-gray-800 mb-2"><i class="fas fa-box-open mr-2"></i>Registrar Nueva Recepción de Mercancía</h1>
+    <div class="bg-white p-4 rounded-lg shadow-md">
+        <form method="POST" action="{{ url_for('main.new_reception') }}" id="reception-form">
+            <!-- Main two-column layout -->
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-4">
+                <!-- LEFT COLUMN: Purchase Order Info -->
+                <div class="space-y-4 lg:col-span-1">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-700 mb-2">1. Seleccionar Orden de Compra</h2>
+                        <label for="purchase_id" class="block text-gray-700 font-bold mb-2">Orden de Compra:</label>
+                        <select id="purchase_id" name="purchase_id" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">-- Seleccione una orden --</option>
+                            {% for purchase in purchases %}
+                                <option value="{{ purchase.id }}">
+                                    #{{ purchase.id }} - {{ purchase.provider.name }} ({{ purchase.status }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <!-- Placeholder for Almacen -->
+                    <div class="mt-4">
+                        <h2 class="text-lg font-semibold text-gray-700 mb-2">2. Almacén de Destino</h2>
+                        <p class="text-sm text-gray-500 mb-2">Funcionalidad futura: Seleccionar el almacén donde se ingresará la mercancía.</p>
+                        <select id="warehouse_id" name="warehouse_id" disabled class="bg-gray-200 shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none">
+                            <option>Almacén Principal</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- RIGHT COLUMN: Product List -->
+                <div class="lg:col-span-3">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-2">3. Productos a Recibir</h2>
+                    <div id="product-list-container" class="hidden max-h-[55vh] overflow-y-auto border rounded-lg">
+                        <table class="table-auto w-full text-sm">
+                            <thead class="bg-gray-100 sticky top-0 z-10">
+                                <tr>
+                                    <th class="px-2 py-2 text-left font-semibold">Producto</th>
+                                    <th class="px-2 py-2 text-center font-semibold">Cant. Pedida</th>
+                                    <th class="px-2 py-2 text-center font-semibold">Cant. Recibida Previamente</th>
+                                    <th class="px-2 py-2 text-center font-semibold">Cant. Pendiente</th>
+                                    <th class="px-2 py-2 text-center font-semibold">Cant. a Recibir Ahora</th>
+                                </tr>
+                            </thead>
+                            <tbody id="product-list-body" class="divide-y divide-gray-200">
+                                <!-- Las filas de productos se insertarán aquí con JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="no-purchase-selected" class="text-center py-10 text-gray-500 border rounded-lg">
+                        <i class="fas fa-info-circle text-2xl mb-2"></i>
+                        <p>Seleccione una orden de compra para ver los productos.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BOTTOM SECTION: Actions -->
+            <div class="border-t pt-4 mt-4 flex justify-end">
+                <button type="submit" id="submit-reception-btn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition-all disabled:bg-gray-400" disabled>
+                    <i class="fas fa-check-circle mr-2"></i>Confirmar Recepción
                 </button>
-                <a href="{{ url_for('main.purchase_list') }}" class="ml-4 text-red-500 hover:text-red-700">Cancelar</a>
             </div>
         </form>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const purchaseSelect = document.getElementById('purchase_id');
+    const productListContainer = document.getElementById('product-list-container');
+    const productListBody = document.getElementById('product-list-body');
+    const noPurchaseSelectedDiv = document.getElementById('no-purchase-selected');
+    const submitBtn = document.getElementById('submit-reception-btn');
+
+    purchaseSelect.addEventListener('change', function() {
+        const purchaseId = this.value;
+        productListBody.innerHTML = ''; // Clear previous items
+
+        if (!purchaseId) {
+            productListContainer.classList.add('hidden');
+            noPurchaseSelectedDiv.classList.remove('hidden');
+            submitBtn.disabled = true;
+            return;
+        }
+
+        fetch(`/api/purchase_details/${purchaseId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('No se pudo cargar los detalles de la compra.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach(item => {
+                        const row = document.createElement('tr');
+                        row.classList.add('product-item');
+
+                        const maxReceivable = item.quantity_pending;
+
+                        row.innerHTML = `
+                            <td class="px-2 py-2 align-middle">
+                                <input type="hidden" name="product_id[]" value="${item.product_id}">
+                                ${item.product_name}
+                            </td>
+                            <td class="px-2 py-2 text-center align-middle">${item.quantity_ordered}</td>
+                            <td class="px-2 py-2 text-center align-middle">${item.quantity_received}</td>
+                            <td class="px-2 py-2 text-center align-middle font-bold">${maxReceivable}</td>
+                            <td class="px-2 py-2 text-center align-middle">
+                                <input type="number" name="quantity_received[]"
+                                       placeholder="0" min="0" max="${maxReceivable}"
+                                       class="w-24 shadow-sm appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-center"
+                                       ${maxReceivable === 0 ? 'disabled' : ''}>
+                            </td>
+                        `;
+                        productListBody.appendChild(row);
+                    });
+                    productListContainer.classList.remove('hidden');
+                    noPurchaseSelectedDiv.classList.add('hidden');
+                    submitBtn.disabled = false;
+                } else {
+                    noPurchaseSelectedDiv.innerHTML = '<p>Esta orden de compra no tiene productos o ya fue recibida completamente.</p>';
+                    productListContainer.classList.add('hidden');
+                    noPurchaseSelectedDiv.classList.remove('hidden');
+                    submitBtn.disabled = true;
+                }
+            })
+            .catch(error => {
+                alert(error.message);
+                productListContainer.classList.add('hidden');
+                noPurchaseSelectedDiv.classList.remove('hidden');
+                submitBtn.disabled = true;
+            });
+    });
+});
+</script>
 {% endblock %}

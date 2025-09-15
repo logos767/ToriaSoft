@@ -48,17 +48,20 @@ def register_commands(app):
 
             logger.info("Database initialization complete!")
 
-    @app.cli.command('set-order-start')
-    def set_order_start_number():
-        """Sets the starting number for the order ID sequence to 18070001."""
+    @app.cli.command('init-order-sequences')
+    def init_order_sequences():
+        """Initializes the order ID sequences for different sale types (PostgreSQL only)."""
         with current_app.app_context():
             try:
-                # This command is specific to PostgreSQL.
-                # The sequence name is typically <table_name>_<id_column_name>_seq
-                db.session.execute(text("ALTER SEQUENCE order_id_seq RESTART WITH 18070001"))
+                # Sequence for 'contado' (regular) sales
+                db.session.execute(text("CREATE SEQUENCE IF NOT EXISTS order_contado_seq START 180000000"))
+                # Sequence for 'credito' (credit) sales
+                db.session.execute(text("CREATE SEQUENCE IF NOT EXISTS order_credito_seq START 280000000"))
+                # Sequence for 'apartado' (reservation) sales
+                db.session.execute(text("CREATE SEQUENCE IF NOT EXISTS order_apartado_seq START 580000000"))
                 db.session.commit()
-                logger.info("Successfully set the order ID sequence to start at 18070001.")
+                logger.info("Successfully created or verified order ID sequences.")
             except Exception as e:
                 db.session.rollback()
-                logger.error(f"Failed to set order ID sequence: {e}")
-                logger.error("This command is likely only compatible with PostgreSQL. Make sure the 'order' table exists.")
+                logger.error(f"Failed to create order ID sequences: {e}")
+                logger.error("This command is only compatible with PostgreSQL.")

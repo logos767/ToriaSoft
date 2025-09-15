@@ -4,7 +4,7 @@ import re
 from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, session, current_app
 from flask_login import login_user, current_user, logout_user, login_required # type: ignore
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func, extract, or_, select, case
+from sqlalchemy import func, extract, or_, select, case, text
 import openpyxl
 from datetime import datetime, timedelta, date
 from flask import Response
@@ -942,8 +942,11 @@ def new_purchase():
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.new_order'))
 
-    providers = Provider.query.all()
-    products = Product.query.all()
+    providers = Provider.query.order_by(Provider.name).all()
+    products = Product.query.order_by(Product.name).all()
+    banks = Bank.query.order_by(Bank.name).all()
+    cash_boxes = CashBox.query.order_by(CashBox.name).all()
+
     calculation_currency, _ = get_main_calculation_currency_info()
     current_rate = get_cached_exchange_rate(calculation_currency)
 
@@ -952,22 +955,26 @@ def new_purchase():
         return redirect(url_for('main.purchase_list'))
 
     if request.method == 'POST':
+        provider_id = request.form.get('provider_id')
+        product_ids = request.form.getlist('product_id[]')
+        quantities = request.form.getlist('quantity[]')
+        costs_usd = request.form.getlist('cost_usd[]')
+        payments_data_json = request.form.get('payments_data')
+        payments_data = json.loads(payments_data_json) if payments_data_json else []
+
         try:
-            provider_id = request.form.get('provider_id')
+            # Create Purchase and Items
             new_purchase = Purchase(provider_id=provider_id, total_cost=0)
             db.session.add(new_purchase)
             db.session.flush()
             
-            product_ids = request.form.getlist('product_id[]')
-            quantities = request.form.getlist('quantity[]')
-            costs_usd = request.form.getlist('cost_usd[]')
-
-            total_cost = 0
+            total_cost_ves = 0
             for p_id, q, c_usd in zip(product_ids, quantities, costs_usd):
                 product = Product.query.get(p_id)
                 quantity = int(q)
-                if product and quantity > 0:
-                    cost_ves = float(c_usd) * current_rate
+                cost_usd = float(c_usd)
+                if product and quantity > 0 and cost_usd >= 0:
+                    cost_ves = cost_usd * current_rate
                     item = PurchaseItem(
                         purchase_id=new_purchase.id,
                         product_id=p_id,
@@ -975,9 +982,46 @@ def new_purchase():
                         cost=cost_ves
                     )
                     db.session.add(item)
-                    total_cost += cost_ves * quantity
+                    total_cost_ves += cost_ves * quantity
             
-            new_purchase.total_cost = total_cost
+            new_purchase.total_cost = total_cost_ves
+            db.session.flush()
+
+            # Process Payments (as ManualFinancialMovement with type 'Egreso')
+            total_paid_ves = 0
+            for payment_info in payments_data:
+                amount_paid = float(payment_info['amount_paid'])
+                currency_paid = payment_info['currency_paid']
+                amount_ves_equivalent = float(payment_info['amount_ves_equivalent'])
+                
+                movement = ManualFinancialMovement(
+                    description=f"Pago por Orden de Compra #{new_purchase.id}",
+                    amount=amount_paid, currency=currency_paid, movement_type='Egreso',
+                    status='Aprobado', purchase_id=new_purchase.id,
+                    created_by_user_id=current_user.id, approved_by_user_id=current_user.id,
+                    date_approved=get_current_time_ve(), bank_id=payment_info.get('bank_id'),
+                    cash_box_id=payment_info.get('cash_box_id')
+                )
+                db.session.add(movement)
+                total_paid_ves += amount_ves_equivalent
+
+                # Decrease balance of the corresponding account
+                if movement.bank_id:
+                    bank = Bank.query.get(movement.bank_id)
+                    if bank: bank.balance -= amount_ves_equivalent
+                elif movement.cash_box_id:
+                    cash_box = CashBox.query.get(movement.cash_box_id)
+                    if cash_box:
+                        if currency_paid == 'VES': cash_box.balance_ves -= amount_paid
+                        elif currency_paid == 'USD': cash_box.balance_usd -= amount_paid
+            
+            # Update Purchase Payment Status
+            if total_paid_ves >= total_cost_ves - 0.01:
+                new_purchase.payment_status = 'Pagada'
+            elif total_paid_ves > 0.01:
+                new_purchase.payment_status = 'Abonada'
+            else:
+                new_purchase.payment_status = 'Pendiente de Pago'
             
             notification_message = f"Nueva Orden de Compra #{new_purchase.id} creada."
             notification_link = url_for('main.purchase_detail', purchase_id=new_purchase.id)
@@ -989,8 +1033,15 @@ def new_purchase():
         except (ValueError, IntegrityError) as e:
             db.session.rollback()
             flash(f'Error al crear la compra: {str(e)}', 'danger')
+            # Fall through to render the template again
     
-    return render_template('compras/nuevo.html', title='Nueva Compra', providers=providers, products=products)
+    return render_template('compras/nuevo.html', 
+                           title='Nueva Compra', 
+                           providers=providers, 
+                           products=products,
+                           banks=banks,
+                           cash_boxes=cash_boxes,
+                           current_rate=current_rate)
 
 # Rutas de recepciones
 @routes_blueprint.route('/recepciones/lista')
@@ -1000,51 +1051,122 @@ def reception_list():
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.new_order'))
 
-    receptions = Reception.query.all()
+    receptions = Reception.query.order_by(Reception.date_received.desc()).all()
     return render_template('recepciones/lista.html', title='Lista de Recepciones', receptions=receptions)
 
-@routes_blueprint.route('/recepciones/nueva/<int:purchase_id>', methods=['GET', 'POST'])
+@routes_blueprint.route('/api/purchase_details/<int:purchase_id>')
 @login_required
-def new_reception(purchase_id):
+def api_purchase_details(purchase_id):
+    if current_user.role != 'administrador':
+        return jsonify({'error': 'Acceso denegado'}), 403
+    
+    purchase = Purchase.query.options(
+        subqueryload(Purchase.items).joinedload(PurchaseItem.product)
+    ).get(purchase_id)
+
+    if not purchase:
+        return jsonify({'error': 'Compra no encontrada'}), 404
+
+    items_data = []
+    for item in purchase.items:
+        items_data.append({
+            'product_id': item.product_id,
+            'product_name': item.product.name,
+            'quantity_ordered': item.quantity,
+            'quantity_received': item.quantity_received,
+            'quantity_pending': item.quantity_pending
+        })
+    
+    return jsonify(items=items_data)
+
+@routes_blueprint.route('/recepciones/nueva', methods=['GET', 'POST'])
+@login_required
+def new_reception():
     if current_user.role != 'administrador':
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.new_order'))
 
-    purchase = Purchase.query.get_or_404(purchase_id)
     if request.method == 'POST':
         try:
-            new_reception = Reception(purchase_id=purchase.id, status='Completada')
-            db.session.add(new_reception)
+            purchase_id = request.form.get('purchase_id')
+            product_ids = request.form.getlist('product_id[]')
+            quantities_received_str = request.form.getlist('quantity_received[]')
 
-            for item in purchase.items:
-                product = Product.query.get(item.product_id)
-                if product:
-                    product.stock += item.quantity
-                    db.session.add(product)
-                    
-                    movement = Movement(
-                        product_id=product.id,
-                        type='Entrada',
-                        quantity=item.quantity,
-                        document_id=purchase.id,
-                        document_type='Orden de Compra',
-                        related_party_id=purchase.provider_id,
-                        related_party_type='Proveedor'
-                    )
-                    db.session.add(movement)
+            if not purchase_id:
+                raise ValueError("No se ha seleccionado una orden de compra.")
+
+            purchase = Purchase.query.get_or_404(purchase_id)
             
-            notification_message = f"Nueva recepción para la compra #{purchase.id} procesada."
+            reception = Reception(purchase_id=purchase.id, status='Parcial')
+            db.session.add(reception)
+            db.session.flush()
+
+            total_items_received_in_this_tx = 0
+            for p_id, qty_rec_str in zip(product_ids, quantities_received_str):
+                qty_received = int(qty_rec_str) if qty_rec_str else 0
+                if qty_received <= 0:
+                    continue
+
+                item = PurchaseItem.query.filter_by(purchase_id=purchase.id, product_id=p_id).first()
+                if not item:
+                    current_app.logger.warning(f"Intento de recibir producto {p_id} que no está en la compra {purchase.id}")
+                    continue
+
+                if qty_received > item.quantity_pending:
+                    raise ValueError(f"Intenta recibir más unidades de '{item.product.name}' de las pendientes ({item.quantity_pending}).")
+
+                product = item.product
+                product.stock += qty_received
+                item.quantity_received += qty_received
+                total_items_received_in_this_tx += qty_received
+                
+                movement = Movement(
+                    product_id=product.id,
+                    type='Entrada',
+                    quantity=qty_received,
+                    document_id=reception.id,
+                    document_type='Recepción de Compra',
+                    related_party_id=purchase.provider_id,
+                    related_party_type='Proveedor'
+                )
+                db.session.add(movement)
+
+            if total_items_received_in_this_tx == 0:
+                db.session.rollback()
+                flash('No se recibieron productos. No se ha creado la recepción.', 'warning')
+                return redirect(url_for('main.new_reception'))
+
+            total_ordered = sum(i.quantity for i in purchase.items)
+            total_received = sum(i.quantity_received for i in purchase.items)
+
+            if total_received >= total_ordered:
+                purchase.status = 'Recibida'
+                reception.status = 'Completada'
+            else:
+                purchase.status = 'Recibida Parcialmente'
+            
+            notification_message = f"Recepción para la compra #{purchase.id} procesada."
             notification_link = url_for('main.reception_list')
             create_notification_for_admins(notification_message, notification_link)
 
             db.session.commit()
             flash('Recepción completada y stock actualizado!', 'success')
             return redirect(url_for('main.reception_list'))
-        except Exception as e:
+        except (ValueError, IntegrityError) as e:
             db.session.rollback()
             flash(f'Error al procesar la recepción: {str(e)}', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error inesperado en recepción: {e}")
+            flash(f'Ocurrió un error inesperado: {str(e)}', 'danger')
 
-    return render_template('recepciones/nueva.html', title='Nueva Recepción', purchase=purchase)
+    pending_purchases = Purchase.query.filter(
+        Purchase.status.in_(['Pendiente', 'Recibida Parcialmente'])
+    ).order_by(Purchase.id.desc()).all()
+
+    return render_template('recepciones/nueva.html', 
+                           title='Nueva Recepción', 
+                           purchases=pending_purchases)
 
 
 # Rutas de órdenes
@@ -1166,6 +1288,21 @@ def new_order():
                 flash('La tasa de cambio especial no es un número válido. Usando tasa actual.', 'warning')
 
         try:
+            # --- NEW: Get next order ID based on sale type ---
+            sequence_map = {
+                'regular': 'order_contado_seq',
+                'credit': 'order_credito_seq',
+                'reservation': 'order_apartado_seq'
+            }
+            sequence_name = sequence_map.get(sale_type)
+            if not sequence_name:
+                raise ValueError("Tipo de venta no válido.")
+            
+            # Using text() to execute raw SQL for sequence
+            next_id_query = text(f"SELECT nextval('{sequence_name}')")
+            next_id = db.session.execute(next_id_query).scalar()
+            # --- END NEW ---
+
             # Validar que el total pagado cubra el total de la orden
             order_total_ves_before_discount = 0
             for q, p_usd in zip(quantities, prices_usd):
@@ -1181,7 +1318,7 @@ def new_order():
                 if paid_total_ves < final_order_total_ves - 0.01: # Permitir pequeñas diferencias de redondeo
                     raise ValueError(f"El monto pagado (Bs. {paid_total_ves:.2f}) es menor que el total de la orden con descuento (Bs. {final_order_total_ves:.2f}).")
 
-            new_order = Order(client_id=client_id, status='Pendiente', total_amount=0, discount_usd=discount_usd, exchange_rate_at_sale=rate_for_order)
+            new_order = Order(id=next_id, client_id=client_id, status='Pendiente', total_amount=0, discount_usd=discount_usd, exchange_rate_at_sale=rate_for_order)
 
             # Handle custom date
             if date_created_str:
@@ -1657,11 +1794,18 @@ def generar_reporte_mensual_pdf():
         or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))
     ).options(joinedload(OrderItem.order), joinedload(OrderItem.product)).all()
 
+    # Obtener la tasa de cambio actual una vez como respaldo
+    current_fallback_rate = get_cached_exchange_rate('USD') or 1.0
+    if current_fallback_rate <= 0: current_fallback_rate = 1.0 # Evitar división por cero
+
     cost_structure = CostStructure.query.first() or CostStructure()
 
     for item in order_items_in_month:
         rate = item.order.exchange_rate_at_sale
-        if not rate or rate <= 0: continue
+        if not rate or rate <= 0:
+            # Usar la tasa de respaldo si la tasa histórica no existe
+            rate = current_fallback_rate
+            current_app.logger.warning(f"PDF Report: Order {item.order_id} missing exchange rate. Using current rate {rate} as fallback for P&L.")
 
         item_revenue_usd = (item.quantity * item.price) / rate
         item_cogs_usd = (item.quantity * item.cost_at_sale_ves) / rate if item.cost_at_sale_ves is not None else 0
@@ -1703,8 +1847,17 @@ def generar_reporte_mensual_pdf():
         elif status == 'Apartado': sales_by_type['Apartado']['num_ventas'] += num; sales_by_type['Apartado']['total_ventas'] += total
 
     # D. Cuentas por cobrar pendientes (al final del mes)
-    all_orders_before_end = Order.query.options(joinedload(Order.client)).filter(Order.date_created <= end_dt).all()
-    pending_accounts_receivable = [o for o in all_orders_before_end if o.due_amount > 0.01]
+    # Optimización: Filtrar en la base de datos en lugar de en Python
+    paid_subquery = db.session.query(
+        Payment.order_id,
+        func.sum(Payment.amount_ves_equivalent).label('total_paid')
+    ).group_by(Payment.order_id).subquery()
+
+    pending_accounts_receivable = Order.query.options(
+        joinedload(Order.client), subqueryload(Order.payments)
+    ).outerjoin(paid_subquery, Order.id == paid_subquery.c.order_id).filter(
+        Order.date_created <= end_dt, (Order.total_amount - func.coalesce(paid_subquery.c.total_paid, 0)) > 0.01
+    ).order_by(Order.date_created.asc()).all()
 
     # E. Cobros hechos en el mes
     collections_in_month = Payment.query.options(joinedload(Payment.order).joinedload(Order.client)).filter(Payment.date.between(start_dt, end_dt)).order_by(Payment.date.asc()).all()
@@ -1734,24 +1887,42 @@ def generar_reporte_mensual_pdf():
     # --- 3. Generación de Gráfico ---
     pnl_chart_base64 = generate_pnl_chart_base64(pnl_summary, currency_symbol)
 
-    # --- 4. Renderizado del Template HTML para el PDF ---
-    context = {
-        'report_period': report_period,
-        'generation_date': get_current_time_ve().strftime("%d/%m/%Y %H:%M:%S"),
-        'currency_symbol': currency_symbol,
-        'pnl_summary': pnl_summary,
-        'pnl_chart_base64': pnl_chart_base64,
-        'top_products': top_products,
-        'sales_by_type': sales_by_type,
-        'pending_accounts_receivable': pending_accounts_receivable,
-        'collections_in_month': collections_in_month,
-        'bank_balances': bank_balances,
-        'cash_box_balances': cash_box_balances,
-        'start_date': start_date,
-        'end_date': end_date,
-        'current_rate_usd': get_cached_exchange_rate('USD') or 1.0,
-    }
-    html_string = render_template('pdf/reporte_mensual_pdf.html', **context)
+    # --- 4. Verificación de Datos y Renderizado del Template ---
+    is_data_available = (
+        pnl_summary['sales'] > 0 or
+        pnl_summary['cogs'] > 0 or
+        pnl_summary['variable_expenses'] > 0 or
+        pnl_summary['fixed_expenses'] > 0 or
+        pending_accounts_receivable or
+        collections_in_month or
+        any(b['inflows_ves'] > 0 or b['outflows_ves'] > 0 for b in bank_balances) or
+        any(c['inflows_ves'] > 0 or c['outflows_ves'] > 0 or c['inflows_usd'] > 0 or c['outflows_usd'] > 0 for c in cash_box_balances)
+    )
+
+    generation_date_str = get_current_time_ve().strftime("%d/%m/%Y %H:%M:%S")
+
+    if not is_data_available:
+        # Renderiza una plantilla simple de "sin datos"
+        html_string = render_template('pdf/reporte_mensual_sin_datos.html', report_period=report_period, generation_date=generation_date_str)
+    else:
+        # Renderiza el reporte completo
+        context = {
+            'report_period': report_period,
+            'generation_date': generation_date_str,
+            'currency_symbol': currency_symbol,
+            'pnl_summary': pnl_summary,
+            'pnl_chart_base64': pnl_chart_base64,
+            'top_products': top_products,
+            'sales_by_type': sales_by_type,
+            'pending_accounts_receivable': pending_accounts_receivable,
+            'collections_in_month': collections_in_month,
+            'bank_balances': bank_balances,
+            'cash_box_balances': cash_box_balances,
+            'start_date': start_date,
+            'end_date': end_date,
+            'current_fallback_rate': current_fallback_rate,
+        }
+        html_string = render_template('pdf/reporte_mensual_pdf.html', **context)
 
     # --- 5. Creación del PDF y Envío de Respuesta ---
     pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
@@ -2344,6 +2515,7 @@ def api_product_by_barcode(barcode):
             'name': product.name,
             'codigo_producto': product.codigo_producto,
             'price_usd': product.price_usd,
+            'cost_usd': product.cost_usd,
             'stock': product.stock
         })
     else:

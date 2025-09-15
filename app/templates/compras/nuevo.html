@@ -1,134 +1,399 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto p-4 max-w-4xl">
-    <div class="flex items-center mb-6">
-        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-plus-circle mr-2"></i>Crear Nueva Compra</h1>
-    </div>
-
-    <div class="bg-white p-6 rounded-lg shadow-md">
-        <form method="POST" action="{{ url_for('main.new_purchase') }}">
-            <!-- Información de la compra -->
-            <div class="mb-6">
-                <h2 class="text-xl font-semibold text-gray-700 mb-2">Información de la Compra</h2>
-                <label for="provider_id" class="block text-gray-700 font-bold mb-2">Proveedor:</label>
-                <select id="provider_id" name="provider_id" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {% for provider in providers %}
-                        <option value="{{ provider.id }}">{{ provider.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <!-- Lista de productos -->
-            <div id="product-list-purchase" class="mb-6">
-                <h2 class="text-xl font-semibold text-gray-700 mb-2">Productos</h2>
-                <div class="space-y-4">
-                    <!-- Fila de ejemplo para clonar -->
-                    <div class="product-item-purchase flex items-center space-x-4 border p-4 rounded-lg bg-gray-50">
-                        <select name="product_id[]" required class="flex-1 shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 product-select-purchase">
-                            {% for product in products %}
-                                <option value="{{ product.id }}" data-cost-usd="{{ product.cost_usd }}">{{ product.name }} (Stock: {{ product.stock }})</option>
+<div class="container mx-auto p-2 max-w-7xl">
+    <h1 class="text-xl font-bold text-gray-800 mb-2"><i class="fas fa-shopping-basket mr-2"></i>Crear Nueva Orden de Compra</h1>
+    <div class="bg-white p-4 rounded-lg shadow-md">
+        <form method="POST" action="{{ url_for('main.new_purchase') }}" id="purchase-form">
+            <!-- Main two-column layout -->
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-4">
+                <!-- LEFT COLUMN: Provider Info -->
+                <div class="space-y-4 lg:col-span-1">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-700 mb-2">1. Información del Proveedor</h2>
+                        <label for="provider_id" class="block text-gray-700 font-bold mb-2">Proveedor:</label>
+                        <select id="provider_id" name="provider_id" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            {% for provider in providers %}
+                                <option value="{{ provider.id }}">{{ provider.name }}</option>
                             {% endfor %}
                         </select>
-                        <input type="number" name="quantity[]" placeholder="Cantidad" min="1" required class="w-24 shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 quantity-input-purchase">
-                        
-                        <div class="flex flex-col">
-                            <label class="text-sm text-gray-500">USD</label>
-                            <input type="number" name="cost_usd[]" placeholder="Costo USD" step="0.01" min="0" required class="w-24 shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 cost-usd-input">
-                        </div>
-                        <div class="flex flex-col">
-                            <label class="text-sm text-gray-500">Bs</label>
-                            <span class="cost-ves-display w-24 text-center font-bold text-gray-800">0.00</span>
-                        </div>
-                        
-                        <button type="button" class="bg-red-500 text-white p-2 rounded remove-product-btn-purchase hover:bg-red-600 transition-colors"><i class="fas fa-trash"></i></button>
                     </div>
                 </div>
-                <div class="mt-4">
-                    <button type="button" id="add-product-btn-purchase" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
-                        <i class="fas fa-plus mr-2"></i>Agregar Otro Producto
-                    </button>
+
+                <!-- RIGHT COLUMN: Product List -->
+                <div class="lg:col-span-3">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-2">2. Añadir Productos</h2>
+                    <div id="product-list" class="max-h-[55vh] overflow-y-auto border rounded-lg">
+                        <table class="table-auto w-full text-sm">
+                            <thead class="bg-gray-100 sticky top-0 z-10">
+                                <tr>
+                                    <th rowspan="2" class="px-1 py-1 text-left font-semibold align-middle">Producto</th>
+                                    <th rowspan="2" class="px-1 py-1 text-center font-semibold align-middle">Cant.</th>
+                                    <th colspan="2" class="px-1 py-1 text-center font-semibold">Costo Unitario</th>
+                                    <th rowspan="2" class="px-1 py-1 text-center font-semibold align-middle">Total</th>
+                                    <th rowspan="2" class="px-1 py-1 text-center font-semibold align-middle"></th>
+                                </tr>
+                                <tr>
+                                    <th class="px-1 py-1 text-center font-semibold bg-gray-100">{{ currency_symbol }}</th>
+                                    <th class="px-1 py-1 text-center font-semibold bg-gray-100">Bs</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <!-- Fila de ejemplo para clonar, se elimina con JS -->
+                                <tr class="product-item bg-gray-50">
+                                    <td class="px-1 py-1 align-top">
+                                        <select name="product_id[]" required class="w-full shadow-sm appearance-none border rounded py-0.5 px-1 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 product-select text-xs">
+                                            {% for product in products %}
+                                            <option value="{{ product.id }}" data-cost-usd="{{ product.cost_usd }}">{{ product.name }} (Stock: {{ product.stock }})</option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                    <td class="px-1 py-1 align-top">
+                                        <input type="number" name="quantity[]" placeholder="Cant." min="1" required class="w-16 shadow-sm appearance-none border rounded py-0.5 px-1 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 quantity-input text-sm text-center">
+                                    </td>
+                                    <td class="px-1 py-1 align-top">
+                                        <input type="number" name="cost_usd[]" placeholder="Costo" step="0.01" min="0" required class="w-20 shadow-sm appearance-none border rounded py-0.5 px-1 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 cost-usd-input text-sm text-center">
+                                    </td>
+                                    <td class="px-1 py-1 text-center font-bold text-gray-800 cost-ves-display text-sm align-top">0.00</td>
+                                    <td class="px-1 py-1 text-center font-bold text-gray-800 row-total-display text-sm align-top">0.00</td>
+                                    <td class="px-1 py-1 text-center align-top">
+                                        <button type="button" class="bg-red-500 text-white py-0.5 px-2 rounded remove-product-btn hover:bg-red-600 transition-colors"><i class="fas fa-trash"></i></button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-2">
+                        <button type="button" id="add-product-btn" class="bg-blue-500 text-white py-1 px-3 rounded hover:bg-blue-600 transition-colors text-sm">
+                            <i class="fas fa-plus mr-1"></i>Agregar Producto
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <div class="flex items-center justify-end">
-                <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
-                    <i class="fas fa-save mr-2"></i>Crear Compra
-                </button>
+            <!-- BOTTOM SECTION: Summary and Actions -->
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 border-t pt-4 mt-2">
+                <div class="lg:col-start-2 lg:col-span-3">
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-1 max-w-sm ml-auto text-sm">
+                        <div class="text-right font-bold text-lg border-t pt-1 col-span-1">Costo Total:</div>
+                        <div class="text-right font-bold text-lg border-t pt-1 col-span-1" id="total-display">0.00 Bs</div>
+                    </div>
+                    <div class="flex justify-end mt-4">
+                        <input type="hidden" name="payments_data" id="payments-data-input">
+                        <button type="button" id="process-payment-btn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition-all">
+                            <i class="fas fa-dollar-sign mr-2"></i>Registrar Pago y Crear Compra
+                        </button>
+                    </div>
+                </div>
             </div>
         </form>
     </div>
 </div>
 
+<!-- Payment Modal -->
+<div id="payment-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-10 mx-auto p-4 border w-full max-w-5xl shadow-lg rounded-md bg-white">
+        <div class="mt-1">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-xl leading-6 font-medium text-gray-900">Registrar Pago de Compra</h3>
+                <button id="close-modal-btn" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+                <!-- Columna Izquierda para Resumen -->
+                <div class="lg:col-span-2 space-y-3">
+                    <div class="bg-blue-50 p-3 rounded-lg text-center">
+                        <div class="grid grid-cols-3 gap-2">
+                            <div>
+                                <p class="text-xs text-gray-600">Total a Pagar</p>
+                                <p id="modal-total-amount" class="text-lg font-bold text-blue-800">0.00 Bs</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-600">Total Pagado</p>
+                                <p id="modal-paid-amount" class="text-lg font-bold text-green-600">0.00 Bs</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-600">Monto Restante</p>
+                                <p id="modal-remaining-amount" class="text-lg font-bold text-red-600">0.00 Bs</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Columna Derecha para Formularios y Lista -->
+                <div class="lg:col-span-3">
+                    <!-- Formulario para agregar pago -->
+                    <div id="add-payment-form" class="border p-3 rounded-lg">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+                            <div>
+                                <label for="payment-method" class="block text-sm font-medium text-gray-700">Método de Pago</label>
+                                <select id="payment-method" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                    <option value="efectivo_ves">Efectivo (Bs)</option>
+                                    <option value="efectivo_usd">Efectivo (USD)</option>
+                                    <option value="transferencia">Transferencia</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="payment-amount" class="block text-sm font-medium text-gray-700">Monto</label>
+                                <input type="number" id="payment-amount" step="0.01" min="0.01" class="mt-1 block w-full py-1 px-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            </div>
+                            <div class="md:col-span-1">
+                                <button type="button" id="add-payment-btn-modal" class="w-full bg-blue-500 text-white font-bold py-1 px-3 rounded-lg hover:bg-blue-600">
+                                    <i class="fas fa-plus mr-1"></i>Agregar
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Campos condicionales -->
+                        <div id="payment-details-group" class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                            <div id="payment-bank-group" class="hidden">
+                                <label for="payment-bank" class="block text-sm font-medium text-gray-700">Cuenta de Origen</label>
+                                <select id="payment-bank" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                    <option value="">Seleccione un banco</option>
+                                    {% for bank in banks %}<option value="{{ bank.id }}">{{ bank.name }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div id="payment-cashbox-group" class="hidden">
+                                <label for="payment-cashbox" class="block text-sm font-medium text-gray-700">Caja de Origen</label>
+                                <select id="payment-cashbox" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                    <option value="">Seleccione una caja</option>
+                                    {% for box in cash_boxes %}<option value="{{ box.id }}">{{ box.name }}</option>{% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lista de pagos agregados -->
+                    <div class="mt-3">
+                        <h4 class="text-base font-medium text-gray-800 mb-1">Pagos a Registrar</h4>
+                        <div id="payments-list" class="space-y-1 max-h-40 overflow-y-auto">
+                            <!-- Los pagos se agregarán aquí dinámicamente -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botón de Finalizar -->
+            <div class="mt-4 flex justify-end">
+                <button type="button" id="finalize-purchase-btn" class="bg-green-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-all">
+                    <i class="fas fa-check-circle mr-2"></i>Finalizar y Crear Compra
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const productList = document.querySelector('#product-list-purchase .space-y-4');
-        const addProductBtn = document.getElementById('add-product-btn-purchase');
-        let currentRate = {{ current_rate }};
+        const productListBody = document.querySelector('#product-list tbody');
+        const addProductBtn = document.getElementById('add-product-btn');
+        const activeRate = {{ current_rate }};
 
-        // Función para actualizar el costo en Bolívares
+        const defaultRow = productListBody.querySelector('tr.product-item');
+        let productTemplate = null;
+        if (defaultRow) {
+            productTemplate = defaultRow.cloneNode(true);
+            defaultRow.remove();
+        }
+
         function updateCostVes(costUsdInput) {
             const costUsd = parseFloat(costUsdInput.value) || 0;
-            const costVesDisplay = costUsdInput.closest('.product-item-purchase').querySelector('.cost-ves-display');
-            const costVes = (costUsd * currentRate).toFixed(2);
+            const costVesDisplay = costUsdInput.closest('tr.product-item').querySelector('.cost-ves-display');
+            const costVes = (costUsd * activeRate).toFixed(2);
             costVesDisplay.textContent = costVes;
         }
 
-        // Función para inicializar los costos y el stock
         function initializeProductItem(productItem) {
-            const selectElement = productItem.querySelector('.product-select-purchase');
+            const selectElement = productItem.querySelector('.product-select');
             const selectedOption = selectElement.options[selectElement.selectedIndex];
             const costUsdInput = productItem.querySelector('.cost-usd-input');
             
             costUsdInput.value = selectedOption.dataset.costUsd;
             updateCostVes(costUsdInput);
+            updatePurchaseSummary();
         }
 
-        // Event listener para actualizar el costo en Bs al cambiar el producto
-        productList.addEventListener('change', function(event) {
-            if (event.target.classList.contains('product-select-purchase')) {
-                initializeProductItem(event.target.closest('.product-item-purchase'));
+        function updatePurchaseSummary() {
+            let total = 0;
+            document.querySelectorAll('tr.product-item').forEach(productItem => {
+                const quantity = parseFloat(productItem.querySelector('.quantity-input').value) || 0;
+                const costUsd = parseFloat(productItem.querySelector('.cost-usd-input').value) || 0;
+                const costVes = costUsd * activeRate;
+                const rowTotal = quantity * costVes;
+                const rowTotalDisplay = productItem.querySelector('.row-total-display');
+                if (rowTotalDisplay) {
+                    rowTotalDisplay.textContent = rowTotal.toFixed(2);
+                }
+
+                total += rowTotal;
+            });
+            document.getElementById('total-display').textContent = total.toFixed(2) + ' Bs';
+        }
+
+        productListBody.addEventListener('change', function(event) {
+            if (event.target.classList.contains('product-select')) {
+                initializeProductItem(event.target.closest('tr.product-item'));
             }
         });
         
-        // Event listener para recalcular el costo en Bs cuando se edita el costo USD
-        productList.addEventListener('input', function(event) {
+        productListBody.addEventListener('input', function(event) {
             if (event.target.classList.contains('cost-usd-input')) {
                 updateCostVes(event.target);
+                updatePurchaseSummary();
+            }
+            if (event.target.classList.contains('quantity-input')) {
+                updatePurchaseSummary();
             }
         });
 
-        // Inicializar el primer producto
-        document.querySelectorAll('.product-item-purchase').forEach(initializeProductItem);
-
-        // Event listener para agregar un nuevo producto
         addProductBtn.addEventListener('click', function() {
-            const firstProductItem = productList.querySelector('.product-item-purchase');
-            const newProductItem = firstProductItem.cloneNode(true);
-            
-            // Limpiar valores del nuevo clon
-            newProductItem.querySelector('.product-select-purchase').selectedIndex = 0;
-            newProductItem.querySelector('.quantity-input-purchase').value = '';
-            newProductItem.querySelector('.cost-usd-input').value = '';
-            newProductItem.querySelector('.cost-ves-display').textContent = '0.00';
-
-            // Habilitar el botón de eliminar
-            const removeBtn = newProductItem.querySelector('.remove-product-btn-purchase');
-            removeBtn.disabled = false;
-            removeBtn.style.display = 'inline-block';
-
-            productList.appendChild(newProductItem);
+            if (!productTemplate) return;
+            const newRow = productTemplate.cloneNode(true);
+            initializeProductItem(newRow);
+            productListBody.appendChild(newRow);
         });
 
-        // Event listener para eliminar una fila de producto
-        productList.addEventListener('click', function(event) {
-            if (event.target.classList.contains('remove-product-btn-purchase') || event.target.closest('.remove-product-btn-purchase')) {
-                const productItem = event.target.closest('.product-item-purchase');
-                if (productList.childElementCount > 1) {
-                    productItem.remove();
+        productListBody.addEventListener('click', function(event) {
+            const removeBtn = event.target.closest('.remove-product-btn');
+            if (removeBtn) {
+                const row = removeBtn.closest('tr.product-item');
+                if (productListBody.querySelectorAll('tr.product-item').length > 0) {
+                    row.remove();
+                    updatePurchaseSummary();
                 }
             }
         });
+
+        // Add first row if list is empty
+        if (productListBody.children.length === 0 && productTemplate) {
+            const firstRow = productTemplate.cloneNode(true);
+            initializeProductItem(firstRow);
+            productListBody.appendChild(firstRow);
+        }
+
+        // --- Payment Modal Logic ---
+        const paymentModal = document.getElementById('payment-modal');
+        const processPaymentBtn = document.getElementById('process-payment-btn');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const finalizePurchaseBtn = document.getElementById('finalize-purchase-btn');
+        const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
+
+        const modalTotalAmount = document.getElementById('modal-total-amount');
+        const modalPaidAmount = document.getElementById('modal-paid-amount');
+        const modalRemainingAmount = document.getElementById('modal-remaining-amount');
+        
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentAmountInput = document.getElementById('payment-amount');
+        const paymentBankGroup = document.getElementById('payment-bank-group');
+        const paymentCashboxGroup = document.getElementById('payment-cashbox-group');
+
+        const paymentsListDiv = document.getElementById('payments-list');
+        const paymentsDataInput = document.getElementById('payments-data-input');
+
+        let payments = [];
+        let purchaseTotal = 0;
+
+        function openPaymentModal() {
+            updatePurchaseSummary();
+            purchaseTotal = parseFloat(document.getElementById('total-display').textContent) || 0;
+
+            if (purchaseTotal <= 0) {
+                alert("Agregue productos a la compra antes de registrar el pago.");
+                return;
+            }
+            modalTotalAmount.textContent = purchaseTotal.toFixed(2) + ' Bs';
+            updatePaymentSummaryModal();
+            paymentModal.classList.remove('hidden');
+        }
+
+        function closePaymentModal() {
+            paymentModal.classList.add('hidden');
+            payments = [];
+            paymentsListDiv.innerHTML = '';
+        }
+
+        function updatePaymentSummaryModal() {
+            const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
+            const remaining = purchaseTotal - totalPaid;
+
+            modalPaidAmount.textContent = totalPaid.toFixed(2) + ' Bs';
+            modalRemainingAmount.textContent = Math.max(0, remaining).toFixed(2) + ' Bs';
+
+            finalizePurchaseBtn.disabled = false; // Can always create a purchase, even with pending payment
+
+            const method = paymentMethodSelect.value;
+            if (method === 'efectivo_usd' && activeRate > 0) {
+                paymentAmountInput.value = (remaining / activeRate).toFixed(2);
+            } else {
+                paymentAmountInput.value = remaining.toFixed(2);
+            }
+        }
+
+        function addPayment() {
+            const method = paymentMethodSelect.value;
+            const amount = parseFloat(paymentAmountInput.value);
+            const bank_id = document.getElementById('payment-bank').value;
+            const cash_box_id = document.getElementById('payment-cashbox').value;
+
+            if (!amount || amount <= 0) { alert("Ingrese un monto válido."); return; }
+            if (method === 'transferencia' && !bank_id) { alert("Seleccione una cuenta de origen."); return; }
+            if (method.startsWith('efectivo') && !cash_box_id) { alert("Seleccione una caja de origen."); return; }
+
+            let amount_ves_equivalent = amount;
+            let currency_paid = 'VES';
+            if (method === 'efectivo_usd') {
+                amount_ves_equivalent = amount * activeRate;
+                currency_paid = 'USD';
+            }
+
+            payments.push({
+                method, amount_paid: amount, currency_paid, amount_ves_equivalent,
+                bank_id: method === 'transferencia' ? parseInt(bank_id) : null,
+                cash_box_id: method.startsWith('efectivo') ? parseInt(cash_box_id) : null,
+            });
+            renderPayments();
+            updatePaymentSummaryModal();
+        }
+
+        function renderPayments() {
+            paymentsListDiv.innerHTML = '';
+            payments.forEach((p, index) => {
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-center bg-gray-100 p-2 rounded';
+                let details = `${p.method.replace(/_/g, ' ')}: ${p.amount_paid.toFixed(2)} ${p.currency_paid} (Equiv. ${p.amount_ves_equivalent.toFixed(2)} Bs)`;
+                div.innerHTML = `<span>${details}</span><button type="button" data-index="${index}" class="remove-payment-btn text-red-500 hover:text-red-700"><i class="fas fa-times"></i></button>`;
+                paymentsListDiv.appendChild(div);
+            });
+        }
+
+        processPaymentBtn.addEventListener('click', openPaymentModal);
+        closeModalBtn.addEventListener('click', closePaymentModal);
+        addPaymentBtnModal.addEventListener('click', addPayment);
+
+        paymentMethodSelect.addEventListener('change', function() {
+            const method = this.value;
+            paymentBankGroup.classList.toggle('hidden', method !== 'transferencia');
+            paymentCashboxGroup.classList.toggle('hidden', !method.startsWith('efectivo'));
+        });
+
+        paymentsListDiv.addEventListener('click', function(e) {
+            const removeBtn = e.target.closest('.remove-payment-btn');
+            if (removeBtn) {
+                payments.splice(removeBtn.dataset.index, 1);
+                renderPayments();
+                updatePaymentSummaryModal();
+            }
+        });
+
+        finalizePurchaseBtn.addEventListener('click', function() {
+            paymentsDataInput.value = JSON.stringify(payments);
+            document.getElementById('purchase-form').submit();
+        });
+
+        // Initial setup
+        paymentMethodSelect.dispatchEvent(new Event('change'));
     });
 </script>
 {% endblock %}

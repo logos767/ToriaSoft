@@ -66,7 +66,8 @@
                                 <tr>
                                     <th rowspan="2" class="px-1 py-1 text-left font-semibold align-middle">Producto</th>
                                     <th rowspan="2" class="px-1 py-1 text-center font-semibold align-middle">Cant.</th>
-                                    <th colspan="2" class="px-1 py-1 text-center font-semibold">Precio</th>
+                                    <th colspan="2" class="px-1 py-1 text-center font-semibold">Precio Unitario</th>
+                                    <th rowspan="2" class="px-1 py-1 text-center font-semibold align-middle">Total</th>
                                     <th rowspan="2" class="px-1 py-1 text-center font-semibold align-middle"></th>
                                 </tr>
                                 <tr>
@@ -105,7 +106,8 @@
                                         <input type="hidden" name="price_usd[]" class="price-usd-hidden-for-submit">
                                 {% endif %}
                                     </td>
-                                    <td class="px-1 py-1 text-center font-bold text-gray-800 price-ves-display text-sm align-top">0.00</td>
+                                    <td class="px-1 py-1 text-center font-bold text-gray-600 price-ves-display text-sm align-top">0.00</td>
+                                    <td class="px-1 py-1 text-center font-bold text-gray-800 row-total-display text-sm align-top">0.00</td>
                                     <td class="px-1 py-1 text-center align-top">
                                         <button type="button" class="bg-red-500 text-white py-0.5 px-2 rounded remove-product-btn hover:bg-red-600 transition-colors"><i class="fas fa-trash"></i></button>
                                     </td>
@@ -809,8 +811,14 @@
                     priceUsd = parseFloat(selectedOption.dataset.priceUsd) || 0;
                 }
                 const priceVes = priceUsd * activeRate;
-                
-                subtotal += quantity * priceVes;
+
+                const rowTotal = quantity * priceVes;
+                const rowTotalDisplay = productItem.querySelector('.row-total-display');
+                if (rowTotalDisplay) {
+                    rowTotalDisplay.textContent = rowTotal.toFixed(2);
+                }
+
+                subtotal += rowTotal;
             });
 
             const discountInput = document.getElementById('discount-input');

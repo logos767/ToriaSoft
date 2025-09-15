@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de Cierre Mensual</title>
+    <style>
+        body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 12pt; color: #333; }
+        .container { text-align: center; padding-top: 4cm; }
+        h1 { font-size: 22pt; color: #000; border-bottom: 2px solid #ccc; padding-bottom: 10px; }
+        p { font-size: 14pt; color: #555; margin-top: 5px; }
+        .footer { position: fixed; bottom: 1cm; left: 0; right: 0; text-align: center; font-size: 9pt; color: #888; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Reporte de Cierre Mensual</h1>
+        <p>{{ report_period }}</p>
+        <p style="margin-top: 3cm; font-weight: bold; color: #888;">
+            No se encontraron movimientos ni datos que reportar para este período.
+        </p>
+    </div>
+    <div class="footer">
+        Reporte generado el {{ generation_date }}
+    </div>
+</body>
+</html>

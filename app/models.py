@@ -78,7 +78,7 @@ class Provider(db.Model):
         return f"Provider('{self.name}')"
 
 class Order(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=False)
     client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
     date_created = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
     status = db.Column(db.String(20), nullable=False, default='Pendiente')
@@ -89,6 +89,22 @@ class Order(db.Model):
     # Relaciones
     items = db.relationship('OrderItem', backref='order', lazy=True, cascade="all, delete-orphan")
     payments = db.relationship('Payment', backref='order', lazy=True, cascade="all, delete-orphan")
+
+    @property
+    def total_amount_usd(self):
+        """Calculates the total amount of the order in USD, after discount."""
+        if self.exchange_rate_at_sale and self.exchange_rate_at_sale > 0:
+            # self.total_amount already includes the discount
+            return self.total_amount / self.exchange_rate_at_sale
+        return 0.0
+
+    @property
+    def paid_amount_usd(self):
+        """Calculates the total paid amount for this order in USD."""
+        if self.exchange_rate_at_sale and self.exchange_rate_at_sale > 0:
+            # self.paid_amount is in VES
+            return self.paid_amount / self.exchange_rate_at_sale
+        return 0.0
 
     @property
     def paid_amount(self):
@@ -106,7 +122,7 @@ class Order(db.Model):
 
 class OrderItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+    order_id = db.Column(db.BigInteger, db.ForeignKey('order.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Float, nullable=False) # Precio en VES en el momento de la venta
@@ -154,7 +170,7 @@ class CashBox(db.Model):
 class Payment(db.Model):
     __tablename__ = 'payments'
     id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+    order_id = db.Column(db.BigInteger, db.ForeignKey('order.id'), nullable=False)
     amount_paid = db.Column(db.Float, nullable=False) # The amount in the currency it was paid
     currency_paid = db.Column(db.String(3), nullable=False) # 'VES', 'USD'
     amount_ves_equivalent = db.Column(db.Float, nullable=False) # The equivalent in VES for the order total
@@ -189,12 +205,14 @@ class ManualFinancialMovement(db.Model):
     # Foreign keys to the accounts
     bank_id = db.Column(db.Integer, db.ForeignKey('banks.id'), nullable=True)
     cash_box_id = db.Column(db.Integer, db.ForeignKey('cash_boxes.id'), nullable=True)
+    purchase_id = db.Column(db.Integer, db.ForeignKey('purchase.id'), nullable=True, index=True)
     
     # Relationships
     bank = db.relationship('Bank', backref=db.backref('manual_movements', lazy='dynamic'))
     cash_box = db.relationship('CashBox', backref=db.backref('manual_movements', lazy='dynamic'))
     created_by_user = db.relationship('User', backref=db.backref('financial_movements_created', lazy='dynamic'), foreign_keys=[created_by_user_id])
     approved_by_user = db.relationship('User', backref=db.backref('financial_movements_approved', lazy='dynamic'), foreign_keys=[approved_by_user_id])
+    purchase = db.relationship('Purchase', backref=db.backref('payments', lazy='dynamic'))
 
     def __repr__(self):
         return f"ManualFinancialMovement('{self.description}', '{self.amount} {self.currency}')"
@@ -204,11 +222,12 @@ class Purchase(db.Model):
     provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'), nullable=False)
     date_created = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
     status = db.Column(db.String(20), nullable=False, default='Pendiente')
+    payment_status = db.Column(db.String(20), nullable=False, default='Pendiente de Pago')
     total_cost = db.Column(db.Float, nullable=False, default=0.0)
 
     # Relaciones
     items = db.relationship('PurchaseItem', backref='purchase', lazy=True)
-    reception = db.relationship('Reception', backref='purchase', uselist=False, lazy=True)
+    receptions = db.relationship('Reception', backref='purchase', lazy=True)
     
     def __repr__(self):
         return f"Purchase('{self.id}', '{self.total_cost}')"
@@ -219,13 +238,20 @@ class PurchaseItem(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
     cost = db.Column(db.Float, nullable=False) # Costo en VES en el momento de la compra
+    quantity_received = db.Column(db.Integer, nullable=False, default=0)
 
+    @property
+    def quantity_pending(self):
+        """Returns the quantity of this item that is yet to be received."""
+        pending = self.quantity - self.quantity_received
+        return pending if pending > 0 else 0
+        
     def __repr__(self):
         return f"PurchaseItem('{self.purchase_id}', '{self.product_id}', '{self.quantity}')"
 
 class Reception(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    purchase_id = db.Column(db.Integer, db.ForeignKey('purchase.id'), nullable=False, unique=True)
+    purchase_id = db.Column(db.Integer, db.ForeignKey('purchase.id'), nullable=False)
     date_received = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
     status = db.Column(db.String(20), nullable=False, default='Pendiente')
 
@@ -238,7 +264,7 @@ class Movement(db.Model):
     type = db.Column(db.String(20), nullable=False)  # 'Entrada', 'Salida'
     quantity = db.Column(db.Integer, nullable=False)
     date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
-    document_id = db.Column(db.Integer, nullable=True) # ID de la orden, compra, etc.
+    document_id = db.Column(db.BigInteger, nullable=True) # ID de la orden, compra, etc.
     document_type = db.Column(db.String(50), nullable=True) # 'Orden de Venta', 'Orden de Compra', 'Ajuste'
     related_party_id = db.Column(db.Integer, nullable=True) # ID del cliente o proveedor
     related_party_type = db.Column(db.String(50), nullable=True) # 'Cliente', 'Proveedor'
