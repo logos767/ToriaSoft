@@ -1,153 +1,174 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto p-4 max-w-4xl">
-    <div class="flex items-center mb-6">
-        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-cart-plus mr-2"></i>Crear Nueva Orden de Venta</h1>
+<div class="container mx-auto p-2 max-w-7xl">
+    <div class="flex justify-between items-center mb-2">
+        <div class="flex items-center">
+            <h1 class="text-xl font-bold text-gray-800"><i class="fas fa-cart-plus m-1"></i>Crear Nueva Orden de Venta</h1>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div>
+                <label for="date_created" class="block text-gray-700 font-bold mb-1 text-sm">Fecha y Hora:</label>
+                <input type="datetime-local" id="date_created" name="date_created" value="{{ current_ve_time.strftime('%Y-%m-%dT%H:%M') }}" class="shadow appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            {% if current_user.role == 'administrador' %}
+            <div id="special-rate-group" class="hidden">
+                <label for="special_exchange_rate" class="block text-red-600 font-bold mb-1 text-sm">Tasa de Cambio Especial:</label>
+                <input type="number" id="special_exchange_rate" name="special_exchange_rate" step="0.01" placeholder="{{ '%.2f'|format(current_rate) }}" class="w-32 shadow appearance-none border border-red-300 rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-red-500">
+            </div>
+            {% endif %}
+        </div>
     </div>
-
-    <div class="bg-white p-6 rounded-lg shadow-md">
+    <div class="bg-white p-4 rounded-lg shadow-md">
         <form method="POST" action="{{ url_for('main.new_order') }}" id="order-form">
-            <!-- Información de la orden y escáner -->
-            <div class="mb-6">
-                <h2 class="text-xl font-semibold text-gray-700 mb-4">Información de la Orden</h2>
-
-                <div class="flex justify-between items-start">
-                    <!-- Información del cliente -->
-                    <div class="w-1/2 pr-4">
-                        <label for="client_search" class="block text-gray-700 font-bold mb-2">Cliente (Cédula o RIF):</label>
-                        <input type="text" id="client_search" name="client_search" autocomplete="off" placeholder="Escribe cédula o RIF para buscar cliente" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-                        <input type="hidden" id="client_id" name="client_id" required>
-                        <div id="client_suggestions" class="border border-gray-300 rounded mt-1 max-h-32 overflow-y-auto bg-white hidden"></div>
-                        <div id="client_info" class="mt-3 p-3 border border-gray-300 rounded bg-gray-50 hidden">
-                            <div class="font-semibold mb-1">Cliente Seleccionado:</div>
-                            <div><strong>Nombre:</strong> <span id="client_name"></span></div>
-                            <div><strong>Cédula/RIF:</strong> <span id="client_cedula_rif"></span></div>
-                            <div><strong>Email:</strong> <span id="client_email"></span></div>
-                            <div><strong>Teléfono:</strong> <span id="client_phone"></span></div>
-                            <div><strong>Dirección:</strong> <span id="client_address"></span></div>
+            <!-- Main two-column layout -->
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-4">
+                <!-- LEFT COLUMN: Client and Actions -->
+                <div class="space-y-4 lg:col-span-1">
+                    <!-- Client Info -->
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-700 mb-2">1. Información del Cliente</h2>
+                        <div class="space-y-2">
+                            <input type="text" id="client_search" name="client_search" autocomplete="off" placeholder="Cédula, RIF o Nombre..." class="shadow-sm appearance-none border rounded w-full py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" required>
+                            <input type="hidden" id="client_id" name="client_id" required>
+                            <div id="client_suggestions" class="border border-gray-300 rounded mt-1 max-h-32 overflow-y-auto bg-white hidden"></div>
+                            <div id="client_info" class="mt-2 p-2 border border-gray-200 rounded bg-gray-50 hidden text-sm">
+                                <div class="font-semibold mb-1">Cliente Seleccionado:</div>
+                                <div><strong>Nombre:</strong> <span id="client_name"></span></div>
+                                <div><strong>Cédula/RIF:</strong> <span id="client_cedula_rif"></span></div>
+                                <div><strong>Teléfono:</strong> <span id="client_phone"></span></div>
+                                <div><strong>Email:</strong> <span id="client_email"></span></div>
+                                <div><strong>Dirección:</strong> <span id="client_address"></span></div>
+                            </div>
                         </div>
                     </div>
+                    
+                </div>
 
-                    <!-- Escáner de código de barras y agregar producto -->
-                    <div class="w-1/2 pl-4">
-                        <label class="block text-gray-700 font-bold mb-2">Escáner de Código de Barras:</label>
-                        <div class="flex items-center space-x-2 mb-4">
-                            <input type="text" id="barcode-input" placeholder="Código de barras" class="flex-1 shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <button type="button" id="scan-barcode-btn" class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 transition-colors">
+                <!-- RIGHT COLUMN: Product List -->
+                <div class="lg:col-span-3">
+                    <!-- Barcode Scanner & Add Product -->
+                    <div class="mb-2">
+                        <h2 class="text-lg font-semibold text-gray-700 mb-2">2. Añadir Productos</h2>
+                        <div class="flex items-center space-x-2 mb-2">
+                            <input type="text" id="barcode-input" placeholder="Escanear o escribir código..." class="flex-1 shadow-sm appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                            <button type="button" id="scan-barcode-btn" class="bg-blue-500 text-white py-1 px-3 rounded hover:bg-blue-600 transition-colors text-sm whitespace-nowrap">
                                 <i class="fas fa-barcode mr-1"></i>Agregar
                             </button>
+                            <button type="button" id="add-product-btn" class="bg-green-500 text-white py-1 px-3 rounded hover:bg-green-600 transition-colors text-sm whitespace-nowrap">
+                                <i class="fas fa-plus mr-1"></i>Agregar Manual
+                            </button>
                         </div>
-                        <button type="button" id="add-product-btn" class="bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600 transition-colors">
-                            <i class="fas fa-plus mr-2"></i>Agregar Otro Producto
-                        </button>
                     </div>
-                </div>
-            </div>
-
-            <!-- Lista de productos -->
-            <div id="product-list" class="mb-6">
-                <h2 class="text-xl font-semibold text-gray-700 mb-4">Productos</h2>
-                <table class="table table-compact w-full border-collapse border border-gray-300">
-                    <thead>
-                        <tr class="bg-gray-100">
-                            <th class="border border-gray-300 px-2 py-1 text-left">Producto</th>
-                            <th class="border border-gray-300 px-2 py-1 text-left">Cantidad</th>
-                            <th class="border border-gray-300 px-2 py-1 text-left">Precio USD</th>
-                            <th class="border border-gray-300 px-2 py-1 text-left">Precio Bs</th>
-                            <th class="border border-gray-300 px-2 py-1 text-left">Acción</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Fila de ejemplo para clonar -->
-                        <tr class="product-item bg-gray-50">
-                            <td class="px-2 py-1">
-                                <select name="product_id[]" required class="w-full shadow appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 product-select">
+                    <div id="product-list" class="max-h-[55vh] overflow-y-auto border rounded-lg">
+                        <table class="table-auto w-full text-sm">
+                            <thead class="bg-gray-100 sticky top-0 z-10">
+                                <tr>
+                                    <th rowspan="2" class="px-1 py-1 text-left font-semibold align-middle">Producto</th>
+                                    <th rowspan="2" class="px-1 py-1 text-center font-semibold align-middle">Cant.</th>
+                                    <th colspan="2" class="px-1 py-1 text-center font-semibold">Precio</th>
+                                    <th rowspan="2" class="px-1 py-1 text-center font-semibold align-middle"></th>
+                                </tr>
+                                <tr>
+                                    <th class="px-1 py-1 text-center font-semibold bg-gray-100">{{ currency_symbol }}</th>
+                                    <th class="px-1 py-1 text-center font-semibold bg-gray-100">Bs</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <!-- Fila de ejemplo para clonar -->
+                                <tr class="product-item bg-gray-50">
+                                    <td class="px-1 py-1 align-top">
+                                        <select name="product_id[]" required class="w-full shadow-sm appearance-none border rounded py-0.5 px-1 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 product-select text-xs">
                                     {% for product in products %}
                                         {% if product.stock > 0 %}
                                             <option value="{{ product.id }}" data-price-usd="{{ product.price_usd }}" data-stock="{{ product.stock }}" data-codigo="{{ product.codigo_producto }}"
                                                     class="{% if product.stock < 5 %}stock-low{% elif product.stock < 20 %}stock-medium{% else %}stock-high{% endif %}">
-                                                {{ product.name }} (Stock: {{ product.stock }})
-                                                {% if product.stock < 5 %}
-                                                    <span class="text-red-600 font-bold">⚠️ STOCK BAJO</span>
-                                                {% elif product.stock < 20 %}
-                                                    <span class="text-yellow-600">⚡ STOCK MEDIO</span>
-                                                {% else %}
-                                                    <span class="text-green-600">✅ STOCK BUENO</span>
-                                                {% endif %}
+                                                {{ product.barcode }} | {{ product.name }}
                                             </option>
                                         {% else %}
                                             <option value="{{ product.id }}" disabled data-price-usd="{{ product.price_usd }}" data-stock="{{ product.stock }}" data-codigo="{{ product.codigo_producto }}" class="stock-out">
                                                 {{ product.name }} (AGOTADO - Stock: {{ product.stock }})
                                             </option>
                                         {% endif %}
-                                    {% endfor %}
-                                </select>
-                                <div class="text-sm text-gray-500 mt-1 codigo-producto-display"></div>
-                            </td>
-                            <td class="px-2 py-1">
-                                <input type="number" name="quantity[]" placeholder="Cantidad" min="1" required class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 quantity-input">
-                            </td>
-                            <td class="px-2 py-1">
+                                            {% endfor %}
+                                        </select>
+                                        <div class="text-xs text-gray-500 mt-1 codigo-producto-display"></div>
+                                    </td>
+                                    <td class="px-1 py-1 align-top">
+                                        <input type="number" name="quantity[]" placeholder="Cant." min="1" required class="w-16 shadow-sm appearance-none border rounded py-0.5 px-1 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 quantity-input text-sm text-center">
+                                    </td>
+                                    <td class="px-1 py-1 align-top">
                                 {% if current_user.is_authenticated and current_user.role == 'administrador' %}
-                                <input type="number" name="price_usd[]" placeholder="Precio" step="0.01" min="0" required class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 price-usd-input">
+                                        <input type="number" name="price_usd[]" placeholder="Precio" step="0.01" min="0" required class="w-20 shadow-sm appearance-none border rounded py-0.5 px-1 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 price-usd-input text-sm text-center">
                                 {% else %}
-                                <span class="w-24 text-center font-bold text-gray-800 price-usd-display">0.00</span>
-                                <input type="hidden" name="price_usd[]" class="price-usd-hidden-for-submit">
+                                        <span class="w-20 text-center font-bold text-gray-800 price-usd-display text-sm">0.00</span>
+                                        <input type="hidden" name="price_usd[]" class="price-usd-hidden-for-submit">
                                 {% endif %}
-                            </td>
-                            <td class="px-2 py-1 text-center font-bold text-gray-800 price-ves-display">0.00</td>
-                            <td class="px-2 py-1 text-center">
-                                <button type="button" class="bg-red-500 text-white py-1 px-2 rounded remove-product-btn hover:bg-red-600 transition-colors"><i class="fas fa-trash"></i></button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Resumen de la orden -->
-            <div class="border-t pt-4 mb-6">
-                <div class="grid grid-cols-2 gap-4 max-w-md ml-auto">
-                    <div class="text-right font-semibold hidden">Subtotal:</div>
-                    <div class="text-right hidden" id="subtotal-display">0.00 Bs</div>
-
-                    <div class="text-right font-semibold hidden">IVA (16%):</div>
-                    <div class="text-right hidden" id="iva-display">0.00 Bs</div>
-
-                    <div class="text-right font-semibold">Descuento ({{ currency_symbol }}):</div>
-                    <div class="text-right">
-                        <input type="number" id="discount-input" name="discount_usd" value="0.00" step="0.01" min="0" class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-right">
+                                    </td>
+                                    <td class="px-1 py-1 text-center font-bold text-gray-800 price-ves-display text-sm align-top">0.00</td>
+                                    <td class="px-1 py-1 text-center align-top">
+                                        <button type="button" class="bg-red-500 text-white py-0.5 px-2 rounded remove-product-btn hover:bg-red-600 transition-colors"><i class="fas fa-trash"></i></button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
-
-                    <div class="text-right font-bold text-lg border-t pt-2">Total a Pagar:</div>
-                    <div class="text-right font-bold text-lg border-t pt-2" id="total-display">0.00 Bs</div>
                 </div>
             </div>
 
-            <div class="flex items-center justify-between mt-6 pt-6 border-t">
-                <!-- Botón para reimprimir la última orden -->
+            <!-- BOTTOM SECTION: Summary and Actions -->
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 border-t pt-4 mt-2">
                 
 
-                <div>
-                    {% if last_order %}
-                    <a href="{{ url_for('main.print_delivery_note', order_id=last_order.id) }}" target="_blank" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
-                        <i class="fas fa-print mr-2"></i>Reimprimir Última Orden (#{{ last_order.id|order_id_format }})
-                    </a>
-                    {% endif %}
-                </div>
+                <!-- Resumen y Botón para procesar el pago -->
+                <div class="space-y-3 lg:col-start-2 lg:col-span-3">
+                    <!-- Resumen de la orden -->
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-1 max-w-sm ml-auto text-sm">
+                        <div class="text-right font-semibold">Subtotal:</div>
+                        <div class="text-right" id="subtotal-display">0.00 Bs</div>
 
-                <!-- Botón para procesar el pago de la nueva orden -->
-                <div>
-                    <div class="flex items-center">
-                        <input id="credit-sale-checkbox" name="is_credit_sale" type="checkbox" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
-                        <label for="credit-sale-checkbox" class="ml-2 block text-sm text-gray-900 font-bold">
-                            Venta a Crédito
-                        </label>
+                        <div class="text-right font-semibold">Descuento ({{ currency_symbol }}):</div>
+                        <div class="text-right">
+                            <input type="number" id="discount-input" name="discount_usd" value="0.00" step="0.01" min="0" class="w-24 shadow-sm appearance-none border rounded py-0.5 px-1 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-right text-sm">
+                        </div>
+
+                        <div class="text-right font-semibold hidden">IVA:</div>
+                        <div class="text-right hidden" id="iva-display">0.00 Bs</div>
+
+                        <div class="text-right font-bold text-lg border-t pt-1 col-span-1">Total a Pagar:</div>
+                        <div class="text-right font-bold text-lg border-t pt-1 col-span-1" id="total-display">0.00 Bs</div>
                     </div>
-                    <input type="hidden" name="payments_data" id="payments-data-input">
-                    <button type="button" id="process-payment-btn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition-all">
-                        <i class="fas fa-dollar-sign mr-2"></i>Procesar Pago y Crear Orden
-                    </button>
+
+                    <!-- Tipo de venta y botón de pago -->
+                    <div class="flex items-center justify-end space-x-4">
+                        <div class="flex items-center">
+                            <input id="sale-type-regular" name="sale_type" type="radio" value="regular" checked class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300">
+                            <label for="sale-type-regular" class="ml-2 block text-sm font-bold text-gray-900">Venta Regular</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input id="sale-type-credit" name="sale_type" type="radio" value="credit" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300">
+                            <label for="sale-type-credit" class="ml-2 block text-sm font-bold text-gray-900">Venta a Crédito</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input id="sale-type-reservation" name="sale_type" type="radio" value="reservation" class="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300">
+                            <label for="sale-type-reservation" class="ml-2 block text-sm font-bold text-gray-900">Apartado</label>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-4">
+                        <div>
+                            {% if last_order %}
+                            <a href="{{ url_for('main.print_delivery_note', order_id=last_order.id) }}" target="_blank" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-3 rounded-lg focus:outline-none focus:shadow-outline text-sm">
+                                <i class="fas fa-print mr-2"></i>Reimprimir Última Orden (#{{ last_order.id|order_id_format }})
+                            </a>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <input type="hidden" name="payments_data" id="payments-data-input">
+                            <button type="button" id="process-payment-btn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition-all">
+                                <i class="fas fa-dollar-sign mr-2"></i>Procesar Pago y Crear Orden
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </form>
@@ -156,115 +177,126 @@
 
 <!-- Payment Modal -->
 <div id="payment-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-20 mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-md bg-white">
-        <div class="mt-3">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-2xl leading-6 font-medium text-gray-900">Registrar Pago</h3>
+    <div class="relative top-10 mx-auto p-4 border w-full max-w-5xl shadow-lg rounded-md bg-white">
+        <div class="mt-1">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-xl leading-6 font-medium text-gray-900">Registrar Pago</h3>
                 <button id="close-modal-btn" class="text-gray-400 hover:text-gray-600">
-                    <i class="fas fa-times text-2xl"></i>
+                    <i class="fas fa-times text-xl"></i>
                 </button>
             </div>
 
-            <div id="credit-sale-notice" class="hidden bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-4" role="alert">
-                <p class="font-bold">Venta a Crédito</p>
-                <p>Puede registrar un abono inicial o finalizar la orden sin pagos. El saldo pendiente se registrará en la cuenta del cliente.</p>
-            </div>
-
-            <!-- Mensaje de restricción de pago -->
-            <div id="payment-restriction-message" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4" role="alert">
-                <p class="font-bold">Atención</p>
-                <p>Debido al descuento aplicado, solo se permite el pago en Efectivo (USD).</p>
-            </div>
-
-            <!-- Resumen de Pago -->
-            <div class="bg-blue-50 p-4 rounded-lg mb-6 text-center">
-                <div class="grid grid-cols-3 gap-4">
-                    <div>
-                        <p class="text-sm text-gray-600">Total a Pagar</p>
-                        <p id="modal-total-amount" class="text-2xl font-bold text-blue-800">0.00 Bs</p>
+            <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+                <!-- Columna Izquierda para Alertas y Resumen -->
+                <div class="lg:col-span-2 space-y-3">
+                    <div id="credit-sale-notice" class="hidden bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-3 rounded text-sm" role="alert">
+                        <p class="font-bold">Venta a Crédito</p>
+                        <p>Puede registrar un abono inicial o finalizar la orden sin pagos. El saldo pendiente se registrará en la cuenta del cliente.</p> 
                     </div>
-                    <div>
-                        <p class="text-sm text-gray-600">Total Pagado</p>
-                        <p id="modal-paid-amount" class="text-2xl font-bold text-green-600">0.00 Bs</p>
+                    <div id="payment-restriction-message" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-3 rounded text-sm" role="alert">
+                        <p class="font-bold">Atención</p>
+                        <p>Debido al descuento aplicado, solo se permite el pago en Efectivo (USD).</p>
                     </div>
-                    <div>
-                        <p class="text-sm text-gray-600">Monto Restante</p>
-                        <p id="modal-remaining-amount" class="text-2xl font-bold text-red-600">0.00 Bs</p>
-                    </div>
-                </div>
-                <!-- Vuelto Display -->
-                <div id="modal-change-display" class="mt-4 hidden text-center">
-                    <p class="text-lg text-gray-700">Vuelto a entregar:</p>
-                    <p id="modal-change-amount" class="text-3xl font-bold text-yellow-600">0.00</p>
-                </div>
-            </div>
-
-            <!-- Formulario para agregar pago -->
-            <div id="add-payment-form" class="border p-4 rounded-lg">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                    <div>
-                    <label for="payment-method" class="block text-sm font-medium text-gray-700">Método de Pago</label>
-                    <select id="payment-method" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                        <option value="efectivo_ves">Efectivo (Bs)</option>
-                        <option value="efectivo_usd">Efectivo (USD)</option>
-                        <option value="transferencia">Transferencia/Pago Móvil</option>
-                        <option value="punto_de_venta">Punto de Venta</option>
-                    </select>
-                    </div>
-                    <div>
-                    <label for="payment-amount" class="block text-sm font-medium text-gray-700">Monto</label>
-                    <input type="number" id="payment-amount" step="0.01" min="0.01" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                    </div>
-                    <div class="md:col-span-1"></div> <!-- Spacer -->
-                </div>
-                
-                <!-- Campos condicionales -->
-                <div id="payment-details-group" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                    <div id="payment-reference-group" class="hidden">
-                        <label for="payment-reference" class="block text-sm font-medium text-gray-700">Referencia</label>
-                        <input type="text" id="payment-reference" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                    </div>
-                    <div id="payment-bank-group" class="hidden">
-                        <label for="payment-bank" class="block text-sm font-medium text-gray-700">Banco Destino</label>
-                        <select id="payment-bank" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                            <option value="">Seleccione un banco</option>
-                            {% for bank in banks %}<option value="{{ bank.id }}">{{ bank.name }}</option>{% endfor %}
-                        </select>
-                    </div>
-                    <div id="payment-pos-group" class="hidden">
-                        <label for="payment-pos" class="block text-sm font-medium text-gray-700">Punto de Venta</label>
-                        <select id="payment-pos" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                            <option value="">Seleccione un POS</option>
-                            {% for pos in points_of_sale %}<option value="{{ pos.id }}">{{ pos.name }}</option>{% endfor %}
-                        </select>
-                    </div>
-                    <div id="payment-cashbox-group" class="hidden">
-                        <label for="payment-cashbox" class="block text-sm font-medium text-gray-700">Caja</label>
-                        <select id="payment-cashbox" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                            <option value="">Seleccione una caja</option>
-                            {% for box in cash_boxes %}<option value="{{ box.id }}">{{ box.name }}</option>{% endfor %}
-                        </select>
+                    <!-- Resumen de Pago -->
+                    <div class="bg-blue-50 p-3 rounded-lg text-center">
+                        <div class="grid grid-cols-3 gap-2">
+                            <div>
+                                <p class="text-xs text-gray-600">Total a Pagar</p>
+                                <p id="modal-total-amount" class="text-lg font-bold text-blue-800">0.00 Bs</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-600">Total Pagado</p>
+                                <p id="modal-paid-amount" class="text-lg font-bold text-green-600">0.00 Bs</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-600">Monto Restante</p>
+                                <p id="modal-remaining-amount" class="text-lg font-bold text-red-600">0.00 Bs</p>
+                            </div>
+                        </div>
+                        <!-- Vuelto Display -->
+                        <div id="modal-change-display" class="mt-2 hidden text-center">
+                            <p class="text-sm text-gray-700">Vuelto a entregar:</p>
+                            <p id="modal-change-amount" class="text-xl font-bold text-yellow-600">0.00</p>
+                        </div>
                     </div>
                 </div>
 
-                <div class="flex justify-end mt-4">
-                    <button type="button" id="add-payment-btn-modal" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600">
-                        <i class="fas fa-plus mr-2"></i>Agregar Pago
-                    </button>
-                </div>
-            </div>
+                <!-- Columna Derecha para Formularios y Lista -->
+                <div class="lg:col-span-3">
+                    <!-- Formulario para agregar pago -->
+                    <div id="add-payment-form" class="border p-3 rounded-lg">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+                            <div>
+                                <label for="payment-method" class="block text-sm font-medium text-gray-700">Método de Pago</label>
+                                <select id="payment-method" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                    <option value="efectivo_ves">Efectivo (Bs)</option>
+                                    <option value="efectivo_usd">Efectivo (USD)</option>
+                                    <option value="transferencia">Transferencia/Pago Móvil</option>
+                                    <option value="punto_de_venta">Punto de Venta</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="payment-amount" class="block text-sm font-medium text-gray-700">Monto</label>
+                                <input type="number" id="payment-amount" step="0.01" min="0.01" class="mt-1 block w-full py-1 px-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            </div>
+                            <div class="md:col-span-1">
+                                <button type="button" id="add-payment-btn-modal" class="w-full bg-blue-500 text-white font-bold py-1 px-3 rounded-lg hover:bg-blue-600">
+                                    <i class="fas fa-plus mr-1"></i>Agregar
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Campos condicionales -->
+                        <div id="payment-details-group" class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                            <div id="payment-reference-group" class="hidden">
+                                <label for="payment-reference" class="block text-sm font-medium text-gray-700">Referencia</label>
+                                <input type="text" id="payment-reference" class="mt-1 block w-full py-1 px-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            </div>
+                            <div id="payment-issuing-bank-group" class="hidden">
+                                <label for="payment-issuing-bank" class="block text-sm font-medium text-gray-700">Banco Emisor</label>
+                                <input type="text" id="payment-issuing-bank" class="mt-1 block w-full py-1 px-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            </div>
+                            <div id="payment-sender-id-group" class="hidden">
+                                <label for="payment-sender-id" class="block text-sm font-medium text-gray-700">Cédula/Teléfono Emisor</label>
+                                <input type="text" id="payment-sender-id" class="mt-1 block w-full py-1 px-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            </div>
+                            <div id="payment-bank-group" class="hidden">
+                                <label for="payment-bank" class="block text-sm font-medium text-gray-700">Banco Destino</label>
+                                <select id="payment-bank" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                    <option value="">Seleccione un banco</option>
+                                    {% for bank in banks %}<option value="{{ bank.id }}">{{ bank.name }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div id="payment-pos-group" class="hidden">
+                                <label for="payment-pos" class="block text-sm font-medium text-gray-700">Punto de Venta</label>
+                                <select id="payment-pos" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                    <option value="">Seleccione un POS</option>
+                                    {% for pos in points_of_sale %}<option value="{{ pos.id }}">{{ pos.name }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div id="payment-cashbox-group" class="hidden">
+                                <label for="payment-cashbox" class="block text-sm font-medium text-gray-700">Caja</label>
+                                <select id="payment-cashbox" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                    <option value="">Seleccione una caja</option>
+                                    {% for box in cash_boxes %}<option value="{{ box.id }}">{{ box.name }}</option>{% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
 
-            <!-- Lista de pagos agregados -->
-            <div class="mt-6">
-                <h4 class="text-lg font-medium text-gray-800 mb-2">Pagos Registrados</h4>
-                <div id="payments-list" class="space-y-2">
-                    <!-- Los pagos se agregarán aquí dinámicamente -->
+                    <!-- Lista de pagos agregados -->
+                    <div class="mt-3">
+                        <h4 class="text-base font-medium text-gray-800 mb-1">Pagos Registrados</h4>
+                        <div id="payments-list" class="space-y-1 max-h-40 overflow-y-auto">
+                            <!-- Los pagos se agregarán aquí dinámicamente -->
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- Botón de Finalizar -->
-            <div class="mt-8 flex justify-end">
-                <button type="button" id="finalize-order-btn" class="bg-green-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-all" disabled>
+            <div class="mt-4 flex justify-end">
+                <button type="button" id="finalize-order-btn" class="bg-green-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-all" disabled>
                     <i class="fas fa-check-circle mr-2"></i>Finalizar y Crear Orden
                 </button>
             </div>
@@ -338,6 +370,64 @@
         const newClientModalError = document.getElementById('new-client-modal-error');
         const newClientModalErrorMessage = document.getElementById('new-client-modal-error-message');
 
+        const defaultRate = {{ current_rate }};
+        let activeRate = defaultRate;
+
+        {% if current_user.role == 'administrador' %}
+        const dateCreatedInput = document.getElementById('date_created');
+        const specialRateGroup = document.getElementById('special-rate-group');
+        const specialRateInput = document.getElementById('special_exchange_rate');
+
+        // Get today's date in YYYY-MM-DD format, considering the VE timezone
+        const today = new Date('{{ current_ve_time.isoformat() }}');
+        const todayString = today.toISOString().split('T')[0];
+
+        function updateAllPricesAndSummary() {
+            document.querySelectorAll('tr.product-item').forEach(row => {
+                const priceUsdInput = row.querySelector('.price-usd-input');
+                const priceUsdDisplay = row.querySelector('.price-usd-display');
+                const priceVesDisplay = row.querySelector('.price-ves-display');
+                let priceUsd = 0;
+
+                if (priceUsdInput) { // Admin view
+                    priceUsd = parseFloat(priceUsdInput.value) || 0;
+                } else if (priceUsdDisplay) { // Non-admin view
+                    priceUsd = parseFloat(priceUsdDisplay.textContent) || 0;
+                }
+                priceVesDisplay.textContent = (priceUsd * activeRate).toFixed(2);
+            });
+            updateOrderSummary();
+        }
+
+        dateCreatedInput.addEventListener('input', function() {
+            const selectedDateString = this.value.split('T')[0];
+            
+            if (selectedDateString && selectedDateString !== todayString) {
+                specialRateGroup.classList.remove('hidden');
+                if (!specialRateGroup.dataset.alertShown) {
+                    alert('Ha seleccionado una fecha diferente a la actual. Considere ajustar la tasa de cambio manualmente para esta orden.');
+                    specialRateGroup.dataset.alertShown = 'true';
+                }
+            } else {
+                specialRateGroup.classList.add('hidden');
+                specialRateInput.value = '';
+                delete specialRateGroup.dataset.alertShown;
+                activeRate = defaultRate; // Reset rate
+                updateAllPricesAndSummary(); // Recalculate everything
+            }
+        });
+
+        specialRateInput.addEventListener('input', function() {
+            const specialRateValue = parseFloat(this.value);
+            if (specialRateValue && specialRateValue > 0) {
+                activeRate = specialRateValue;
+            } else {
+                activeRate = defaultRate;
+            }
+            updateAllPricesAndSummary();
+        });
+        {% endif %}
+
         let selectedClient = null;
         let debounceTimeout = null;
 
@@ -345,6 +435,8 @@
             clientNameSpan.textContent = '';
             clientCedulaRifSpan.textContent = '';
             clientEmailSpan.textContent = '';
+            clientPhoneSpan.textContent = '';
+            clientAddressSpan.textContent = '';
             clientInfoDiv.classList.add('hidden');
             clientIdInput.value = '';
             selectedClient = null;
@@ -498,7 +590,6 @@
 
         const productList = document.querySelector('#product-list tbody');
         const addProductBtn = document.getElementById('add-product-btn');
-        let currentRate = {{ current_rate }};
 
         // Remove default product row and store as template
         const defaultRow = productList.querySelector('tr.product-item');
@@ -512,7 +603,7 @@
         function updatePriceVes(priceUsdInput) {
             const priceUsd = parseFloat(priceUsdInput.value) || 0;
             const priceVesDisplay = priceUsdInput.closest('tr.product-item').querySelector('.price-ves-display');
-            const priceVes = (priceUsd * currentRate).toFixed(2);
+            const priceVes = (priceUsd * activeRate).toFixed(2);
             priceVesDisplay.textContent = priceVes;
         }
 
@@ -536,7 +627,7 @@
 
                 if (priceUsdDisplay) priceUsdDisplay.textContent = parseFloat(priceUsd).toFixed(2);
                 if (priceUsdHiddenInput) priceUsdHiddenInput.value = priceUsd;
-                if (priceVesDisplay) priceVesDisplay.textContent = (parseFloat(priceUsd) * currentRate).toFixed(2);
+                if (priceVesDisplay) priceVesDisplay.textContent = (parseFloat(priceUsd) * activeRate).toFixed(2);
             }
 
             // Configurar validación de cantidad según stock disponible
@@ -659,10 +750,8 @@
         productList.addEventListener('click', function(event) {
             if (event.target.classList.contains('remove-product-btn') || event.target.closest('.remove-product-btn')) {
                 const productItem = event.target.closest('tr.product-item');
-                if (productList.childElementCount > 1) {
-                    productItem.remove();
-                    updateOrderSummary();
-                }
+                productItem.remove();
+                updateOrderSummary();
             }
         });
 
@@ -719,14 +808,14 @@
                     const selectedOption = selectElement.options[selectElement.selectedIndex];
                     priceUsd = parseFloat(selectedOption.dataset.priceUsd) || 0;
                 }
-                const priceVes = priceUsd * currentRate;
+                const priceVes = priceUsd * activeRate;
                 
                 subtotal += quantity * priceVes;
             });
 
             const discountInput = document.getElementById('discount-input');
             const discountUsd = parseFloat(discountInput.value) || 0;
-            const discountVes = discountUsd * currentRate;
+            const discountVes = discountUsd * activeRate;
 
             const iva = 0; // IVA desactivado
             const total = subtotal - discountVes;
@@ -843,7 +932,7 @@
         const paymentModal = document.getElementById('payment-modal');
         const processPaymentBtn = document.getElementById('process-payment-btn');
         const closeModalBtn = document.getElementById('close-modal-btn');
-        const creditSaleCheckbox = document.getElementById('credit-sale-checkbox');
+        const saleTypeRadios = document.querySelectorAll('input[name="sale_type"]');
         const finalizeOrderBtn = document.getElementById('finalize-order-btn');
         const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
 
@@ -858,6 +947,10 @@
         const paymentAmountInput = document.getElementById('payment-amount');
         const paymentReferenceGroup = document.getElementById('payment-reference-group');
         const paymentReferenceInput = document.getElementById('payment-reference');
+        const paymentIssuingBankGroup = document.getElementById('payment-issuing-bank-group');
+        const paymentIssuingBankInput = document.getElementById('payment-issuing-bank');
+        const paymentSenderIdGroup = document.getElementById('payment-sender-id-group');
+        const paymentSenderIdInput = document.getElementById('payment-sender-id');
         const paymentBankGroup = document.getElementById('payment-bank-group');
         const paymentBankSelect = document.getElementById('payment-bank');
         const paymentPosGroup = document.getElementById('payment-pos-group');
@@ -884,8 +977,8 @@
             const method = paymentMethodSelect.value;
 
             if (method === 'efectivo_usd') {
-                if (currentRate > 0) {
-                    const amountUsd = remaining / currentRate;
+                if (activeRate > 0) {
+                    const amountUsd = remaining / activeRate;
                     paymentAmountInput.value = amountUsd.toFixed(2);
                 } else {
                     paymentAmountInput.value = '0.00'; // Avoid division by zero
@@ -904,12 +997,22 @@
                 return;
             }
 
-            // Show/hide credit sale notice in modal
-            if (creditSaleCheckbox.checked) {
+            const selectedSaleType = document.querySelector('input[name="sale_type"]:checked').value;
+
+            // Show/hide notices in modal
+            creditSaleNotice.classList.add('hidden'); // Hide all notices first
+
+            if (selectedSaleType === 'credit') {
                 creditSaleNotice.classList.remove('hidden');
+                creditSaleNotice.querySelector('p.font-bold').textContent = 'Venta a Crédito';
+                creditSaleNotice.querySelector('p:not(.font-bold)').textContent = 'Puede registrar un abono inicial o finalizar la orden sin pagos. El saldo pendiente se registrará en la cuenta del cliente.';
                 finalizeOrderBtn.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Finalizar y Crear Crédito';
-            } else {
-                creditSaleNotice.classList.add('hidden');
+            } else if (selectedSaleType === 'reservation') {
+                creditSaleNotice.classList.remove('hidden');
+                creditSaleNotice.querySelector('p.font-bold').textContent = 'Sistema de Apartado';
+                creditSaleNotice.querySelector('p:not(.font-bold)').textContent = 'Registre un abono para reservar los productos. El saldo pendiente se puede pagar después.';
+                finalizeOrderBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Registrar Apartado';
+            } else { // regular
                 finalizeOrderBtn.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Finalizar y Crear Orden';
             }
 
@@ -962,7 +1065,7 @@
             if (remaining < -0.001) { // Overpaid, show change
                 const change = Math.abs(remaining);
                 const changeInBs = change.toFixed(2);
-                const changeInUsd = (change / currentRate).toFixed(2);
+                const changeInUsd = (change / activeRate).toFixed(2);
                 modalChangeAmount.textContent = `Bs ${changeInBs} / $${changeInUsd}`;
                 modalChangeDisplay.classList.remove('hidden');
             } else {
@@ -975,7 +1078,8 @@
                 modalRemainingAmount.classList.remove('text-green-600');
                 modalRemainingAmount.classList.add('text-red-600');
                 // For credit sales, the order can be finalized even with a remaining amount.
-                if (creditSaleCheckbox.checked) {
+                const selectedSaleType = document.querySelector('input[name="sale_type"]:checked').value;
+                if (selectedSaleType === 'credit' || selectedSaleType === 'reservation') {
                     finalizeOrderBtn.disabled = false;
                 } else {
                     finalizeOrderBtn.disabled = true;
@@ -993,6 +1097,8 @@
             const method = paymentMethodSelect.value;
             const amount = parseFloat(paymentAmountInput.value);
             const reference = paymentReferenceInput.value;
+            const issuing_bank = paymentIssuingBankInput.value;
+            const sender_id = paymentSenderIdInput.value;
             const bank_id = paymentBankSelect.value;
             const pos_id = paymentPosSelect.value;
             const cash_box_id = paymentCashboxSelect.value;
@@ -1020,7 +1126,7 @@
             let currency_paid = 'VES';
 
             if (method === 'efectivo_usd') {
-                amount_ves_equivalent = amount * currentRate;
+                amount_ves_equivalent = amount * activeRate;
                 currency_paid = 'USD';
             }
 
@@ -1030,6 +1136,8 @@
                 currency_paid: currency_paid,
                 amount_ves_equivalent: amount_ves_equivalent,
                 reference: reference,
+                issuing_bank: method === 'transferencia' ? issuing_bank : null,
+                sender_id: method === 'transferencia' ? sender_id : null,
                 bank_id: method === 'transferencia' ? parseInt(bank_id) : null,
                 pos_id: method === 'punto_de_venta' ? parseInt(pos_id) : null,
                 cash_box_id: method.startsWith('efectivo') ? parseInt(cash_box_id) : null,
@@ -1042,6 +1150,8 @@
             // Limpiar formulario de pago
             paymentAmountInput.value = '';
             paymentReferenceInput.value = '';
+            paymentIssuingBankInput.value = '';
+            paymentSenderIdInput.value = '';
             paymentBankSelect.selectedIndex = 0;
             paymentPosSelect.selectedIndex = 0;
             paymentCashboxSelect.selectedIndex = 0;
@@ -1055,6 +1165,12 @@
                 let details = `${p.method.replace(/_/g, ' ')}: ${p.amount_paid.toFixed(2)} ${p.currency_paid} (Equiv. ${p.amount_ves_equivalent.toFixed(2)} Bs)`;
                 if (p.reference) {
                     details += ` - Ref: ${p.reference}`;
+                }
+                if (p.issuing_bank) {
+                    details += ` - Banco: ${p.issuing_bank}`;
+                }
+                if (p.sender_id) {
+                    details += ` - Emisor: ${p.sender_id}`;
                 }
                 div.innerHTML = `
                     <span>${details}</span>
@@ -1074,6 +1190,8 @@
 
             // Toggle conditional fields first
             paymentReferenceGroup.classList.toggle('hidden', newMethod !== 'transferencia');
+            paymentIssuingBankGroup.classList.toggle('hidden', newMethod !== 'transferencia');
+            paymentSenderIdGroup.classList.toggle('hidden', newMethod !== 'transferencia');
             paymentBankGroup.classList.toggle('hidden', newMethod !== 'transferencia');
             paymentPosGroup.classList.toggle('hidden', newMethod !== 'punto_de_venta');
             paymentCashboxGroup.classList.toggle('hidden', !newMethod.startsWith('efectivo'));
@@ -1082,12 +1200,12 @@
                 let newAmount = amount;
                 // From USD to VES
                 if (previousPaymentMethod === 'efectivo_usd' && newMethod !== 'efectivo_usd') {
-                    newAmount = amount * currentRate;
+                    newAmount = amount * activeRate;
                 } 
                 // From VES to USD
                 else if (previousPaymentMethod !== 'efectivo_usd' && newMethod === 'efectivo_usd') {
-                    if (currentRate > 0) {
-                        newAmount = amount / currentRate;
+                    if (activeRate > 0) {
+                        newAmount = amount / activeRate;
                     } else {
                         newAmount = 0;
                     }
@@ -1111,15 +1229,23 @@
             }
         });
 
-        creditSaleCheckbox.addEventListener('change', function() {
-            if (this.checked) {
-                processPaymentBtn.innerHTML = '<i class="fas fa-hand-holding-usd mr-2"></i>Registrar Abono / Crear Crédito';
-                processPaymentBtn.classList.replace('bg-green-500', 'bg-blue-600');
-            } else {
-                processPaymentBtn.innerHTML = '<i class="fas fa-dollar-sign mr-2"></i>Procesar Pago y Crear Orden';
-                processPaymentBtn.classList.replace('bg-blue-600', 'bg-green-500');
-            }
+        saleTypeRadios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                const saleType = this.value;
+                processPaymentBtn.classList.remove('bg-green-500', 'bg-blue-600', 'bg-yellow-500'); // Remove all color classes
+                if (saleType === 'credit') {
+                    processPaymentBtn.innerHTML = '<i class="fas fa-hand-holding-usd mr-2"></i>Registrar Abono / Crear Crédito';
+                    processPaymentBtn.classList.add('bg-blue-600');
+                } else if (saleType === 'reservation') {
+                    processPaymentBtn.innerHTML = '<i class="fas fa-box-open mr-2"></i>Procesar Apartado';
+                    processPaymentBtn.classList.add('bg-yellow-500');
+                } else { // regular
+                    processPaymentBtn.innerHTML = '<i class="fas fa-dollar-sign mr-2"></i>Procesar Pago y Crear Orden';
+                    processPaymentBtn.classList.add('bg-green-500');
+                }
+            });
         });
+
 
         finalizeOrderBtn.addEventListener('click', function() {
             paymentsDataInput.value = JSON.stringify(payments);

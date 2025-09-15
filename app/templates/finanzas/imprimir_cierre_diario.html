@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        @page {
+            size: 80mm auto; /* Wider than delivery note */
+            margin: 3mm;
+        }
+
+        body {
+            width: 74mm;
+            padding: 0;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 9px;
+            color: #000;
+        }
+        
+        .header, .footer {
+            text-align: center;
+            margin-bottom: 2mm;
+        }
+
+        .header img {
+            max-width: 60mm;
+            height: auto;
+            margin-bottom: 1mm;
+        }
+
+        .section-title {
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            border-top: 1px dashed #000;
+            border-bottom: 1px dashed #000;
+            padding: 1mm 0;
+            margin: 3mm 0 2mm 0;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5mm;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 2mm;
+            font-size: 8px;
+        }
+
+        table th, table td {
+            text-align: left;
+            padding: 0.5mm;
+            vertical-align: top;
+        }
+
+        table thead th {
+            border-bottom: 1px solid #000;
+            font-weight: bold;
+        }
+        
+        .text-right { text-align: right; }
+        .font-bold { font-weight: bold; }
+
+        .summary-block {
+            border: 1px dashed #000;
+            padding: 2mm;
+            margin-top: 2mm;
+        }
+
+        .summary-block .info-item {
+            font-size: 1.1em;
+        }
+
+        /* Ocultar el botón de imprimir en la versión impresa */
+        @media print {
+            .no-print {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Encabezado de la empresa -->
+    <div class="header">
+        {% if company_info.logo_filename %}
+            <!-- <img src="{{ url_for('static', filename=company_info.logo_filename, _external=True) }}" alt="Logo de la empresa" onerror="this.style.display='none'"> -->
+        {% endif %}
+        <h3 style="font-weight: bold; font-size: 1.2em;">{{ company_info.name }}</h3>
+        <p>RIF: {{ company_info.rif }}</p>
+    </div>
+
+    <!-- Título del documento -->
+    <h2 class="text-center font-bold" style="text-align: center; font-weight: bold; font-size: 1.3em;">REPORTE DE CIERRE DIARIO</h2>
+    
+    <div class="info">
+        <div class="info-item">
+            <span>Fecha del Reporte:</span>
+            <span class="font-bold">{{ today.strftime('%d/%m/%Y') }}</span>
+        </div>
+        <div class="info-item">
+            <span>Generado por:</span>
+            <span class="font-bold">{{ user.username }}</span>
+        </div>
+        <div class="info-item">
+            <span>Hora de Emisión:</span>
+            <span class="font-bold">{{ get_current_time_ve().strftime('%H:%M:%S') }}</span>
+        </div>
+    </div>
+
+    <!-- RESUMEN DE VENTAS -->
+    <div class="section-title">RESUMEN DE VENTAS</div>
+    <div class="info-item">
+        <span>Ventas de Contado:</span>
+        <span>{{ sales_summary.contado.count }} Órdenes / Bs. {{ "%.2f"|format(sales_summary.contado.amount_ves) }}</span>
+    </div>
+    <div class="info-item">
+        <span>Ventas a Crédito:</span>
+        <span>{{ sales_summary.credito.count }} Órdenes / Bs. {{ "%.2f"|format(sales_summary.credito.amount_ves) }}</span>
+    </div>
+    <div class="info-item">
+        <span>Apartados:</span>
+        <span>{{ sales_summary.apartado.count }} Órdenes / Bs. {{ "%.2f"|format(sales_summary.apartado.amount_ves) }}</span>
+    </div>
+    <div class="info-item font-bold" style="border-top: 1px solid #000; padding-top: 1mm; margin-top: 1mm;">
+        <span>TOTAL VENTAS:</span>
+        <span>{{ sales_summary.total.count }} Órdenes / Bs. {{ "%.2f"|format(sales_summary.total.amount_ves) }}</span>
+    </div>
+    <div class="info-item font-bold">
+        <span></span>
+        <span>${{ "%.2f"|format(sales_summary.total.amount_ves / current_rate_usd) }}</span>
+    </div>
+
+    <!-- RESUMEN DE PAGOS -->
+    <div class="section-title">INGRESOS POR FORMA DE PAGO</div>
+    <div class="info-item">
+        <span>Efectivo (Bs):</span>
+        <span>Bs. {{ "%.2f"|format(payments_summary.efectivo_ves.amount) }}</span>
+    </div>
+    <div class="info-item">
+        <span>Efectivo (USD):</span>
+        <span>${{ "%.2f"|format(payments_summary.efectivo_usd.amount) }} (Bs. {{ "%.2f"|format(payments_summary.efectivo_usd.amount_ves_equivalent) }})</span>
+    </div>
+    <div class="info-item">
+        <span>Transferencia/Pago Móvil:</span>
+        <span>Bs. {{ "%.2f"|format(payments_summary.transferencia.amount) }}</span>
+    </div>
+    <div class="info-item">
+        <span>Punto de Venta:</span>
+        <span>Bs. {{ "%.2f"|format(payments_summary.punto_de_venta.amount) }}</span>
+    </div>
+    <div class="info-item font-bold" style="border-top: 1px solid #000; padding-top: 1mm; margin-top: 1mm;">
+        <span>TOTAL INGRESOS:</span>
+        <span>Bs. {{ "%.2f"|format(payments_summary.total_ves) }}</span>
+    </div>
+    <div class="info-item font-bold">
+        <span></span>
+        <span>${{ "%.2f"|format(payments_summary.total_ves / current_rate_usd) }}</span>
+    </div>
+
+    <!-- MOVIMIENTOS DE CAJA -->
+    <div class="section-title">MOVIMIENTOS DE CAJA</div>
+    {% for box_name, data in cash_box_movements.items() %}
+        {% if data.income_ves > 0 or data.expense_ves > 0 or data.income_usd > 0 or data.expense_usd > 0 %}
+        <div class="summary-block">
+            <p class="font-bold" style="text-align: center; margin-bottom: 1mm;">{{ box_name }}</p>
+            <!-- Moneda VES -->
+            <p class="font-bold">Moneda: VES</p>
+            <div class="info-item"><span>Saldo Inicial:</span> <span>Bs. {{ "%.2f"|format(data.initial_balance_ves) }}</span></div>
+            <div class="info-item"><span>(+) Ingresos:</span> <span>Bs. {{ "%.2f"|format(data.income_ves) }}</span></div>
+            <div class="info-item"><span>(-) Egresos:</span> <span>Bs. {{ "%.2f"|format(data.expense_ves) }}</span></div>
+            <div class="info-item font-bold"><span>Saldo Final:</span> <span>Bs. {{ "%.2f"|format(data.final_balance_ves) }}</span></div>
+            <!-- Moneda USD -->
+            <p class="font-bold" style="margin-top: 2mm;">Moneda: USD</p>
+            <div class="info-item"><span>Saldo Inicial:</span> <span>${{ "%.2f"|format(data.initial_balance_usd) }}</span></div>
+            <div class="info-item"><span>(+) Ingresos:</span> <span>${{ "%.2f"|format(data.income_usd) }}</span></div>
+            <div class="info-item"><span>(-) Egresos:</span> <span>${{ "%.2f"|format(data.expense_usd) }}</span></div>
+            <div class="info-item font-bold"><span>Saldo Final:</span> <span>${{ "%.2f"|format(data.final_balance_usd) }}</span></div>
+        </div>
+        {% endif %}
+    {% endfor %}
+
+    <!-- MOVIMIENTOS DE BANCOS -->
+    <div class="section-title">MOVIMIENTOS BANCARIOS (VES)</div>
+    {% for bank_name, data in bank_movements.items() %}
+        {% if data.income_ves > 0 or data.expense_ves > 0 %}
+        <div class="summary-block">
+            <p class="font-bold" style="text-align: center; margin-bottom: 1mm;">{{ bank_name }}</p>
+            <div class="info-item"><span>Saldo Inicial:</span> <span>Bs. {{ "%.2f"|format(data.initial_balance_ves) }}</span></div>
+            <div class="info-item"><span>(+) Ingresos:</span> <span>Bs. {{ "%.2f"|format(data.income_ves) }}</span></div>
+            <div class="info-item"><span>(-) Egresos:</span> <span>Bs. {{ "%.2f"|format(data.expense_ves) }}</span></div>
+            <div class="info-item font-bold"><span>Saldo Final:</span> <span>Bs. {{ "%.2f"|format(data.final_balance_ves) }}</span></div>
+        </div>
+        {% endif %}
+    {% endfor %}
+
+    <!-- RETIROS DE CAJA -->
+    {% if cash_withdrawals_today %}
+    <div class="section-title">RETIROS DE CAJA APROBADOS</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Monto</th>
+                <th>Caja</th>
+                <th>Recibido por</th>
+                <th>Solicitado por</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for mov in cash_withdrawals_today %}
+            <tr>
+                <td>{{ mov.currency }} {{ "%.2f"|format(mov.amount) }}</td>
+                <td>{{ mov.cash_box.name }}</td>
+                <td>{{ mov.received_by }}</td>
+                <td>{{ mov.created_by_user.username }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <div class="footer">
+        <p style="margin-top: 5mm;">*** FIN DEL REPORTE ***</p>
+    </div>
+
+    <div class="no-print" style="text-align: center; margin-top: 15mm;">
+        <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px;">Imprimir Reporte</button>
+    </div>
+
+    <script>
+        window.onload = function() {
+            // Se dispara la impresión tan pronto como la página carga.
+            window.print();
+        };
+    </script>
+</body>
+</html>

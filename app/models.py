@@ -84,6 +84,7 @@ class Order(db.Model):
     status = db.Column(db.String(20), nullable=False, default='Pendiente')
     total_amount = db.Column(db.Float, nullable=False, default=0.0)
     discount_usd = db.Column(db.Float, nullable=True, default=0.0)
+    exchange_rate_at_sale = db.Column(db.Float, nullable=True)
 
     # Relaciones
     items = db.relationship('OrderItem', backref='order', lazy=True, cascade="all, delete-orphan")
@@ -159,6 +160,8 @@ class Payment(db.Model):
     amount_ves_equivalent = db.Column(db.Float, nullable=False) # The equivalent in VES for the order total
     method = db.Column(db.String(50), nullable=False) # 'transferencia', 'pago_movil', 'punto_de_venta', 'efectivo_usd', 'efectivo_ves'
     reference = db.Column(db.String(100), nullable=True)
+    issuing_bank = db.Column(db.String(100), nullable=True) # Banco emisor
+    sender_id = db.Column(db.String(50), nullable=True) # Cédula o teléfono del emisor
     date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
     
     # Destination of funds

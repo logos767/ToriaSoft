@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nota de Entrega #{{ order.id|order_id_format }}</title>
+    <title>Recibo de Apartado #{{ order.id|order_id_format }}</title>
     <style>
         @page {
             size: 55mm auto;
@@ -86,7 +86,7 @@
     <!-- Encabezado de la empresa -->
     <div class="header">
         {% if company_info.logo_filename %}
-            <!-- E<img src="{{ url_for('static', filename=company_info.logo_filename, _external=True) }}" alt="Logo de la empresa" onerror="this.style.display='none'"> -->
+            <!-- <img src="{{ url_for('static', filename=company_info.logo_filename, _external=True) }}" alt="Logo de la empresa" onerror="this.style.display='none'"> -->
         {% endif %}
         <h3 style="font-weight: bold; font-size: 1em;">{{ company_info.name }}</h3>
         <p>RIF: {{ company_info.rif }}</p>
@@ -95,14 +95,8 @@
     </div>
 
     <!-- Título del documento -->
-    <h2 class="text-center font-bold" style="text-align: center; font-weight: bold; font-size: 1em;">NOTA DE ENTREGA N° {{ order.id|order_id_format }}</h2>
-    <!-- Información del cliente y orden -->
-    {% set is_credit_sale = order.status == 'Crédito' %}
-    {% if is_credit_sale %}
-    <div style="text-align: center; font-weight: bold; border: 1px dashed #000; padding: 1mm; margin: 1mm 0;">
-        CONDICIÓN: CRÉDITO
-    </div>
-    {% endif %}
+    <h2 class="text-center font-bold" style="text-align: center; font-weight: bold; font-size: 1em;">RECIBO DE APARTADO N° {{ order.id|order_id_format }}</h2>
+
     <div class="info">
         <div class="info-item">
             <span>Fecha:</span>
@@ -116,23 +110,10 @@
             <strong>Cliente:</strong>
             <span>{{ order.client.name }}</span>
         </div>
-        
         {% if order.client.cedula_rif %}
         <div class="info-item">
             <strong>Cédula/RIF:</strong>
             <span> {{ order.client.cedula_rif }}</span>
-        </div>
-        {% endif %}
-        {% if order.client.address %}
-        <div class="info-item">
-            <strong>Dirección:</strong>
-            <span> {{ order.client.address }}</span>
-        </div>
-        {% endif %}
-        {% if order.client.phone %}
-        <div class="info-item">
-            <strong>Teléfono:</strong>
-            <span> {{ order.client.phone }}</span>
         </div>
         {% endif %}
     </div>
@@ -151,19 +132,11 @@
             <tr>
                 <td>{{ item.quantity }}x</td>
                 <td>{{ item.product.name }}</td>
-                {% if is_credit_sale and current_rate > 0 %}
-                    <td style="text-align: right;">{{ currency_symbol }}{{ "%.2f"|format((item.price * item.quantity) / current_rate) }}</td>
-                {% else %}
-                    <td style="text-align: right;">Bs. {{ "%.2f"|format(item.price * item.quantity) }}</td>
-                {% endif %}
+                <td style="text-align: right;">{{ currency_symbol }}{{ "%.2f"|format((item.price * item.quantity) / current_rate) }}</td>
             </tr>
             <tr style="font-size: 8px;">
                 <td></td>
-                {% if is_credit_sale and current_rate > 0 %}
-                    <td colspan="2" style="padding-left: 5px;">@ {{ currency_symbol }}{{ "%.2f"|format(item.price / current_rate) }} c/u</td>
-                {% else %}
-                    <td colspan="2" style="padding-left: 5px;">@ Bs. {{ "%.2f"|format(item.price) }} c/u</td>
-                {% endif %}
+                <td colspan="2" style="padding-left: 5px;">@ {{ currency_symbol }}{{ "%.2f"|format(item.price / current_rate) }} c/u</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -171,7 +144,7 @@
 
     <!-- Información de Pago -->
     <div class="info" style="border-top: 1px dashed #000; padding-top: 2mm; margin-top: 2mm;">
-        <p style="text-align: center; font-weight: bold;">FORMA(S) DE PAGO</p>
+        <p style="text-align: center; font-weight: bold;">ABONO(S) REALIZADO(S)</p>
         {% if order.exchange_rate_at_sale %}
         <div class="info-item" style="font-size: 7px;">
             <span>Tasa de cambio:</span>
@@ -212,73 +185,38 @@
 
     <!-- Totales -->
     <div class="totals">
+        {% set subtotal_foreign = (order.total_amount + (order.discount_usd * current_rate)) / current_rate %}
         <div class="total-item">
             <span>Subtotal:</span>
-            {% if is_credit_sale and current_rate > 0 %}
-                <span>{{ currency_symbol }}{{ "%.2f"|format(subtotal / current_rate) }}</span>
-            {% else %}
-                <span>Bs. {{ "%.2f"|format(subtotal) }}</span>
-            {% endif %}
+            <span>{{ currency_symbol }}{{ "%.2f"|format(subtotal_foreign) }}</span>
         </div>
         {% if order.discount_usd > 0 %}
         <div class="total-item">
             <span>Descuento:</span>
-            {% if is_credit_sale and current_rate > 0 %}
-                <span>-{{ currency_symbol }}{{ "%.2f"|format((subtotal - order.total_amount) / current_rate) }}</span>
-            {% else %}
-                <span>-Bs. {{ "%.2f"|format(subtotal - order.total_amount) }}</span>
-            {% endif %}
+            <span>-{{ currency_symbol }}{{ "%.2f"|format(order.discount_usd) }}</span>
         </div>
         {% endif %}
-        <div class="total-item" style="display: none;">
-            <span>IVA (16%):</span>
-            {% if is_credit_sale and current_rate > 0 %}
-                <span>{{ currency_symbol }}{{ "%.2f"|format(iva / current_rate) }}</span>
-            {% else %}
-                <span>Bs. {{ "%.2f"|format(iva) }}</span>
-            {% endif %}
-        </div>
         <div class="total-item grand-total">
-            <span>Total:</span>
-            {% if is_credit_sale and current_rate > 0 %}
-                <span>{{ currency_symbol }}{{ "%.2f"|format(order.total_amount / current_rate) }}</span>
-            {% else %}
-                <span>Bs. {{ "%.2f"|format(order.total_amount) }}</span>
-            {% endif %}
+            <span>Total Apartado:</span>
+            <span>{{ currency_symbol }}{{ "%.2f"|format(order.total_amount / current_rate) }}</span>
         </div>
         <div class="total-item">
-            <span>Total Pagado:</span>
-            {% if is_credit_sale and current_rate > 0 %}
-                <span>{{ currency_symbol }}{{ "%.2f"|format(order.paid_amount / current_rate) }}</span>
-            {% else %}
-                <span>Bs. {{ "%.2f"|format(order.paid_amount) }}</span>
-            {% endif %}
+            <span>Total Abonado:</span>
+            <span>{{ currency_symbol }}{{ "%.2f"|format(order.paid_amount / current_rate) }}</span>
         </div>
-        {% if change > 0.01 %}
-        <div class="total-item">
-            <span>Vuelto:</span>
-            {% if is_credit_sale and current_rate > 0 %}
-                <span>{{ currency_symbol }}{{ "%.2f"|format(change / current_rate) }}</span>
-            {% else %}
-                <span>Bs. {{ "%.2f"|format(change) }}</span>
-            {% endif %}
-        </div>
-        {% endif %}
         {% if order.due_amount > 0.01 %}
         <div class="total-item grand-total" style="color: red;">
             <span>Saldo Pendiente:</span>
-            {% if is_credit_sale and current_rate > 0 %}
-                <span>{{ currency_symbol }}{{ "%.2f"|format(order.due_amount / current_rate) }}</span>
-            {% else %}
-                <span>Bs. {{ "%.2f"|format(order.due_amount) }}</span>
-            {% endif %}
+            <span>{{ currency_symbol }}{{ "%.2f"|format(order.due_amount / current_rate) }}</span>
         </div>
         {% endif %}
-        
     </div>
 
     <div class="footer">
         <p>¡Gracias por su compra!</p>
+        <p style="font-size: 8px; margin-top: 5mm;">
+            CONDICIONES: El producto debe ser retirado en un plazo de 30 días una vez completado el pago.
+        </p>
         {% if barcode_base64 %}
         <div style="text-align: center; margin-top: 5mm;">
             <img src="data:image/png;base64,{{ barcode_base64 }}" alt="Barcode for order {{ order.id|order_id_format }}" style="max-width: 100%; height: auto;">
@@ -287,18 +225,14 @@
     </div>
 
     <div class="no-print" style="text-align: center; margin-top: 15mm;">
-        <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px;">Imprimir Nota de Entrega</button>
+        <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px;">Imprimir Recibo</button>
     </div>
 
     <script>
         window.onload = function() {
-            // Se dispara la impresión tan pronto como la página carga.
             window.print();
         };
-
-        // Este evento se dispara después de que el diálogo de impresión se cierra (ya sea que el usuario imprima o cancele).
         window.onafterprint = function() {
-            // Redirigir al usuario a la página para crear una nueva orden.
             window.location.href = "{{ url_for('main.new_order') }}";
         };
     </script>

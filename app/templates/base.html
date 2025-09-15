@@ -8,21 +8,39 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <!-- Toastr CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <style>
+        body.sidebar-collapsed #sidebar {
+            width: 5rem; /* w-20 */
+        }
+        body.sidebar-collapsed #sidebar .sidebar-text {
+            display: none;
+        }
+        body.sidebar-collapsed #sidebar .group[open] > div {
+            display: none;
+        }
+        body.sidebar-collapsed #sidebar nav a,
+        body.sidebar-collapsed #sidebar nav summary {
+            justify-content: center;
+        }
+        body.sidebar-collapsed #sidebar > a { /* App Title Link */
+            justify-content: center;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 font-sans">
+<body class="bg-gray-100 font-sans sidebar-collapsed">
     <div class="flex h-screen bg-gray-200">
         <!-- Sidebar -->
         <div id="sidebar" class="sidebar bg-gray-800 text-gray-100 w-64 py-7 px-2 absolute inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition duration-200 ease-in-out z-30 flex flex-col">
             <!-- Título de la App -->
             <a href="{{ url_for('main.dashboard') }}" class="text-white flex items-center space-x-2 px-4 flex-shrink-0">
                 <i class="fas fa-store text-2xl"></i>
-                <span class="text-2xl font-extrabold">ToriaSoft</span>
+                <span class="text-2xl font-extrabold sidebar-text">ToriaSoft</span>
             </a>
 
             <!-- Tasa de Cambio -->
-            <div class="px-4 py-2 text-center bg-gray-700 rounded-lg mx-2 mt-6 flex-shrink-0">
-                <p class="text-xs font-semibold uppercase">Moneda de Cálculo</p>
-                <p class="text-lg font-bold">1 {{ calculation_currency }} = Bs. {{ "%.2f"|format(current_rate) }}</p>
+            <div class="px-4 py-2 text-center bg-gray-700 rounded-lg mx-2 mt-6 flex-shrink-0 sidebar-text">
+                <p class="text-xs font-semibold uppercase ">Moneda de Cálculo</p>
+                <p class="text-lg font-bold ">1 {{ calculation_currency }} = Bs. {{ "%.2f"|format(current_rate) }}</p>
 
                 <!-- Selector de Moneda -->
                 <form action="{{ url_for('main.set_display_currency') }}" method="POST" class="mt-2" id="currency-form">
@@ -36,120 +54,126 @@
             <!-- Navegación -->
             <nav class="mt-6 flex-grow overflow-y-auto space-y-2">
                 {% if current_user.is_authenticated and current_user.role == 'administrador' %}
-                <a href="{{ url_for('main.dashboard') }}" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
-                    <i class="fas fa-tachometer-alt mr-2"></i> Dashboard
+                <a href="{{ url_for('main.dashboard') }}" class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
+                    <i class="fas fa-tachometer-alt mr-2"></i><span class="sidebar-text">Dashboard</span>
                 </a>
                 {% endif %}
                 
                 {% if current_user.is_authenticated and current_user.role == 'administrador' %}
                 <details class="group">
-                    <summary class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
-                        <i class="fas fa-shopping-basket mr-2"></i> Compras
+                    <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
+                        <i class="fas fa-shopping-basket mr-2"></i><span class="sidebar-text">Compras</span>
                     </summary>
                     <div class="ml-4 mt-2 space-y-1">
-                        <a href="{{ url_for('main.new_purchase') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-plus mr-2"></i> Nueva Orden de Compra
+                        <a href="{{ url_for('main.new_purchase') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-plus mr-2"></i><span class="sidebar-text">Nueva Orden de Compra</span>
                         </a>
-                        <a href="{{ url_for('main.purchase_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-list mr-2"></i> Ordenes de Compra
+                        <a href="{{ url_for('main.purchase_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-list mr-2"></i><span class="sidebar-text">Ordenes de Compra</span>
                         </a>
-                        <a href="{{ url_for('main.provider_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-truck mr-2"></i> Proveedores
+                        <a href="{{ url_for('main.provider_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-truck mr-2"></i><span class="sidebar-text">Proveedores</span>
                         </a>
-                        <a href="{{ url_for('main.purchase_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-plus mr-2"></i> Nueva Recepción
+                        <a href="{{ url_for('main.purchase_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-plus mr-2"></i><span class="sidebar-text">Nueva Recepción</span>
                         </a>
-                        <a href="{{ url_for('main.reception_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-list mr-2"></i> Recepciones
+                        <a href="{{ url_for('main.reception_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-list mr-2"></i><span class="sidebar-text">Recepciones</span>
                         </a>
                     </div>
                 </details>
                 {% endif %}
 
                 <details class="group">
-                    <summary class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
-                        <i class="fas fa-shopping-cart mr-2"></i> Ventas
+                    <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
+                        <i class="fas fa-shopping-cart mr-2"></i><span class="sidebar-text">Ventas</span>
                     </summary>
                     <div class="ml-4 mt-2 space-y-1">
-                        <a href="{{ url_for('main.new_order') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-plus mr-2"></i> Nueva Orden de Entrega
+                        <a href="{{ url_for('main.new_order') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-plus mr-2"></i><span class="sidebar-text">Nueva Orden de Entrega</span>
                         </a>
-                        <a href="{{ url_for('main.order_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-list mr-2"></i> Ordenes de Entrega
+                        <a href="{{ url_for('main.order_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-list mr-2"></i><span class="sidebar-text">Ordenes de Entrega</span>
                         </a>
-                        <a href="{{ url_for('main.client_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-users mr-2"></i> Clientes
+                        <a href="{{ url_for('main.reservation_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-box-open mr-2"></i><span class="sidebar-text">Apartados</span>
                         </a>
-                        <a href="#" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-file-invoice mr-2"></i> Facturas
+                        <a href="{{ url_for('main.client_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-users mr-2"></i><span class="sidebar-text">Clientes</span>
+                        </a>
+                        <a href="#" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-file-invoice mr-2"></i><span class="sidebar-text">Facturas</span>
                         </a>
                         {% if current_user.is_authenticated and current_user.role == 'administrador' %}
-                        <a href="{{ url_for('main.estadisticas') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-chart-line mr-2"></i> Estadísticas
+                        <a href="{{ url_for('main.estadisticas') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-chart-line mr-2"></i><span class="sidebar-text">Estadísticas</span>
                         </a>
                         {% endif %}
                     </div>
                 </details>
 
                 <details class="group">
-                    <summary class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
-                        <i class="fas fa-boxes mr-2"></i> Inventario
+                    <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
+                        <i class="fas fa-boxes mr-2"></i><span class="sidebar-text">Inventario</span>
                     </summary>
                     <div class="ml-4 mt-2 space-y-1">
-                        <a href="{{ url_for('main.inventory_stock') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-list mr-2"></i> Existencias
+                        <a href="{{ url_for('main.inventory_stock') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-list mr-2"></i><span class="sidebar-text">Existencias</span>
                         </a>
-                        <a href="{{ url_for('main.movement_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-exchange-alt mr-2"></i> Movimientos
+                        <a href="{{ url_for('main.movement_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-exchange-alt mr-2"></i><span class="sidebar-text">Movimientos</span>
                         </a>
                         {% if current_user.is_authenticated and current_user.role == 'administrador' %}
-                        <a href="{{ url_for('main.new_product') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-plus mr-2"></i> Nuevo Producto
+                        <a href="{{ url_for('main.new_product') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-plus mr-2"></i><span class="sidebar-text">Nuevo Producto</span>
                         </a>
-                        <a href="{{ url_for('main.cargar_excel') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-upload mr-2"></i> Cargar Productos
+                        <a href="{{ url_for('main.cargar_excel') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-upload mr-2"></i><span class="sidebar-text">Cargar Productos</span>
                         </a>
-                        <a href="{{ url_for('main.codigos_barra') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-barcode mr-2"></i> Códigos de Barra
+                        <a href="{{ url_for('main.codigos_barra') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-barcode mr-2"></i><span class="sidebar-text">Códigos de Barra</span>
                         </a>
                         {% endif %}
                     </div>
                 </details>
 
                 <details class="group">
-                    <summary class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
-                        <i class="fas fa-wallet mr-2"></i> Finanzas
+                    <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
+                        <i class="fas fa-wallet mr-2"></i><span class="sidebar-text">Finanzas</span>
                     </summary>
                     <div class="ml-4 mt-2 space-y-1">
-                        <a href="{{ url_for('main.bank_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-university mr-2"></i> Lista de Bancos
+                        <a href="{{ url_for('main.bank_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-university mr-2"></i><span class="sidebar-text">Lista de Bancos</span>
                         </a>                        
                         {% if current_user.is_authenticated and current_user.role == 'administrador' %}
-                        <a href="{{ url_for('main.bank_movements') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-exchange-alt mr-2"></i> Movimientos Bancarios
+                        <a href="{{ url_for('main.bank_movements') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-exchange-alt mr-2"></i><span class="sidebar-text">Movimientos Bancarios</span>
                         </a>
                         {% endif %}
-                        <a href="{{ url_for('main.pos_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-credit-card mr-2"></i> Puntos de Venta
+                        <a href="{{ url_for('main.pos_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-credit-card mr-2"></i><span class="sidebar-text">Puntos de Venta</span>
                         </a>
-                        <a href="{{ url_for('main.cashbox_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-cash-register mr-2"></i> Cajas
+                        <a href="{{ url_for('main.cashbox_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-cash-register mr-2"></i><span class="sidebar-text">Cajas</span>
                         </a>
-                        <a href="{{ url_for('main.new_cash_withdrawal') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-money-bill-wave mr-2"></i> Retiro de Efectivo
+                        <a href="{{ url_for('main.new_cash_withdrawal') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-money-bill-wave mr-2"></i><span class="sidebar-text">Retiro de Efectivo</span>
                         </a>
-                        <a href="{{ url_for('main.my_withdrawals') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-history mr-2"></i> Mis Retiros
+                        <a href="{{ url_for('main.my_withdrawals') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-history mr-2"></i><span class="sidebar-text">Mis Retiros</span>
+                        </a>
+                        <a href="{{ url_for('main.daily_closing') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-calendar-check mr-2"></i><span class="sidebar-text">Cierre Diario</span>
                         </a>
                         {% if current_user.is_authenticated and current_user.role == 'administrador' %}
-                        <a href="{{ url_for('main.pending_withdrawals') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm relative">
-                            <i class="fas fa-hourglass-half mr-2"></i> Retiros Pendientes
+                        <a href="{{ url_for('main.pending_withdrawals') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm relative">
+                            <i class="fas fa-hourglass-half mr-2"></i><span class="sidebar-text">Retiros Pendientes</span>
                             {% if pending_withdrawals_count > 0 %}
                             <span class="absolute top-1 right-1 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 transform bg-red-600 rounded-full">{{ pending_withdrawals_count }}</span>
                             {% endif %}
                         </a>
-                        <a href="{{ url_for('main.cashbox_movements') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-exchange-alt mr-2"></i> Movimientos de Caja
+                        <a href="{{ url_for('main.cashbox_movements') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-exchange-alt mr-2"></i><span class="sidebar-text">Movimientos de Caja</span>
                         </a>
                         {% endif %}
                     </div>
@@ -157,25 +181,25 @@
 
                 {% if current_user.is_authenticated and current_user.role == 'administrador' %}
                 <details class="group">
-                    <summary class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
-                        <i class="fas fa-calculator mr-2"></i> Costos
+                    <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
+                        <i class="fas fa-calculator mr-2"></i><span class="sidebar-text">Costos</span>
                     </summary>
                     <div class="ml-4 mt-2 space-y-1">
-                        <a href="{{ url_for('main.cost_list') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-list mr-2"></i> Resumen
+                        <a href="{{ url_for('main.cost_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-list mr-2"></i><span class="sidebar-text">Resumen</span>
                         </a>
-                        <a href="{{ url_for('main.cost_structure_config') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-cogs mr-2"></i> Configuración de Costos
+                        <a href="{{ url_for('main.cost_structure_config') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-cogs mr-2"></i><span class="sidebar-text">Configuración de Costos</span>
                         </a>
                     </div>
                 </details>
                 <details class="group">
-                    <summary class="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
-                        <i class="fas fa-cogs mr-2"></i> Configuración
+                    <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
+                        <i class="fas fa-cogs mr-2"></i><span class="sidebar-text">Configuración</span>
                     </summary>
                     <div class="ml-4 mt-2 space-y-1">
-                        <a href="{{ url_for('main.company_settings') }}" class="block py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-building mr-2"></i> Empresa
+                        <a href="{{ url_for('main.company_settings') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-building mr-2"></i><span class="sidebar-text">Empresa</span>
                         </a>
                     </div>
                 </details>
@@ -233,24 +257,38 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
+        document.addEventListener('DOMContentLoaded', function() {
             const mobileMenuButton = document.getElementById('mobile-menu-button');
             const sidebar = document.getElementById('sidebar');
             const sidebarOverlay = document.getElementById('sidebar-overlay');
 
+            // --- Mobile Sidebar Logic ---
             function toggleSidebar() {
-                // Toggle the sidebar's visibility
                 sidebar.classList.toggle('-translate-x-full');
-                // Toggle the overlay's visibility
                 sidebarOverlay.classList.toggle('hidden');
             }
 
-            if (mobileMenuButton) {
-                mobileMenuButton.addEventListener('click', toggleSidebar);
-            }
+            mobileMenuButton?.addEventListener('click', toggleSidebar);
+            sidebarOverlay?.addEventListener('click', toggleSidebar);
 
-            if (sidebarOverlay) {
-                sidebarOverlay.addEventListener('click', toggleSidebar);
+            // --- NEW Desktop Auto-Collapsing Sidebar Logic ---
+            if (sidebar) {
+                sidebar.addEventListener('mouseenter', () => {
+                    // Only apply this behavior on screens wider than the 'md' breakpoint (768px)
+                    if (window.innerWidth >= 768) {
+                        document.body.classList.remove('sidebar-collapsed');
+                    }
+                });
+
+                sidebar.addEventListener('mouseleave', () => {
+                    if (window.innerWidth >= 768) {
+                        document.body.classList.add('sidebar-collapsed');
+                        // Close all open submenus when collapsing
+                        sidebar.querySelectorAll('details[open]').forEach(details => {
+                            details.removeAttribute('open');
+                        });
+                    }
+                });
             }
         });
     </script>

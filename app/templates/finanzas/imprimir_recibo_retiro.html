@@ -6,63 +6,60 @@
     <title>Recibo de Retiro #{{ movement.id }}</title>
     <style>
         @page {
-            size: 80mm auto; /* Ancho típico de impresora térmica */
-            margin: 3mm;
+            size: 55mm auto;
+            margin: 2mm;
         }
 
         body {
+            width: 45mm;
+            padding: 0;
             font-family: 'Courier New', Courier, monospace;
-            font-size: 10pt;
+            font-size: 8px;
             color: #000;
-        }
-
-        .receipt-container {
-            width: 100%;
-            margin: 0 auto;
+            font-weight: bold;
         }
 
         .header, .footer {
             text-align: center;
-            margin-bottom: 5mm;
+            margin-bottom: 0;
         }
 
         .header h2 {
             margin: 0;
-            font-size: 12pt;
+            font-size: 1em;
+            font-weight: bold;
         }
         .header p {
-            margin: 1mm 0;
+            margin: 0.5mm 0;
         }
 
-        .content {
-            margin-top: 5mm;
+        .info {
+            border-top: 1px dashed #000;
+            padding-top: 1mm;
+            margin-top: 1mm;
         }
 
-        .content p {
-            margin: 2mm 0;
-        }
-
-        .content .item {
+        .info-item {
             display: flex;
             justify-content: space-between;
         }
 
         .amount {
-            font-size: 14pt;
+            font-size: 1.2em;
             font-weight: bold;
             text-align: center;
             border-top: 1px dashed #000;
             border-bottom: 1px dashed #000;
-            padding: 3mm 0;
-            margin: 5mm 0;
+            padding: 2mm 0;
+            margin: 2mm 0;
         }
 
         .signatures {
-            margin-top: 10mm;
+            margin-top: 5mm;
         }
 
         .signature-block {
-            margin-top: 15mm;
+            margin-top: 8mm;
             text-align: center;
         }
 
@@ -70,6 +67,10 @@
             border-top: 1px solid #000;
             width: 80%;
             margin: 0 auto;
+        }
+        
+        .signature-block p {
+            margin: 0.5mm 0;
         }
 
         @media print {
@@ -80,24 +81,25 @@
     </style>
 </head>
 <body>
-    <div class="receipt-container">
+    <div>
         <div class="header">
             {% if company_info and company_info.name %}
                 <h2>{{ company_info.name }}</h2>
                 <p>RIF: {{ company_info.rif }}</p>
             {% endif %}
-            <h3 style="margin-top: 5mm; font-size: 11pt;">RECIBO DE RETIRO DE EFECTIVO</h3>
+            <h3 style="margin-top: 2mm; font-size: 1em; font-weight: bold;">RECIBO DE RETIRO DE EFECTIVO</h3>
         </div>
 
-        <div class="content">
-            <div class="item"><span>Fecha:</span><span>{{ movement.date|ve_datetime(fmt='%d/%m/%Y') }}</span></div>
-            <div class="item"><span>Hora:</span><span>{{ movement.date|ve_datetime(fmt='%H:%M:%S') }}</span></div>
-            <div class="item"><span>Recibo Nro:</span><span>{{ movement.id }}</span></div>
-            <div class="item"><span>Caja:</span><span>{{ movement.cash_box.name }}</span></div>
+        <div class="info">
+            <div class="info-item"><span>Fecha:</span><span>{{ movement.date|ve_datetime(fmt='%d/%m/%Y') }}</span></div>
+            <div class="info-item"><span>Hora:</span><span>{{ movement.date|ve_datetime(fmt='%H:%M:%S') }}</span></div>
+            <div class="info-item"><span>Recibo Nro:</span><span>{{ movement.id }}</span></div>
+            <div class="info-item"><span>Caja:</span><span>{{ movement.cash_box.name }}</span></div>
+        </div>
 
-            <div class="amount">MONTO: {{ "%.2f"|format(movement.amount) }} {{ movement.currency }}</div>
-
-            <p><strong>Motivo:</strong></p>
+        <div class="amount">MONTO: {{ "%.2f"|format(movement.amount) }} {{ movement.currency }}</div>
+        <div style="margin-top: 2mm;">
+            <p style="font-weight: bold;">Motivo:</p>
             <p>{{ movement.description }}</p>
 
             <div class="signatures">
@@ -113,7 +115,7 @@
             </div>
         </div>
 
-        <div class="footer"><p style="margin-top: 10mm;">.</p></div>
+        <div class="footer"><p style="margin-top: 5mm;">.</p></div>
     </div>
 
     <div class="no-print" style="text-align: center; margin-top: 15mm;">

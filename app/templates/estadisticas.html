@@ -42,33 +42,69 @@
         </form>
     </div>
 
+    <!-- Generar Reporte Mensual PDF -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+        <h2 class="text-2xl font-semibold text-gray-700 mb-4">Reporte de Cierre Mensual</h2>
+        <p class="text-gray-600 mb-6">
+            Seleccione un mes y año para generar un reporte detallado en formato PDF. El reporte incluirá un resumen financiero completo del mes, análisis de ventas, estado de cuentas por cobrar, flujo de caja y más.
+        </p>
+        <form method="GET" action="{{ url_for('main.generar_reporte_mensual_pdf') }}" target="_blank" id="monthly-report-form">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label for="report_month" class="block text-sm font-medium text-gray-700">Mes</label>
+                    <select name="month" id="report_month" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        <option value="1">Enero</option>
+                        <option value="2">Febrero</option>
+                        <option value="3">Marzo</option>
+                        <option value="4">Abril</option>
+                        <option value="5">Mayo</option>
+                        <option value="6">Junio</option>
+                        <option value="7">Julio</option>
+                        <option value="8">Agosto</option>
+                        <option value="9">Septiembre</option>
+                        <option value="10">Octubre</option>
+                        <option value="11">Noviembre</option>
+                        <option value="12">Diciembre</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="report_year" class="block text-sm font-medium text-gray-700">Año</label>
+                    <input type="number" name="year" id="report_year" placeholder="Ej: 2024" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" required>
+                </div>
+                <button type="submit" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors w-full text-center">
+                    <i class="fas fa-file-pdf mr-2"></i>Generar PDF
+                </button>
+            </div>
+        </form>
+    </div>
+
     <!-- Resumen Total del Período -->
     <div class="bg-white p-6 rounded-lg shadow-md mb-8">
         <h2 class="text-2xl font-semibold text-gray-700 mb-6">Resumen del Período Seleccionado</h2>
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 text-center">
             <div class="bg-blue-50 p-3 rounded-lg">
                 <h3 class="text-sm font-semibold text-blue-800">Ventas Totales</h3>
-                <p class="text-xl font-bold text-blue-600">{{ "{:,.2f}".format(total_summary.sales) }} Bs</p>
+                <p class="text-xl font-bold text-blue-600">{{ currency_symbol }} {{ "{:,.2f}".format(total_summary.sales) }}</p>
             </div>
             <div class="bg-yellow-50 p-3 rounded-lg">
                 <h3 class="text-sm font-semibold text-yellow-800">Costo Mercancía (CMV)</h3>
-                <p class="text-xl font-bold text-yellow-600">{{ "{:,.2f}".format(total_summary.cogs) }} Bs</p>
+                <p class="text-xl font-bold text-yellow-600">{{ currency_symbol }} {{ "{:,.2f}".format(total_summary.cogs) }}</p>
             </div>
             <div class="bg-indigo-50 p-3 rounded-lg">
                 <h3 class="text-sm font-semibold text-indigo-800">Utilidad Bruta</h3>
-                <p class="text-xl font-bold text-indigo-600">{{ "{:,.2f}".format(total_summary.gross_profit) }} Bs</p>
+                <p class="text-xl font-bold text-indigo-600">{{ currency_symbol }} {{ "{:,.2f}".format(total_summary.gross_profit) }}</p>
             </div>
             <div class="bg-orange-50 p-3 rounded-lg">
                 <h3 class="text-sm font-semibold text-orange-800">Gastos Variables</h3>
-                <p class="text-xl font-bold text-orange-600">{{ "{:,.2f}".format(total_summary.variable_expenses) }} Bs</p>
+                <p class="text-xl font-bold text-orange-600">{{ currency_symbol }} {{ "{:,.2f}".format(total_summary.variable_expenses) }}</p>
             </div>
             <div class="bg-gray-100 p-3 rounded-lg">
                 <h3 class="text-sm font-semibold text-gray-800">Gastos Fijos</h3>
-                <p class="text-xl font-bold text-gray-600">{{ "{:,.2f}".format(total_summary.fixed_expenses) }} Bs</p>
+                <p class="text-xl font-bold text-gray-600">{{ currency_symbol }} {{ "{:,.2f}".format(total_summary.fixed_expenses) }}</p>
             </div>
             <div class="p-3 rounded-lg {{ 'bg-green-100' if total_summary.net_profit >= 0 else 'bg-red-100' }}">
                 <h3 class="text-sm font-semibold {{ 'text-green-800' if total_summary.net_profit >= 0 else 'text-red-800' }}">Utilidad Neta</h3>
-                <p class="text-xl font-bold {{ 'text-green-600' if total_summary.net_profit >= 0 else 'text-red-600' }}">{{ "{:,.2f}".format(total_summary.net_profit) }} Bs</p>
+                <p class="text-xl font-bold {{ 'text-green-600' if total_summary.net_profit >= 0 else 'text-red-600' }}">{{ currency_symbol }} {{ "{:,.2f}".format(total_summary.net_profit) }}</p>
             </div>
         </div>
     </div>
@@ -99,12 +135,12 @@
                     {% for period, data in stats_data.items()|sort %}
                     <tr>
                         <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{{ period }}</td>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-gray-700">{{ "{:,.2f}".format(data.sales) }}</td>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-red-600">({{ "{:,.2f}".format(data.cogs) }})</td>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right font-semibold {{ 'text-green-700' if data.gross_profit >= 0 else 'text-red-700' }}">{{ "{:,.2f}".format(data.gross_profit) }}</td>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-orange-600">({{ "{:,.2f}".format(data.variable_expenses) }})</td>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-gray-500">({{ "{:,.2f}".format(data.fixed_expenses) }})</td>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right font-bold {{ 'text-green-700' if data.net_profit >= 0 else 'text-red-700' }}">{{ "{:,.2f}".format(data.net_profit) }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-gray-700">{{ currency_symbol }} {{ "{:,.2f}".format(data.sales) }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-red-600">({{ currency_symbol }} {{ "{:,.2f}".format(data.cogs) }})</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right font-semibold {{ 'text-green-700' if data.gross_profit >= 0 else 'text-red-700' }}">{{ currency_symbol }} {{ "{:,.2f}".format(data.gross_profit) }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-orange-600">({{ currency_symbol }} {{ "{:,.2f}".format(data.variable_expenses) }})</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-gray-500">({{ currency_symbol }} {{ "{:,.2f}".format(data.fixed_expenses) }})</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right font-bold {{ 'text-green-700' if data.net_profit >= 0 else 'text-red-700' }}">{{ currency_symbol }} {{ "{:,.2f}".format(data.net_profit) }}</td>
                     </tr>
                     {% else %}
                     <tr>
@@ -148,10 +184,27 @@
         periodSelect.addEventListener('change', toggleDateFilters);
         toggleDateFilters(); // Run on page load
 
+        // Lógica para el formulario de reporte mensual: pre-seleccionar el mes anterior
+        const reportMonthSelect = document.getElementById('report_month');
+        const reportYearInput = document.getElementById('report_year');
+        
+        if (reportMonthSelect && reportYearInput) {
+            const today = new Date();
+            // Por defecto, se selecciona el mes anterior para el reporte.
+            const reportDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            
+            const defaultMonth = reportDate.getMonth() + 1; // getMonth es 0-11, el valor del select es 1-12
+            const defaultYear = reportDate.getFullYear();
+
+            reportMonthSelect.value = defaultMonth;
+            reportYearInput.value = defaultYear;
+        }
+
         // Datos de la plantilla
         const topProductsData = {{ top_products_data | tojson }};
         const frequentClientsData = {{ frequent_clients_data | tojson }};
         const profitLossChartData = {{ profit_loss_chart_data | tojson }};
+        const currencySymbol = '{{ currency_symbol }}';
         
         // Gráfico de Top Productos
         new Chart(document.getElementById('topProductsChart'), {
@@ -213,7 +266,7 @@
                 labels: profitLossChartData.labels,
                 datasets: [
                     {
-                        label: 'Ventas (Bs)',
+                        label: `Ventas (${currencySymbol})`,
                         data: profitLossChartData.sales,
                         borderColor: 'rgba(59, 130, 246, 1)',
                         backgroundColor: 'rgba(59, 130, 246, 0.2)',
@@ -221,7 +274,7 @@
                         tension: 0.1
                     },
                     {
-                        label: 'Costo Mercancía (Bs)',
+                        label: `Costo Mercancía (${currencySymbol})`,
                         data: profitLossChartData.cogs,
                         borderColor: 'rgba(239, 68, 68, 1)',
                         backgroundColor: 'rgba(239, 68, 68, 0.2)',
@@ -229,7 +282,7 @@
                         tension: 0.1
                     },
                     {
-                    label: 'Utilidad Neta (Bs)',
+                    label: `Utilidad Neta (${currencySymbol})`,
                     data: profitLossChartData.net_profit,
                     borderColor: 'rgba(34, 197, 94, 1)',
                     borderWidth: 1,
@@ -257,7 +310,7 @@
                                 if (label) {
                                     label += ': ';
                                 }
-                                label += new Intl.NumberFormat('es-VE', {
+                                label += currencySymbol + ' ' + new Intl.NumberFormat('es-VE', {
                                     style: 'decimal',
                                     minimumFractionDigits: 2
                                 }).format(context.parsed.y);

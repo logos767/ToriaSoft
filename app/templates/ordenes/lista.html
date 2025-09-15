@@ -9,7 +9,36 @@
         </a>
     </div>
 
-    <div class="bg-white p-6 rounded-lg shadow-md">
+    <!-- Filter Form -->
+    <div class="bg-white p-4 rounded-lg shadow-md mb-6">
+        <form id="filter-form" method="GET" action="{{ url_for('main.order_list') }}" class="flex items-center gap-3 w-full">
+            <!-- Search -->
+            <input type="text" name="search" id="search" value="{{ filters.search or '' }}" placeholder="Buscar por N° Orden o Cliente..." class="flex-grow block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            
+            <!-- Status -->
+            <select name="status" id="status" class="block rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                <option value="" {% if not filters.status %}selected{% endif %}>Estado: Todos</option>
+                <option value="contado" {% if filters.status == 'contado' %}selected{% endif %}>De Contado (Pagada)</option>
+                <option value="credito" {% if filters.status == 'credito' %}selected{% endif %}>Crédito</option>
+                <option value="apartado" {% if filters.status == 'apartado' %}selected{% endif %}>Apartado</option>
+                <option value="con_deuda" {% if filters.status == 'con_deuda' %}selected{% endif %}>Con Deuda</option>
+            </select>
+            
+            <!-- Date Range -->
+            <span class="text-sm text-gray-600 whitespace-nowrap">Desde:</span>
+            <input type="date" name="start_date" id="start_date" value="{{ filters.start_date }}" class="block w-auto rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            
+            <span class="text-sm text-gray-600 whitespace-nowrap">Hasta:</span>
+            <input type="date" name="end_date" id="end_date" value="{{ filters.end_date }}" class="block w-auto rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            
+            <!-- Buttons -->
+            <a href="{{ url_for('main.order_list') }}" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 whitespace-nowrap">
+                <i class="fas fa-eraser mr-1"></i>Limpiar
+            </a>
+        </form>
+    </div>
+
+    <div class="bg-white p-6 rounded-lg shadow-md mt-6">
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
@@ -36,14 +65,24 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
                             {% if order.status == 'Crédito' %}
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Crédito</span>
+                            {% elif order.status == 'Apartado' %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">Apartado</span>
                             {% elif order.status == 'Pagada' %}
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">Pagada</span>
+                            {% elif order.status == 'Completada' %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completada</span>
                             {% else %}
-                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">{{ order.status }}</span>
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">{{ order.status }}</span>
                             {% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <a href="{{ url_for('main.order_detail', order_id=order.id) }}" class="text-indigo-600 hover:text-indigo-900">Detalles</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center py-10 text-gray-500">
+                            <p class="text-lg">No se encontraron órdenes que coincidan con los filtros.</p>
                         </td>
                     </tr>
                     {% endfor %}
@@ -52,4 +91,42 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('filter-form');
+    const searchInput = document.getElementById('search');
+    const statusSelect = document.getElementById('status');
+    const startDateInput = document.getElementById('start_date');
+    const endDateInput = document.getElementById('end_date');
+
+    let debounceTimeout;
+
+    function applyFilters() {
+        // Construct the query string from the form's current values
+        const params = new URLSearchParams(new FormData(form));
+
+        // Reload the page with the new filters
+        window.location.href = `${form.action}?${params.toString()}`;
+    }
+
+    // Debounce for search input
+    searchInput.addEventListener('input', () => {
+        clearTimeout(debounceTimeout);
+        debounceTimeout = setTimeout(applyFilters, 500); // Wait 500ms after user stops typing
+    });
+
+    // Immediate change for select and date inputs
+    statusSelect.addEventListener('change', applyFilters);
+    startDateInput.addEventListener('change', applyFilters);
+    endDateInput.addEventListener('change', applyFilters);
+
+    // Prevent form submission on Enter key, but still trigger the filter
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        clearTimeout(debounceTimeout); // Clear any pending debounce and apply filters immediately
+        applyFilters();
+    });
+});
+</script>
 {% endblock %}

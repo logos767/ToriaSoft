@@ -5,12 +5,12 @@
     <h1 class="text-3xl font-bold text-gray-800 mb-6"><i class="fas fa-tachometer-alt mr-2"></i>Dashboard</h1>
     
     <!-- Sección de Métricas -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
         <!-- Tarjeta de Productos Totales -->
         <div class="bg-white rounded-lg shadow-md p-6 flex items-center justify-between relative">
             <div>
                 <h2 class="text-gray-500 text-sm font-semibold uppercase">Productos Totales</h2>
-                <p class="text-3xl font-bold text-gray-800">{{ total_products }}</p>
+                <p class="text-3xl font-bold text-gray-800">{{ "{:,}".format(total_products) }}</p>
             </div>
             <div class="bg-blue-100 text-blue-500 p-3 rounded-full">
                 <i class="fas fa-boxes text-2xl"></i>
@@ -23,7 +23,8 @@
         <div class="bg-white rounded-lg shadow-md p-6 flex items-center justify-between relative">
             <div>
                 <h2 class="text-gray-500 text-sm font-semibold uppercase">Existencias Totales</h2>
-                <p class="text-3xl font-bold text-gray-800">{{ total_stock }}</p>
+                <p class="text-3xl font-bold text-gray-800">{{ "{:,}".format(total_stock) }} <span class="text-lg font-normal">unidades</span></p>
+                <p class="text-lg font-semibold text-green-600">${{ "{:,.2f}".format(total_stock_value_usd) }}</p>
             </div>
             <div class="bg-green-100 text-green-500 p-3 rounded-full">
                 <i class="fas fa-box-open text-2xl"></i>
@@ -36,7 +37,7 @@
         <div class="bg-white rounded-lg shadow-md p-6 flex items-center justify-between relative">
             <div>
                 <h2 class="text-gray-500 text-sm font-semibold uppercase">Clientes Totales</h2>
-                <p class="text-3xl font-bold text-gray-800">{{ total_clients }}</p>
+                <p class="text-3xl font-bold text-gray-800">{{ "{:,}".format(total_clients) }}</p>
             </div>
             <div class="bg-yellow-100 text-yellow-500 p-3 rounded-full">
                 <i class="fas fa-users text-2xl"></i>
@@ -45,23 +46,54 @@
                 <i class="fas fa-list text-sm"></i>
             </a>
         </div>
-        <!-- Tarjeta de Órdenes Totales -->
+        <!-- Tarjeta de Cuentas por Cobrar -->
         <div class="bg-white rounded-lg shadow-md p-6 flex items-center justify-between relative">
             <div>
-                <h2 class="text-gray-500 text-sm font-semibold uppercase">Órdenes Totales</h2>
-                <p class="text-3xl font-bold text-gray-800">{{ total_orders }}</p>
+                <h2 class="text-gray-500 text-sm font-semibold uppercase">Cuentas por Cobrar</h2>
+                <p class="text-3xl font-bold text-gray-800">{{ clients_in_debt_count }} <span class="text-lg font-normal">clientes</span></p>
+                <p class="text-lg font-semibold text-orange-600">${{ "{:,.2f}".format(total_due_usd) }}</p>
             </div>
-            <div class="bg-red-100 text-red-500 p-3 rounded-full">
-                <i class="fas fa-shopping-cart text-2xl"></i>
+            <div class="bg-orange-100 text-orange-500 p-3 rounded-full">
+                <i class="fas fa-file-invoice-dollar text-2xl"></i>
             </div>
-            <a href="{{ url_for('main.order_list') }}" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600" title="Ver lista de órdenes">
+            <a href="{{ url_for('main.client_list') }}" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600" title="Ver clientes con deudas">
+                <i class="fas fa-list text-sm"></i>
+            </a>
+        </div>
+        <!-- Tarjeta de Resumen de Órdenes -->
+        <div class="bg-white rounded-lg shadow-md p-6 relative">
+            <h2 class="text-gray-500 text-sm font-semibold uppercase mb-2">Resumen de Órdenes</h2>
+            <div class="space-y-2 text-sm">
+                <div class="flex justify-between items-baseline">
+                    <span class="font-medium text-gray-700">Hoy:</span>
+                    <div>
+                        <span class="font-bold text-gray-800">{{ orders_today_count }}</span><span class="text-gray-600"> / </span>
+                        <span class="font-bold text-green-600">${{ "{:,.2f}".format(orders_today_amount_usd) }}</span>
+                    </div>
+                </div>
+                <div class="flex justify-between items-baseline">
+                    <span class="font-medium text-gray-700">Este Mes:</span>
+                    <div>
+                        <span class="font-bold text-gray-800">{{ orders_month_count }}</span><span class="text-gray-600"> / </span>
+                        <span class="font-bold text-green-600">${{ "{:,.2f}".format(orders_month_amount_usd) }}</span>
+                    </div>
+                </div>
+                <div class="flex justify-between items-baseline">
+                    <span class="font-medium text-gray-700">Total:</span>
+                    <div>
+                        <span class="font-bold text-gray-800">{{ all_orders_count }}</span><span class="text-gray-600"> / </span>
+                        <span class="font-bold text-green-600">${{ "{:,.2f}".format(all_orders_amount_usd) }}</span>
+                    </div>
+                </div>
+            </div>
+            <a href="{{ url_for('main.order_list') }}" class="absolute bottom-2 right-2 text-gray-400 hover:text-gray-600" title="Ver lista de órdenes">
                 <i class="fas fa-list text-sm"></i>
             </a>
         </div>
     </div>
     
-    <!-- Sección de Últimas Actividades -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Sección de Actividades y Gráfico -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <!-- Productos Recientes -->
         <div class="bg-white rounded-lg shadow-md p-6 relative">
             <h2 class="text-xl font-semibold text-gray-700 mb-4">Productos Recientes</h2>
@@ -107,6 +139,110 @@
                 {% endfor %}
             </ul>
         </div>
+
+        <!-- Sección de Gráfico de Contabilidad -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-700">
+                    Resumen Contable (<span id="chart-period-label"></span>)
+                </h2>
+                <div class="flex border border-gray-300 rounded-md text-sm">
+                    <button id="show-month-chart" class="px-3 py-1 rounded-l-md focus:outline-none bg-blue-500 text-white">Mes</button>
+                    <button id="show-day-chart" class="px-3 py-1 rounded-r-md focus:outline-none bg-white text-gray-700">Día</button>
+                </div>
+            </div>
+            <div class="max-w-md mx-auto">
+                <canvas id="accountingDonutChart"></canvas>
+            </div>
+        </div>
     </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const monthlyChartData = {{ accounting_chart_data | tojson }};
+    const dailyChartData = {{ accounting_chart_data_day | tojson }};
+    const currentMonthName = "{{ current_month_name }}";
+    const todayLabel = "Hoy";
+
+    const showMonthBtn = document.getElementById('show-month-chart');
+    const showDayBtn = document.getElementById('show-day-chart');
+    const chartPeriodLabel = document.getElementById('chart-period-label');
+    const ctx = document.getElementById('accountingDonutChart');
+    let accountingChart;
+
+    const backgroundColors = [
+        'rgba(75, 192, 192, 0.7)',  // Contado
+        'rgba(255, 159, 64, 0.7)',  // Crédito
+        'rgba(255, 205, 86, 0.7)',  // Apartado
+        'rgba(153, 102, 255, 0.7)', // Gastos Fijos
+        'rgba(239, 68, 68, 0.7)'    // Gastos Variables
+    ];
+
+    function updateChart(chartData, periodLabel) {
+        chartPeriodLabel.textContent = periodLabel;
+
+        const filteredLabels = [];
+        const filteredValues = [];
+        const filteredColors = [];
+
+        chartData.values.forEach((value, index) => {
+            if (value > 0) {
+                filteredLabels.push(chartData.labels[index]);
+                filteredValues.push(value);
+                filteredColors.push(backgroundColors[index]);
+            }
+        });
+
+        if (accountingChart) {
+            accountingChart.destroy();
+        }
+
+        accountingChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: filteredLabels,
+                datasets: [{
+                    label: 'Monto (USD)',
+                    data: filteredValues,
+                    backgroundColor: filteredColors,
+                    borderColor: '#fff',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => `${context.label}: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed)}`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    showMonthBtn.addEventListener('click', () => {
+        updateChart(monthlyChartData, currentMonthName);
+        showMonthBtn.classList.add('bg-blue-500', 'text-white');
+        showMonthBtn.classList.remove('bg-white', 'text-gray-700');
+        showDayBtn.classList.add('bg-white', 'text-gray-700');
+        showDayBtn.classList.remove('bg-blue-500', 'text-white');
+    });
+
+    showDayBtn.addEventListener('click', () => {
+        updateChart(dailyChartData, todayLabel);
+        showDayBtn.classList.add('bg-blue-500', 'text-white');
+        showDayBtn.classList.remove('bg-white', 'text-gray-700');
+        showMonthBtn.classList.add('bg-white', 'text-gray-700');
+        showMonthBtn.classList.remove('bg-blue-500', 'text-white');
+    });
+
+    // Initial load
+    updateChart(monthlyChartData, currentMonthName);
+});
+</script>
 {% endblock %}

@@ -79,6 +79,14 @@ def create_app():
         database_url = database_url.replace("postgresql://", "postgresql+psycopg2://", 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    # Engine options to handle database connection issues (e.g., "server closed the connection unexpectedly")
+    # 'pool_pre_ping': checks if a connection is alive before using it from the pool.
+    # 'pool_recycle': recycles connections after a set time (in seconds). This is useful for DBs that time out idle connections.
+    # A value of 280 is safe for many default DB timeouts (e.g., 300s).
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        "pool_pre_ping": True,
+        "pool_recycle": 280,
+    }
 
     # --- Initialize Extensions ---
     db.init_app(app)
@@ -127,6 +135,11 @@ def create_app():
             if not order_id:
                 return ''
             return f"{order_id:09d}"
+
+        # Add get_current_time_ve to context for use in templates
+        @app.context_processor
+        def inject_ve_time():
+            return dict(get_current_time_ve=models.get_current_time_ve)
 
     @app.teardown_appcontext
     def shutdown_session(exception=None):
