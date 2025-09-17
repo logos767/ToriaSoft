@@ -2208,33 +2208,27 @@ def cost_list():
 
     products_with_costs = []
     for product in products:
+        # El precio de venta final es el que está guardado en el producto.
+        selling_price = product.price_usd or 0
+
+        # Usar gastos variables específicos o los por defecto.
         var_sales_exp_pct = product.variable_selling_expense_percent if product.variable_selling_expense_percent > 0 else cost_structure.default_sales_commission_percent
         var_marketing_pct = product.variable_marketing_percent if product.variable_marketing_percent > 0 else cost_structure.default_marketing_percent
 
-        base_cost = (product.cost_usd or 0) + \
-                    (product.specific_freight_cost or 0) + \
-                    fixed_cost_per_unit
+        # Calcular el costo total por unidad basado en el precio de venta final.
+        total_cost_per_unit = (product.cost_usd or 0) + \
+                              (product.specific_freight_cost or 0) + \
+                              fixed_cost_per_unit + \
+                              (selling_price * (var_sales_exp_pct or 0)) + \
+                              (selling_price * (var_marketing_pct or 0))
         
-        denominator = 1 - (var_sales_exp_pct or 0) - (var_marketing_pct or 0) - (product.profit_margin or 0)
+        # La utilidad es la diferencia entre el precio de venta y el costo total.
+        profit = selling_price - total_cost_per_unit
 
-        if denominator <= 0:
-            selling_price = 0
-            profit = 0
-            sales_expense = 0
-            marketing_expense = 0
-            error = "La suma de porcentajes de utilidad y gastos variables supera el 100%."
-        else:
-            selling_price = base_cost / denominator
-            profit = selling_price * (product.profit_margin or 0)
-            sales_expense = selling_price * (var_sales_exp_pct or 0)
-            marketing_expense = selling_price * (var_marketing_pct or 0)
-            error = None
+        error = "El producto genera pérdidas." if profit < 0 and selling_price > 0 else None
 
         products_with_costs.append({
             'product': product,
-            'fixed_cost_per_unit': fixed_cost_per_unit,
-            'sales_expense': sales_expense,
-            'marketing_expense': marketing_expense,
             'profit': profit,
             'selling_price': selling_price,
             'error': error

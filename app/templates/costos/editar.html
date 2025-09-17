@@ -141,6 +141,23 @@
     {% if break_even_data %}
     <div class="mt-8 bg-white p-8 rounded-lg shadow-md">
         <h2 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-chart-bar mr-2"></i>Gráfica de Punto de Equilibrio</h2>
+        
+        <!-- Leyenda personalizada -->
+        <div class="flex flex-wrap justify-center items-center gap-x-6 gap-y-2 mb-4 text-sm text-gray-600">
+            <div class="flex items-center">
+                <span class="w-8 h-1 bg-green-500 mr-2"></span> Ingresos
+            </div>
+            <div class="flex items-center">
+                <span class="w-8 h-1 bg-blue-500 mr-2"></span> Costos Totales
+            </div>
+            <div class="flex items-center">
+                <span class="w-8 h-0.5 border-t-2 border-dashed border-red-400 mr-2"></span> Costos Fijos
+            </div>
+            <div class="flex items-center">
+                <span class="w-3 h-3 rounded-full bg-yellow-500 mr-2"></span> Punto de Equilibrio
+            </div>
+        </div>
+
         <canvas id="breakEvenChart" width="400" height="200"></canvas>
     </div>
 
@@ -150,58 +167,165 @@
             const ctx = document.getElementById('breakEvenChart').getContext('2d');
             
             // Datos para la gráfica
-            const breakEvenUnits = {{ break_even_data.break_even_units }};
-            const maxUnits = Math.max(breakEvenUnits * 2, 1000);
-            const step = Math.ceil(maxUnits / 10);
+            const breakEvenUnits = parseFloat("{{ break_even_data.break_even_units }}");
+            const breakEvenAmount = parseFloat("{{ break_even_data.break_even_amount }}");
+
+            // 1. Auto-escala de los ejes
+            const xMax = Math.max(breakEvenUnits * 2, 100); // xmax = 2 veces el punto de equilibrio, con un mínimo de 100 unidades
+            const yMax = Math.max(breakEvenAmount * 2, 100); // ymax = 2 veces el monto de equilibrio, con un mínimo de $100
+            const step = Math.ceil(xMax / 10);
             
-            const units = [];
-            const fixedCosts = [];
-            const variableCosts = [];
-            const totalCosts = [];
-            const revenues = [];
+            const totalCostsData = [];
+            const revenuesData = [];
+            const fixedCostsData = [];
             
-            for (let i = 0; i <= maxUnits; i += step) {
-                units.push(i);
-                fixedCosts.push({{ break_even_data.fixed_costs_total }});
-                variableCosts.push(i * {{ break_even_data.variable_cost_per_unit }});
-                totalCosts.push({{ break_even_data.fixed_costs_total }} + (i * {{ break_even_data.variable_cost_per_unit }}));
-                revenues.push(i * {{ break_even_data.selling_price }});
+            // Generar puntos para las líneas con pasos uniformes, usando formato {x, y}
+            for (let i = 0; i <= xMax; i += step) {
+                const yTotalCost = {{ break_even_data.fixed_costs_total }} + (i * {{ break_even_data.variable_cost_per_unit }});
+                const yRevenue = i * {{ break_even_data.selling_price }};
+                totalCostsData.push({x: i, y: yTotalCost});
+                revenuesData.push({x: i, y: yRevenue});
+                fixedCostsData.push({x: i, y: {{ break_even_data.fixed_costs_total }}});
             }
+
+            // Añadir el punto de equilibrio exacto a los datos para asegurar que la línea pase por él.
+            // El eje lineal se encargará de dibujarlo en la posición correcta sin distorsionar la escala.
+            if (breakEvenUnits > 0 && breakEvenUnits < xMax) {
+                totalCostsData.push({x: breakEvenUnits, y: breakEvenAmount});
+                revenuesData.push({x: breakEvenUnits, y: breakEvenAmount});
+                
+                // Ordenar los datos por el eje X para que la línea se dibuje correctamente
+                totalCostsData.sort((a, b) => a.x - b.x);
+                revenuesData.sort((a, b) => a.x - b.x);
+            }
+
+            // Encontrar el índice del punto de equilibrio en los datos ordenados
+            const breakEvenIndex = revenuesData.findIndex(p => p.x === breakEvenUnits);
+
+            // 2. Enfatizar solo el punto de equilibrio
+            // Usamos el array de 'revenuesData' como base, ya que ambos (ingresos y costos) lo contienen.
+            const pointRadiusArray = revenuesData.map((_, index) => (breakEvenIndex !== -1 && index === breakEvenIndex) ? 6 : 0);
+            const pointHoverRadiusArray = revenuesData.map((_, index) => (breakEvenIndex !== -1 && index === breakEvenIndex) ? 8 : 0);
+            const pointBackgroundColor = 'rgb(255, 205, 86)'; // Amarillo/Dorado para el punto
             
+            // Plugin para dibujar etiquetas de 'Pérdidas' y 'Ganancias'
+            const areaLabelsPlugin = {
+                id: 'areaLabels',
+                afterDraw: (chart) => {
+                    const { ctx, chartArea: { left, right }, scales: { x, y } } = chart;
+                    
+                    const breakEvenUnitsValue = parseFloat("{{ break_even_data.break_even_units }}");
+                    if (breakEvenUnitsValue <= x.min || breakEvenUnitsValue >= x.max) {
+                        return; // No dibujar si el punto de equilibrio está fuera del área visible
+                    }
+
+                    const breakEvenPixel = x.getPixelForValue(breakEvenUnitsValue);
+
+                    const labels = [
+                        {
+                            text: 'PÉRDIDAS',
+                            color: 'rgba(153, 27, 27, 0.8)', // Rojo oscuro
+                            xPos: (left + breakEvenPixel) / 2,
+                            show: breakEvenPixel - left > 80 // Solo mostrar si hay espacio suficiente
+                        },
+                        {
+                            text: 'GANANCIAS',
+                            color: 'rgba(15, 118, 110, 0.8)', // Verde azulado oscuro
+                            xPos: (breakEvenPixel + right) / 2,
+                            show: right - breakEvenPixel > 80 // Solo mostrar si hay espacio suficiente
+                        }
+                    ];
+
+                    ctx.save();
+                    ctx.font = 'bold 16px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+
+                    labels.forEach(label => {
+                        if (!label.show) return;
+                        const xValue = x.getValueForPixel(label.xPos);
+                        const revenueY = xValue * parseFloat("{{ break_even_data.selling_price }}");
+                        const costY = parseFloat("{{ break_even_data.fixed_costs_total }}") + (xValue * parseFloat("{{ break_even_data.variable_cost_per_unit }}"));
+                        const yPos = (y.getPixelForValue(revenueY) + y.getPixelForValue(costY)) / 2;
+
+                        ctx.fillStyle = label.color;
+                        ctx.fillText(label.text, label.xPos, yPos);
+                    });
+                    ctx.restore();
+                }
+            };
+
             new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: units,
+                    // No se usa 'labels' para un eje X lineal
                     datasets: [
                         {
-                            label: 'Costos Fijos',
-                            data: fixedCosts,
-                            borderColor: 'rgb(255, 99, 132)',
-                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                            fill: true,
-                            tension: 0.1
-                        },
-                        {
                             label: 'Costos Totales',
-                            data: totalCosts,
+                            data: totalCostsData,
                             borderColor: 'rgb(54, 162, 235)',
-                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                            fill: true,
-                            tension: 0.1
+                            fill: false, // No rellenar esta área
+                            tension: 0.1,
+                            pointRadius: pointRadiusArray,
+                            pointHoverRadius: pointHoverRadiusArray,
+                            pointBackgroundColor: pointBackgroundColor,
                         },
                         {
                             label: 'Ingresos',
-                            data: revenues,
+                            data: revenuesData,
                             borderColor: 'rgb(75, 192, 192)',
-                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            fill: 0, // Rellenar el área hasta el dataset en el índice 0 (Costos Totales)
+                            tension: 0.1,
+                            pointRadius: pointRadiusArray,
+                            pointHoverRadius: pointHoverRadiusArray,
+                            pointBackgroundColor: pointBackgroundColor,
+                            backgroundColor: function(context) {
+                                const chart = context.chart;
+                                const {ctx, chartArea} = chart;
+
+                                if (!chartArea) {
+                                    return null; // El área del gráfico aún no está disponible
+                                }
+                                
+                                // Crear un gradiente horizontal que abarque el ancho del gráfico
+                                const gradient = ctx.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
+                                
+                                // Obtener la posición en píxeles del punto de equilibrio en el eje X
+                                const breakEvenPixel = chart.scales.x.getPixelForValue(breakEvenUnits);
+                                
+                                // Normalizar esta posición a un valor entre 0 y 1 para el gradiente, asegurando que esté dentro de los límites
+                                const breakEvenRatio = Math.max(0, Math.min(1, (breakEvenPixel - chartArea.left) / (chartArea.right - chartArea.left)));
+
+                                const red = 'rgba(255, 99, 132, 0.5)'; // Color para pérdidas (rojo)
+                                const green = 'rgba(75, 192, 192, 0.5)'; // Color para ganancias (verde/azul)
+
+                                // Crear el gradiente con un cambio de color brusco en el punto de equilibrio
+                                gradient.addColorStop(0, red);
+                                gradient.addColorStop(breakEvenRatio, red);
+                                gradient.addColorStop(breakEvenRatio, green);
+                                gradient.addColorStop(1, green);
+
+                                return gradient;
+                            },
+                        },
+                        {
+                            label: 'Costos Fijos',
+                            data: fixedCostsData,
+                            borderColor: 'rgb(255, 99, 132)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
                             fill: false,
-                            tension: 0.1
+                            tension: 0.1,
+                            pointRadius: 0, // Sin puntos para esta línea
+                            borderDash: [5, 5], // Línea punteada
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     plugins: {
+                        legend: {
+                            display: false // Ocultar la leyenda por defecto
+                        },
                         title: {
                             display: true,
                             text: 'Análisis de Punto de Equilibrio'
@@ -213,20 +337,26 @@
                     },
                     scales: {
                         x: {
+                            type: 'linear', // Eje X de tipo lineal para una escala correcta
+                            position: 'bottom',
                             title: {
                                 display: true,
                                 text: 'Unidades Vendidas'
-                            }
+                            },
+                            beginAtZero: true,
+                            max: xMax
                         },
                         y: {
                             title: {
                                 display: true,
                                 text: 'Monto (USD)'
                             },
-                            beginAtZero: true
+                            beginAtZero: true,
+                            max: yMax // Aplicar auto-escala en Y
                         }
                     }
-                }
+                },
+                plugins: [areaLabelsPlugin] // Registrar el plugin personalizado
             });
         });
     </script>
