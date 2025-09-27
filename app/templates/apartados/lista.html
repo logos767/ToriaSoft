@@ -36,7 +36,13 @@
                         <td class="px-4 py-4 whitespace-nowrap text-sm text-right text-green-700">{{ "%.2f"|format(r.paid_amount / current_rate) }}</td>
                         <td class="px-4 py-4 whitespace-nowrap text-sm text-right font-bold {% if r.due_amount > 0.01 %}text-red-600{% else %}text-gray-500{% endif %}">{{ "%.2f"|format(r.due_amount / current_rate) }}</td>
                         <td class="px-4 py-4 whitespace-nowrap text-center text-sm">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {% if r.status == 'Apartado' %}bg-yellow-100 text-yellow-800{% else %}bg-green-100 text-green-800{% endif %}">{{ r.status }}</span>
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                                {% if r.status == 'Apartado' %}bg-yellow-100 text-yellow-800
+                                {% elif r.status == 'Pagado' %}bg-green-100 text-green-800
+                                {% elif r.status == 'Entregado' %}bg-blue-100 text-blue-800
+                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ 'Pendiente' if r.status == 'Apartado' else r.status }}
+                            </span>
                         </td>
                         <td class="px-4 py-4 whitespace-nowrap text-center text-sm font-medium">
                             <a href="{{ url_for('main.reservation_detail', order_id=r.id) }}" title="Ver Detalle" class="text-indigo-600 hover:text-indigo-900"><i class="fas fa-eye"></i> Detalles</a>

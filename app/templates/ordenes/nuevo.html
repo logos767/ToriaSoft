@@ -2,25 +2,15 @@
 
 {% block content %}
 <div class="container mx-auto p-2 max-w-7xl">
-    <div class="flex justify-between items-center mb-2">
-        <div class="flex items-center">
-            <h1 class="text-xl font-bold text-gray-800"><i class="fas fa-cart-plus m-1"></i>Crear Nueva Orden de Venta</h1>
-        </div>
-        <div class="flex items-center space-x-4">
-            <div>
-                <label for="date_created" class="block text-gray-700 font-bold mb-1 text-sm">Fecha y Hora:</label>
-                <input type="datetime-local" id="date_created" name="date_created" value="{{ current_ve_time.strftime('%Y-%m-%dT%H:%M') }}" class="shadow appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-            </div>
-            {% if current_user.role == 'administrador' %}
-            <div id="special-rate-group" class="hidden">
-                <label for="special_exchange_rate" class="block text-red-600 font-bold mb-1 text-sm">Tasa de Cambio Especial:</label>
-                <input type="number" id="special_exchange_rate" name="special_exchange_rate" step="0.01" placeholder="{{ '%.2f'|format(current_rate) }}" class="w-32 shadow appearance-none border border-red-300 rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-red-500">
-            </div>
-            {% endif %}
-        </div>
-    </div>
     <div class="bg-white p-4 rounded-lg shadow-md">
         <form method="POST" action="{{ url_for('main.new_order') }}" id="order-form">
+            <div class="flex justify-between items-center mb-4">
+                <h1 class="text-xl font-bold text-gray-800"><i class="fas fa-cart-plus m-1"></i>Crear Nueva Orden de Venta</h1>
+                <div>
+                    <label for="date_created" class="block text-gray-700 font-bold mb-1 text-sm">Fecha y Hora de la Orden:</label>
+                    <input type="datetime-local" id="date_created" name="date_created" value="{{ current_ve_time.strftime('%Y-%m-%dT%H:%M') }}" class="shadow appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
             <!-- Main two-column layout -->
             <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-4">
                 <!-- LEFT COLUMN: Client and Actions -->
@@ -128,10 +118,13 @@
                     <div class="grid grid-cols-2 gap-x-4 gap-y-1 max-w-sm ml-auto text-sm">
                         <div class="text-right font-semibold">Subtotal:</div>
                         <div class="text-right" id="subtotal-display">0.00 Bs</div>
-
-                        <div class="text-right font-semibold">Descuento ({{ currency_symbol }}):</div>
+ 
+                        <div class="text-right font-semibold flex items-center justify-end">
+                            <input type="checkbox" id="discount-enabled-checkbox" name="discount_enabled" value="on" class="h-4 w-4 mr-2 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                            <label for="discount-enabled-checkbox">Descuento ({{ currency_symbol }}):</label>
+                        </div>
                         <div class="text-right">
-                            <input type="number" id="discount-input" name="discount_usd" value="0.00" step="0.01" min="0" class="w-24 shadow-sm appearance-none border rounded py-0.5 px-1 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-right text-sm">
+                            <input type="number" id="discount-input" name="discount_usd" value="0.00" step="0.01" min="0" class="w-24 shadow-sm appearance-none border rounded py-0.5 px-1 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-right text-sm disabled:bg-gray-200 disabled:cursor-not-allowed" disabled>
                         </div>
 
                         <div class="text-right font-semibold hidden">IVA:</div>
@@ -255,11 +248,29 @@
                                 <input type="text" id="payment-reference" class="mt-1 block w-full py-1 px-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                             </div>
                             <div id="payment-issuing-bank-group" class="hidden">
-                                <label for="payment-issuing-bank" class="block text-sm font-medium text-gray-700">Banco Emisor</label>
-                                <input type="text" id="payment-issuing-bank" class="mt-1 block w-full py-1 px-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                <label for="payment-issuing-bank" class="block text-sm font-medium text-gray-700">Banco Origen</label>
+                                <select id="payment-issuing-bank" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                    <option value="">Seleccione un banco</option>
+                                    <option value="Banco de Venezuela">Banco de Venezuela</option>
+                                    <option value="BBVA Provincial">BBVA Provincial</option>
+                                    <option value="Banesco">Banesco</option>
+                                    <option value="BNC (Banco Nacional de Crédito)">BNC (Banco Nacional de Crédito)</option>
+                                    <option value="Mercantil">Mercantil</option>
+                                    <option value="Bancamiga">Bancamiga</option>
+                                    <option value="BDT (Banco del Tesoro)">BDT (Banco del Tesoro)</option>
+                                    <option value="Banplus">Banplus</option>
+                                    <option value="Plaza">Plaza</option>
+                                    <option value="Bancaribe">Bancaribe</option>
+                                    <option value="Banco Exterior">Banco Exterior</option>
+                                    <option value="Banco Caroní">Banco Caroní</option>
+                                    <option value="Banco Activo">Banco Activo</option>
+                                    <option value="Fondo Común (BFC)">Fondo Común (BFC)</option>
+                                    <option value="Bancrecer">Bancrecer</option>
+                                    <option value="Banco Del Sur">Banco Del Sur</option>
+                                </select>
                             </div>
                             <div id="payment-sender-id-group" class="hidden">
-                                <label for="payment-sender-id" class="block text-sm font-medium text-gray-700">Cédula/Teléfono Emisor</label>
+                                <label for="payment-sender-id" class="block text-sm font-medium text-gray-700">Teléfono/Número de Cédula</label>
                                 <input type="text" id="payment-sender-id" class="mt-1 block w-full py-1 px-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                             </div>
                             <div id="payment-bank-group" class="hidden">
@@ -305,6 +316,39 @@
         </div>
     </div>
 </div>
+
+<!-- Modal para Tasa de Cambio Temporal -->
+{% if current_user.role == 'administrador' %}
+<div id="rate-change-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div class="mt-3 text-center">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100">
+                <i class="fas fa-exclamation-triangle text-2xl text-yellow-600"></i>
+            </div>
+            <h3 class="text-lg leading-6 font-medium text-gray-900 mt-2">Cambio de Tasa de Cambio</h3>
+            <div class="mt-2 px-7 py-3">
+                <p class="text-sm text-gray-500">
+                    Ha seleccionado una fecha pasada. Para asegurar la consistencia de los cálculos, puede establecer una tasa de cambio temporal para esta orden.
+                    La tasa actual (Bs. {{ '%.2f'|format(current_rate) }}) se restaurará automáticamente después de crear la orden.
+                </p>
+                <div class="mt-4">
+                    <label for="modal_exchange_rate" class="block text-sm font-medium text-gray-700 text-left">Nueva Tasa para {{ calculation_currency }}:</label>
+                    <input type="number" id="modal_exchange_rate" name="modal_exchange_rate" step="0.01" placeholder="{{ '%.2f'|format(current_rate) }}"
+                           class="mt-1 w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+            <div class="items-center px-4 py-3">
+                <button id="cancel-rate-change-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 mr-2">
+                    Cancelar
+                </button>
+                <button id="update-rate-btn" class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">
+                    <i class="fas fa-sync-alt mr-2"></i>Actualizar Tasa y Recargar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- New Client Modal -->
 <div id="new-client-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
@@ -377,13 +421,11 @@
 
         {% if current_user.role == 'administrador' %}
         const dateCreatedInput = document.getElementById('date_created');
-        const specialRateGroup = document.getElementById('special-rate-group');
-        const specialRateInput = document.getElementById('special_exchange_rate');
-
-        // Get today's date in YYYY-MM-DD format, considering the VE timezone
         const today = new Date('{{ current_ve_time.isoformat() }}');
         const todayString = today.toISOString().split('T')[0];
 
+        // Función para recalcular todos los precios y el resumen de la orden en el frontend.
+        // Esencial para actualizar la vista sin recargar la página.
         function updateAllPricesAndSummary() {
             document.querySelectorAll('tr.product-item').forEach(row => {
                 const priceUsdInput = row.querySelector('.price-usd-input');
@@ -391,10 +433,10 @@
                 const priceVesDisplay = row.querySelector('.price-ves-display');
                 let priceUsd = 0;
 
-                if (priceUsdInput) { // Admin view
+                if (priceUsdInput) { // Vista de Administrador
                     priceUsd = parseFloat(priceUsdInput.value) || 0;
-                } else if (priceUsdDisplay) { // Non-admin view
-                    priceUsd = parseFloat(priceUsdDisplay.textContent) || 0;
+                } else if (priceUsdDisplay) { // Vista de no-administrador
+                    priceUsd = parseFloat(priceUsdDisplay.dataset.priceUsd) || 0;
                 }
                 priceVesDisplay.textContent = (priceUsd * activeRate).toFixed(2);
             });
@@ -405,28 +447,60 @@
             const selectedDateString = this.value.split('T')[0];
             
             if (selectedDateString && selectedDateString !== todayString) {
-                specialRateGroup.classList.remove('hidden');
-                if (!specialRateGroup.dataset.alertShown) {
-                    alert('Ha seleccionado una fecha diferente a la actual. Considere ajustar la tasa de cambio manualmente para esta orden.');
-                    specialRateGroup.dataset.alertShown = 'true';
-                }
-            } else {
-                specialRateGroup.classList.add('hidden');
-                specialRateInput.value = '';
-                delete specialRateGroup.dataset.alertShown;
-                activeRate = defaultRate; // Reset rate
-                updateAllPricesAndSummary(); // Recalculate everything
+                // Open the modal
+                document.getElementById('rate-change-modal').classList.remove('hidden');
             }
         });
 
-        specialRateInput.addEventListener('input', function() {
-            const specialRateValue = parseFloat(this.value);
-            if (specialRateValue && specialRateValue > 0) {
-                activeRate = specialRateValue;
-            } else {
-                activeRate = defaultRate;
+        // Modal logic
+        const rateModal = document.getElementById('rate-change-modal');
+        const cancelRateBtn = document.getElementById('cancel-rate-change-btn');
+        const updateRateBtn = document.getElementById('update-rate-btn');
+        const modalRateInput = document.getElementById('modal_exchange_rate');
+
+        cancelRateBtn.addEventListener('click', () => {
+            rateModal.classList.add('hidden');
+            // Reset date to today
+            dateCreatedInput.value = '{{ current_ve_time.strftime("%Y-%m-%dT%H:%M") }}';
+        });
+
+        updateRateBtn.addEventListener('click', () => {
+            const newRate = parseFloat(modalRateInput.value);
+            if (!newRate || newRate <= 0) {
+                alert('Por favor, ingrese una tasa de cambio válida.');
+                return;
             }
-            updateAllPricesAndSummary();
+
+            // Use fetch to call the existing update_rate endpoint
+            const formData = new FormData();
+            formData.append('currency', '{{ calculation_currency }}');
+            formData.append('manual_rate', newRate);
+            // Store the original rate in the session via a new endpoint
+            formData.append('store_original_rate', 'true');
+            // CORRECCIÓN: Añadir un indicador explícito de que esta es una llamada AJAX.
+            formData.append('is_ajax', 'true');
+
+            fetch("{{ url_for('main.update_exchange_rate') }}", {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // CORRECCIÓN: No recargar la página. Actualizar la tasa activa y recalcular todo.
+                    activeRate = newRate;
+                    updateAllPricesAndSummary();
+                    rateModal.classList.add('hidden');
+                    // Usar Toastr para notificar al usuario del éxito.
+                    toastr.success(`Tasa de cambio actualizada a ${newRate.toFixed(2)} Bs.`, 'Éxito');
+                } else {
+                    alert('Error al actualizar la tasa: ' + (data.message || 'Error desconocido.'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Ocurrió un error de red al intentar actualizar la tasa.');
+            });
         });
         {% endif %}
 
@@ -790,10 +864,25 @@
         });
 
         // Event listener para actualizar resumen al cambiar el descuento
-        document.getElementById('discount-input').addEventListener('input', function() {
-            updateOrderSummary();
+        const discountEnabledCheckbox = document.getElementById('discount-enabled-checkbox');
+        const discountInput = document.getElementById('discount-input');
+
+        discountEnabledCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                discountInput.disabled = false;
+                discountInput.focus();
+            } else {
+                discountInput.disabled = true;
+                discountInput.value = '0.00';
+                // Disparar el evento 'input' para que se actualice el resumen
+                discountInput.dispatchEvent(new Event('input'));
+            }
         });
 
+        discountInput.addEventListener('input', function() {
+            updateOrderSummary();
+        });
+        
         // Función para calcular y actualizar el resumen de la orden
         function updateOrderSummary() {
             let subtotal = 0;
@@ -806,9 +895,9 @@
                     priceUsd = parseFloat(priceUsdInput.value) || 0;
                 } else {
                     // For non-admin users, use the default price from the selected option
-                    const selectElement = productItem.querySelector('.product-select');
-                    const selectedOption = selectElement.options[selectElement.selectedIndex];
-                    priceUsd = parseFloat(selectedOption.dataset.priceUsd) || 0;
+                    const priceUsdDisplay = productItem.querySelector('.price-usd-display');
+                    // Usamos un atributo de datos para mantener el precio original en USD
+                    priceUsd = parseFloat(priceUsdDisplay.dataset.priceUsd) || 0;
                 }
                 const priceVes = priceUsd * activeRate;
 
@@ -821,8 +910,11 @@
                 subtotal += rowTotal;
             });
 
-            const discountInput = document.getElementById('discount-input');
-            const discountUsd = parseFloat(discountInput.value) || 0;
+            let discountUsd = 0;
+            if (discountEnabledCheckbox.checked) {
+                discountUsd = parseFloat(discountInput.value) || 0;
+            }
+
             const discountVes = discountUsd * activeRate;
 
             const iva = 0; // IVA desactivado
@@ -1024,11 +1116,11 @@
                 finalizeOrderBtn.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Finalizar y Crear Orden';
             }
 
-            const discountUsd = parseFloat(document.getElementById('discount-input').value) || 0;
+            const discountEnabled = document.getElementById('discount-enabled-checkbox').checked;
+            const discountUsd = discountEnabled ? (parseFloat(document.getElementById('discount-input').value) || 0) : 0;
             const paymentMethodSelect = document.getElementById('payment-method');
             const restrictionMessage = document.getElementById('payment-restriction-message');
-
-            if (discountUsd > 0) {
+            if (discountEnabled && discountUsd > 0) {
                 // Restrict payment methods to cash USD
                 restrictionMessage.classList.remove('hidden');
                 for (let option of paymentMethodSelect.options) {
@@ -1085,13 +1177,9 @@
                 modalRemainingAmount.textContent = remaining.toFixed(2) + ' Bs';
                 modalRemainingAmount.classList.remove('text-green-600');
                 modalRemainingAmount.classList.add('text-red-600');
-                // For credit sales, the order can be finalized even with a remaining amount.
-                const selectedSaleType = document.querySelector('input[name="sale_type"]:checked').value;
-                if (selectedSaleType === 'credit' || selectedSaleType === 'reservation') {
-                    finalizeOrderBtn.disabled = false;
-                } else {
-                    finalizeOrderBtn.disabled = true;
-                }
+                // The button is now always enabled to allow showing a message on click.
+                // Validation is moved to the button's click event listener.
+                finalizeOrderBtn.disabled = false;
             } else { // Paid in full or overpaid
                 modalRemainingAmount.textContent = '0.00 Bs';
                 modalRemainingAmount.classList.remove('text-red-600');
@@ -1204,21 +1292,20 @@
             paymentPosGroup.classList.toggle('hidden', newMethod !== 'punto_de_venta');
             paymentCashboxGroup.classList.toggle('hidden', !newMethod.startsWith('efectivo'));
 
-            if (amount && amount > 0) {
-                let newAmount = amount;
-                // From USD to VES
-                if (previousPaymentMethod === 'efectivo_usd' && newMethod !== 'efectivo_usd') {
-                    newAmount = amount * activeRate;
-                } 
-                // From VES to USD
-                else if (previousPaymentMethod !== 'efectivo_usd' && newMethod === 'efectivo_usd') {
-                    if (activeRate > 0) {
-                        newAmount = amount / activeRate;
-                    } else {
-                        newAmount = 0;
-                    }
+            if (newMethod === 'transferencia') {
+                if (selectedClient && selectedClient.phone) {
+                    paymentSenderIdInput.value = selectedClient.phone;
+                } else {
+                    paymentSenderIdInput.value = '';
                 }
-                paymentAmountInput.value = newAmount.toFixed(2);
+            }
+
+            if (amount && amount > 0) {
+                // CORRECCIÓN: Se elimina la conversión automática de montos en el frontend.
+                // Esto era una fuente de errores cuando se usaba una tasa especial.
+                // Ahora, simplemente se mantiene el valor numérico y se deja que el usuario ajuste si es necesario,
+                // o se recalcula con `updatePaymentAmountInput`.
+                updatePaymentAmountInput();
             } else {
                 // If no amount is entered, use the default behavior of filling with remaining
                 updatePaymentAmountInput();
@@ -1256,8 +1343,89 @@
 
 
         finalizeOrderBtn.addEventListener('click', function() {
-            paymentsDataInput.value = JSON.stringify(payments);
-            document.getElementById('order-form').submit();
+            const originalButtonHtml = this.innerHTML;
+            const button = this;
+
+            // Disable button and show verification message
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Verificando stock...';
+
+            // --- Payment validation logic ---
+            const selectedSaleType = document.querySelector('input[name="sale_type"]:checked').value;
+            const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
+            const remaining = orderTotal - totalPaid;
+
+            if (payments.length === 0) {
+                if (selectedSaleType === 'regular') {
+                    alert('No ha agregado ningún pago. Para una Venta Regular, debe registrar el pago completo.');
+                    button.disabled = false; // Re-enable
+                    button.innerHTML = originalButtonHtml;
+                    return;
+                } else { 
+                    if (!confirm('No ha agregado ningún pago inicial. ¿Desea crear la orden con el saldo total pendiente?')) {
+                        button.disabled = false; // Re-enable
+                        button.innerHTML = originalButtonHtml;
+                        return;
+                    }
+                }
+            } 
+            else if (selectedSaleType === 'regular' && remaining > 0.01) {
+                alert('El monto pagado no cubre el total de la orden. Para una Venta Regular, debe registrar el pago completo.');
+                button.disabled = false; // Re-enable
+                button.innerHTML = originalButtonHtml;
+                return;
+            }
+
+            // --- Real-time stock check ---
+            const productItems = [];
+            document.querySelectorAll('tr.product-item').forEach(row => {
+                const productId = row.querySelector('.product-select').value;
+                const quantity = parseInt(row.querySelector('.quantity-input').value, 10);
+                if (productId && quantity > 0) {
+                    productItems.push({ id: productId, quantity: quantity });
+                }
+            });
+
+            if (productItems.length === 0) {
+                alert('No hay productos en la orden.');
+                button.disabled = false; // Re-enable
+                button.innerHTML = originalButtonHtml;
+                return;
+            }
+
+            fetch('/api/check_stock', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ products: productItems })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Stock is OK, proceed with submission
+                    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Procesando...';
+                    paymentsDataInput.value = JSON.stringify(payments);
+                    document.getElementById('order-form').submit();
+                } else {
+                    // Stock issue found
+                    let errorMessage = 'No se puede procesar la orden por falta de stock:\n\n';
+                    if (data.errors) {
+                        data.errors.forEach(err => {
+                            errorMessage += `• ${err.name}: Solicitado: ${err.requested}, Disponible: ${err.stock}\n`;
+                        });
+                    }
+                    alert(errorMessage);
+                    button.disabled = false; // Re-enable
+                    button.innerHTML = originalButtonHtml;
+                }
+            })
+            .catch(error => {
+                console.error('Error checking stock:', error);
+                alert('Ocurrió un error al verificar el stock. Por favor, intente de nuevo.');
+                button.disabled = false; // Re-enable
+                button.innerHTML = originalButtonHtml;
+            });
         });
 
         // Disparar el evento change al cargar para establecer el estado inicial correcto

@@ -63,6 +63,26 @@ def create_initial_users(app):
             db.session.commit()
             logger.info(f"Added {len(users_to_add)} new users to the database.")
 
+def create_order_sequences(app):
+    """Creates the order ID sequences if they don't exist (PostgreSQL only)."""
+    with app.app_context():
+        from sqlalchemy import text
+        # This check is important for environments that might not be PostgreSQL
+        if db.engine.dialect.name != 'postgresql':
+            logger.info("Skipping sequence creation for non-PostgreSQL database.")
+            return
+        try:
+            logger.info("Verifying or creating order ID sequences for PostgreSQL...")
+            db.session.execute(text("CREATE SEQUENCE IF NOT EXISTS order_contado_seq START 180000000"))
+            db.session.execute(text("CREATE SEQUENCE IF NOT EXISTS order_credito_seq START 280000000"))
+            db.session.execute(text("CREATE SEQUENCE IF NOT EXISTS order_apartado_seq START 580000000"))
+            db.session.commit()
+            logger.info("Order ID sequences are ready.")
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to create order ID sequences: {e}")
+            logger.error("This feature is only compatible with PostgreSQL. The app may not function correctly.")
+
 def create_app():
     """Application Factory Function"""
     app = Flask(__name__)
@@ -121,6 +141,10 @@ def create_app():
         from .cli_commands import register_commands
         register_commands(app)
 
+        # Registrar manejadores de errores
+        from .error_handlers import register_error_handlers
+        register_error_handlers(app)
+
         # Custom Jinja filter for Venezuela timezone formatting
         @app.template_filter('ve_datetime')
         def ve_datetime_filter(dt, fmt='%d/%m/%Y %H:%M:%S'):
@@ -150,5 +174,8 @@ def create_app():
 
     # --- Create initial users if they don't exist ---
     create_initial_users(app)
+
+    # --- Create order sequences if they don't exist (for PostgreSQL) ---
+    create_order_sequences(app)
 
     return app

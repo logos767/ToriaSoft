@@ -81,6 +81,7 @@ class Order(db.Model):
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=False)
     client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
     date_created = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
+    order_type = db.Column(db.String(20), nullable=False, default='regular')
     status = db.Column(db.String(20), nullable=False, default='Pendiente')
     total_amount = db.Column(db.Float, nullable=False, default=0.0)
     discount_usd = db.Column(db.Float, nullable=True, default=0.0)

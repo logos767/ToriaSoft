@@ -16,9 +16,13 @@
                 <p><strong>Cliente:</strong> <a href="{{ url_for('main.client_detail', client_id=order.client.id) }}" class="text-blue-600 hover:underline">{{ order.client.name }}</a></p>
                 <p><strong>Cédula/RIF:</strong> {{ order.client.cedula_rif or 'N/A' }}</p>
                 <p><strong>Fecha Apartado:</strong> {{ order.date_created|ve_datetime(fmt='%d/%m/%Y %H:%M') }}</p>
-                <p><strong>Estado:</strong> 
-                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {% if order.status == 'Apartado' %}bg-yellow-100 text-yellow-800{% elif order.status == 'Pagada' %}bg-green-100 text-green-800{% else %}bg-blue-100 text-blue-800{% endif %}">
-                        {{ order.status }}
+                <p><strong>Estado:</strong>
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                        {% if order.status == 'Apartado' %}bg-yellow-100 text-yellow-800
+                        {% elif order.status == 'Pagado' %}bg-green-100 text-green-800
+                        {% elif order.status == 'Entregado' %}bg-blue-100 text-blue-800
+                        {% else %}bg-gray-100 text-gray-800{% endif %}">
+                        {{ 'Pendiente' if order.status == 'Apartado' else order.status }}
                     </span>
                 </p>
             </div>
@@ -45,14 +49,18 @@
         <div class="flex items-center space-x-4">
             {% if order.due_amount > 0.01 %}
             <button type="button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg add-payment-button"
-                    data-order-id="{{ order.id }}" 
+                    data-order-id="{{ order.id }}"
                     data-due-amount="{{ order.due_amount }}"
                     title="Registrar Abono">
                 <i class="fas fa-hand-holding-usd mr-2"></i>Registrar Abono
             </button>
             {% endif %}
 
-            {% if order.due_amount <= 0.01 %}
+            {% if order.status == 'Entregado' %}
+            <span class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 font-bold">
+                <i class="fas fa-check-circle mr-2 text-green-500"></i>Entregado
+            </span>
+            {% elif order.due_amount <= 0.01 %}
             <form method="POST" action="{{ url_for('main.reservation_detail', order_id=order.id) }}" onsubmit="return confirm('¿Está seguro que desea marcar este apartado como entregado? Esta acción no se puede deshacer.');">
                 <input type="hidden" name="action" value="deliver">
                 <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">

@@ -28,7 +28,7 @@ from .models import User, Product, Client, Provider, Order, OrderItem, Purchase,
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
-from reportlab.graphics.barcode import code128
+from reportlab.graphics.barcode import createBarcodeDrawing
 from reportlab.graphics import renderPM
 from reportlab.graphics.shapes import Drawing
 
@@ -1127,7 +1127,8 @@ def new_reception():
                     document_id=reception.id,
                     document_type='Recepción de Compra',
                     related_party_id=purchase.provider_id,
-                    related_party_type='Proveedor'
+                    related_party_type='Proveedor',
+                    date=reception_date # Asegurar que el movimiento tenga la misma fecha que la recepción
                 )
                 db.session.add(movement)
 
@@ -1190,7 +1191,7 @@ def order_list():
     query = Order.query.options(
         joinedload(Order.client),
         subqueryload(Order.payments)
-    ).join(Client).order_by(Order.id.desc())
+    ).join(Client).order_by(Order.date_created.desc())
 
     # Apply search filter (Order ID or Client Name)
     if search_term:
@@ -1271,12 +1272,10 @@ def new_order():
         product_ids = request.form.getlist('product_id[]')
         quantities = request.form.getlist('quantity[]')
         prices_usd = request.form.getlist('price_usd[]')
-        payments_data_json = request.form.get('payments_data') # This will hold the JSON of payments
-        sale_type = request.form.get('sale_type', 'regular') # 'regular', 'credit', 'reservation'
-        discount_usd = float(request.form.get('discount_usd', 0.0))
+        payments_data_json = request.form.get('payments_data')
+        sale_type = request.form.get('sale_type', 'regular')
         payments_data = json.loads(payments_data_json) if payments_data_json else []
         
-        # Determine which exchange rate to use for this transaction
         rate_for_order = current_rate
         if current_user.role == 'administrador' and special_rate_str:
             try:
@@ -1287,8 +1286,10 @@ def new_order():
             except (ValueError, TypeError):
                 flash('La tasa de cambio especial no es un número válido. Usando tasa actual.', 'warning')
 
+        discount_enabled = request.form.get('discount_enabled') == 'on'
+        discount_usd = float(request.form.get('discount_usd', 0.0)) if discount_enabled else 0.0
+
         try:
-            # --- NEW: Get next order ID based on sale type ---
             sequence_map = {
                 'regular': 'order_contado_seq',
                 'credit': 'order_credito_seq',
@@ -1298,127 +1299,108 @@ def new_order():
             if not sequence_name:
                 raise ValueError("Tipo de venta no válido.")
             
-            # Using text() to execute raw SQL for sequence
-            next_id_query = text(f"SELECT nextval('{sequence_name}')")
-            next_id = db.session.execute(next_id_query).scalar()
-            # --- END NEW ---
+            next_id = db.session.execute(text(f"SELECT nextval('{sequence_name}')")).scalar()
 
-            # Validar que el total pagado cubra el total de la orden
-            order_total_ves_before_discount = 0
-            for q, p_usd in zip(quantities, prices_usd):
-                order_total_ves_before_discount += (int(q) * float(p_usd) * rate_for_order)
-            # IVA desactivado. La línea de cálculo de IVA se ha eliminado.
-
+            order_total_ves_before_discount = sum(int(q) * float(p_usd) * rate_for_order for q, p_usd in zip(quantities, prices_usd))
             discount_ves = discount_usd * rate_for_order
             final_order_total_ves = order_total_ves_before_discount - discount_ves
 
-            paid_total_ves = sum(p['amount_ves_equivalent'] for p in payments_data)
+            paid_total_ves = 0
+            for p in payments_data:
+                if p['currency_paid'] == 'USD':
+                    p['amount_ves_equivalent'] = float(p['amount_paid']) * rate_for_order
+                else:
+                    p['amount_ves_equivalent'] = float(p['amount_paid'])
+                paid_total_ves += float(p['amount_ves_equivalent'])
 
-            if sale_type == 'regular':
-                if paid_total_ves < final_order_total_ves - 0.01: # Permitir pequeñas diferencias de redondeo
-                    raise ValueError(f"El monto pagado (Bs. {paid_total_ves:.2f}) es menor que el total de la orden con descuento (Bs. {final_order_total_ves:.2f}).")
+            if sale_type == 'regular' and paid_total_ves < final_order_total_ves - 0.01:
+                raise ValueError(f"El monto pagado (Bs. {paid_total_ves:.2f}) es menor que el total de la orden (Bs. {final_order_total_ves:.2f}).")
 
-            new_order = Order(id=next_id, client_id=client_id, status='Pendiente', total_amount=0, discount_usd=discount_usd, exchange_rate_at_sale=rate_for_order)
-
-            # Handle custom date
+            order_date = get_current_time_ve()
             if date_created_str:
                 try:
-                    # The input type="datetime-local" sends a string like '2024-07-25T15:30'
-                    # We need to parse it and make it timezone-aware.
                     naive_dt = datetime.strptime(date_created_str, '%Y-%m-%dT%H:%M')
-                    aware_dt = VE_TIMEZONE.localize(naive_dt)
-                    new_order.date_created = aware_dt
+                    order_date = VE_TIMEZONE.localize(naive_dt)
                 except (ValueError, TypeError):
-                    current_app.logger.warning(f"Invalid date_created format received: '{date_created_str}'. Falling back to default.")
-                    # Let the default value from the model be used.
-                    pass
+                    current_app.logger.warning(f"Invalid date_created format: '{date_created_str}'. Falling back.")
 
+            # --- Performance Optimization: Pre-fetch all products ---
+            unique_product_ids = [pid for pid in product_ids if pid]
+            products_from_db = Product.query.filter(Product.id.in_(unique_product_ids)).all()
+            product_map = {str(p.id): p for p in products_from_db}
+
+            # --- Stock validation before creating the order ---
+            for p_id, q in zip(product_ids, quantities):
+                quantity = int(q)
+                product = product_map.get(p_id)
+                if not product or quantity <= 0:
+                    continue
+                if product.stock < quantity:
+                    raise ValueError(f'Stock insuficiente para "{product.name}". Solicitado: {quantity}, Disponible: {product.stock}.')
+
+            new_order = Order(
+                id=next_id, client_id=client_id, status='Pendiente', total_amount=0, 
+                discount_usd=discount_usd, exchange_rate_at_sale=rate_for_order,
+                date_created=order_date, order_type=sale_type
+            )
             db.session.add(new_order)
             db.session.flush()
 
             total_amount = 0
             for p_id, q, p_usd in zip(product_ids, quantities, prices_usd):
-                product = Product.query.get(p_id)
+                product = product_map.get(p_id)
                 quantity = int(q)
-                
                 if not product or quantity <= 0:
                     continue
-
-                if product.stock < quantity:
-                    current_app.logger.warning(f"Intento de venta con stock insuficiente - Producto: {product.name} (ID: {product.id}), Stock disponible: {product.stock}, Cantidad solicitada: {quantity}")
-                    raise ValueError(f'Stock insuficiente para el producto "{product.name}". Stock disponible: {product.stock}, Cantidad solicitada: {quantity}. Por favor, ajuste la cantidad o contacte al administrador para reponer inventario.')
 
                 price_ves = float(p_usd) * rate_for_order
                 cost_ves = product.cost_usd * rate_for_order if product.cost_usd else 0
                 
-                item = OrderItem(
-                    order_id=new_order.id,
-                    product_id=p_id,
-                    quantity=quantity,
-                    price=price_ves,
-                    cost_at_sale_ves=cost_ves
-                )
+                item = OrderItem(order_id=new_order.id, product_id=p_id, quantity=quantity, price=price_ves, cost_at_sale_ves=cost_ves)
                 db.session.add(item)
                 
                 product.stock -= quantity
-                movement = Movement(
-                    product_id=product.id,
-                    type='Salida',
-                    quantity=quantity,
-                    document_id=new_order.id,
-                    document_type='Orden de Venta',
-                    related_party_id=new_order.client_id,
-                    related_party_type='Cliente'
-                )
+                movement = Movement(product_id=product.id, type='Salida', quantity=quantity, document_id=new_order.id, document_type='Orden de Venta', related_party_id=new_order.client_id, related_party_type='Cliente', date=order_date)
                 db.session.add(movement)
                 
                 total_amount += price_ves * quantity
 
-            new_order.total_amount = total_amount - discount_ves # Guardar el total con descuento
-            db.session.flush() # Flush to allow due_amount property to calculate correctly
+            new_order.total_amount = total_amount - discount_ves
+            db.session.flush()
 
-            # Set order status
-            if sale_type == 'reservation':
-                new_order.status = 'Apartado'
-            elif sale_type == 'credit':
-                # Para ventas a crédito, el estado es siempre 'Crédito'.
-                # El estado del pago se determina por el monto adeudado (due_amount).
-                new_order.status = 'Crédito'
-            else: # 'regular'
-                # For regular sales, we already validated it's paid in full.
-                new_order.status = 'Pagada'
+            if sale_type == 'reservation': new_order.status = 'Apartado'
+            elif sale_type == 'credit': new_order.status = 'Crédito'
+            else: new_order.status = 'Pagada'
 
-            # Procesar pagos
+            # --- Performance Optimization: Pre-fetch all financial accounts ---
+            bank_ids = {p.get('bank_id') for p in payments_data if p.get('bank_id')}
+            pos_ids = {p.get('pos_id') for p in payments_data if p.get('pos_id')}
+            cash_box_ids = {p.get('cash_box_id') for p in payments_data if p.get('cash_box_id')}
+
+            banks_map = {b.id: b for b in Bank.query.filter(Bank.id.in_(bank_ids))}
+            pos_map = {p.id: p for p in PointOfSale.query.filter(PointOfSale.id.in_(pos_ids)).options(joinedload(PointOfSale.bank))}
+            cash_box_map = {c.id: c for c in CashBox.query.filter(CashBox.id.in_(cash_box_ids))}
+            # --- End Optimization ---
+
             for payment_info in payments_data:
                 payment = Payment(
-                    order_id=new_order.id,
-                    amount_paid=payment_info['amount_paid'],
-                    currency_paid=payment_info['currency_paid'],
-                    amount_ves_equivalent=payment_info['amount_ves_equivalent'],
-                    method=payment_info['method'],
-                    reference=payment_info.get('reference'),
-                    issuing_bank=payment_info.get('issuing_bank'),
-                    sender_id=payment_info.get('sender_id'),
-                    bank_id=payment_info.get('bank_id'),
-                    pos_id=payment_info.get('pos_id'),
-                    cash_box_id=payment_info.get('cash_box_id')
+                    order_id=new_order.id, amount_paid=payment_info['amount_paid'], currency_paid=payment_info['currency_paid'],
+                    amount_ves_equivalent=payment_info['amount_ves_equivalent'], method=payment_info['method'],
+                    reference=payment_info.get('reference'), issuing_bank=payment_info.get('issuing_bank'),
+                    sender_id=payment_info.get('sender_id'), bank_id=payment_info.get('bank_id'),
+                    pos_id=payment_info.get('pos_id'), cash_box_id=payment_info.get('cash_box_id')
                 )
                 db.session.add(payment)
 
-                # Actualizar saldos
-                if payment.bank_id:
-                    bank = Bank.query.get(payment.bank_id)
-                    if bank: bank.balance += payment.amount_ves_equivalent
-                elif payment.pos_id:
-                    pos = PointOfSale.query.get(payment.pos_id)
-                    if pos and pos.bank: pos.bank.balance += payment.amount_ves_equivalent
-                elif payment.cash_box_id:
-                    cash_box = CashBox.query.get(payment.cash_box_id)
-                    if cash_box:
-                        if payment.currency_paid == 'VES':
-                            cash_box.balance_ves += payment.amount_paid
-                        elif payment.currency_paid == 'USD':
-                            cash_box.balance_usd += payment.amount_paid
+                if payment.bank_id and payment.bank_id in banks_map:
+                    banks_map[payment.bank_id].balance += payment.amount_ves_equivalent
+                elif payment.pos_id and payment.pos_id in pos_map:
+                    pos = pos_map[payment.pos_id]
+                    if pos.bank: pos.bank.balance += payment.amount_ves_equivalent
+                elif payment.cash_box_id and payment.cash_box_id in cash_box_map:
+                    cash_box = cash_box_map[payment.cash_box_id]
+                    if payment.currency_paid == 'VES': cash_box.balance_ves += payment.amount_paid
+                    elif payment.currency_paid == 'USD': cash_box.balance_usd += payment.amount_paid
 
             notification_message = f"Nueva Nota de Entrega #{new_order.id:09d} creada."
             notification_link = url_for('main.order_detail', order_id=new_order.id)
@@ -1434,9 +1416,12 @@ def new_order():
         except (ValueError, IntegrityError) as e:
             db.session.rollback()
             flash(f'Error al crear la orden: {str(e)}', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error inesperado al crear la orden: {e}", exc_info=True)
+            flash(f'Ocurrió un error inesperado al crear la orden. Por favor, contacta al administrador.', 'danger')
             return redirect(url_for('main.new_order'))
 
-    # Obtener la última orden creada para ofrecer la opción de reimprimir
     last_order = Order.query.order_by(Order.id.desc()).first()
     current_ve_time = get_current_time_ve()
 
@@ -1456,16 +1441,18 @@ def new_order():
 @login_required
 def reservation_list():
     """Muestra la lista de productos apartados."""
-    # Muestra órdenes que están en estado 'Apartado' o 'Pagada' (listas para entregar)
-    reservations = Order.query.filter(Order.status.in_(['Apartado', 'Pagada'])).order_by(Order.date_created.desc()).all()
-    return render_template('apartados/lista.html', title='Lista de Apartados', reservations=reservations)
+    # Muestra un historial de todas las órdenes que se crearon como 'apartado',
+    # independientemente de su estado actual (Apartado, Pagada, Completada).
+    # Esto permite ver tanto los apartados activos como los ya finalizados.
+    reservations = Order.query.filter_by(order_type='reservation').order_by(Order.date_created.desc()).all()
+    return render_template('apartados/lista.html', title='Historial de Apartados', reservations=reservations)
 
 @routes_blueprint.route('/apartados/detalle/<int:order_id>', methods=['GET', 'POST'])
 @login_required
 def reservation_detail(order_id):
     """Muestra el detalle de un apartado, permite agregar abonos y marcar como entregado."""
-    order = Order.query.get_or_404(order_id)
-    if order.status not in ['Apartado', 'Pagada']:
+    order = Order.query.filter_by(id=order_id, order_type='reservation').first_or_404()
+    if not order:
         flash('Esta orden no es un apartado válido.', 'warning')
         return redirect(url_for('main.reservation_list'))
 
@@ -1474,13 +1461,15 @@ def reservation_detail(order_id):
         
         # Acción para marcar como entregado
         if action == 'deliver':
-            if order.due_amount <= 0.01:
-                order.status = 'Completada'
+            if order.status == 'Entregado':
+                flash('Este apartado ya fue entregado.', 'info')
+            elif order.due_amount <= 0.01:
+                order.status = 'Entregado'
                 db.session.commit()
-                flash('Apartado marcado como entregado y completado.', 'success')
+                flash('Apartado marcado como entregado.', 'success')
             else:
                 flash('El apartado debe estar totalmente pagado para poder ser entregado.', 'warning')
-            return redirect(url_for('main.reservation_list'))
+            return redirect(url_for('main.reservation_detail', order_id=order.id))
 
         # Acción para registrar un abono (pago)
         payment_data_json = request.form.get('payments_data')
@@ -1512,8 +1501,8 @@ def reservation_detail(order_id):
                             cash_box.balance_usd += payment.amount_paid
 
                 db.session.flush()
-                if order.due_amount <= 0.01:
-                    order.status = 'Pagada'
+                if order.due_amount <= 0.01 and order.status != 'Entregado':
+                    order.status = 'Pagado'
                 db.session.commit()
                 flash('Abono registrado exitosamente.', 'success')
             except Exception as e:
@@ -2286,28 +2275,49 @@ def cost_structure_config():
 @routes_blueprint.route('/costos/update_rate', methods=['POST'])
 @login_required
 def update_exchange_rate():
+    """
+    Updates an exchange rate. Can be called from the settings page (form redirect)
+    or from the new order modal (AJAX).
+    """
     if current_user.role != 'administrador':
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.dashboard'))
+        # CORRECCIÓN: La llamada fetch desde el modal no es JSON, pero es AJAX.
+        # Usamos 'X-Requested-With' o un campo del formulario para detectar la llamada AJAX.
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.form.get('is_ajax')
+        if is_ajax:
+            return jsonify(success=False, message='Acceso denegado.'), 403
+        return redirect(url_for('main.new_order'))
 
     try:
         currency = request.form.get('currency')
         manual_rate = float(request.form.get('manual_rate'))
+        store_original = request.form.get('store_original_rate') == 'true'
+
         if manual_rate > 0 and currency in ['USD', 'EUR']:
             exchange_rate_entry = ExchangeRate.query.filter_by(currency=currency).first()
             if exchange_rate_entry:
+                if store_original:
+                    session['original_exchange_rate'] = exchange_rate_entry.rate
+                    session['original_rate_currency'] = currency
                 exchange_rate_entry.rate = manual_rate
                 exchange_rate_entry.date_updated = get_current_time_ve()
             else:
                 exchange_rate_entry = ExchangeRate(currency=currency, rate=manual_rate)
                 db.session.add(exchange_rate_entry)
             db.session.commit()
-            flash('Tasa de cambio actualizada manualmente.', 'success')
+            
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.form.get('is_ajax') == 'true':
+                return jsonify(success=True, message='Tasa de cambio actualizada.')
+            else:
+                flash('Tasa de cambio actualizada manualmente.', 'success')
         else:
-            flash('La tasa de cambio debe ser un número positivo.', 'danger')
-    except (ValueError, TypeError):
-        flash('Valor de tasa de cambio inválido.', 'danger')
+            raise ValueError('La tasa de cambio debe ser un número positivo.')
+    except (ValueError, TypeError) as err:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.form.get('is_ajax') == 'true':
+            return jsonify(success=False, message=str(err)), 400
+        
+        flash(f'Valor de tasa de cambio inválido: {err}', 'danger')
 
+    # Default redirect for non-AJAX calls (e.g., from config page)
     return redirect(url_for('main.cost_structure_config'))
 
 
@@ -2441,7 +2451,8 @@ def print_delivery_note(order_id):
         if not order_id_str:
             return None
         try:
-            barcode = code128.Code128(order_id_str, barHeight=10*mm, barWidth=0.3*mm)
+            from reportlab.graphics.barcode import createBarcodeDrawing
+            barcode = createBarcodeDrawing('Code128', value=order_id_str, barHeight=10*mm, barWidth=0.3*mm)
             drawing = Drawing(barcode.width, barcode.height)
             drawing.add(barcode)
             buffer = io.BytesIO()
@@ -2479,7 +2490,8 @@ def print_reservation_receipt(order_id):
         if not order_id_str:
             return None
         try:
-            barcode = code128.Code128(order_id_str, barHeight=10*mm, barWidth=0.3*mm)
+            from reportlab.graphics.barcode import createBarcodeDrawing
+            barcode = createBarcodeDrawing('Code128', value=order_id_str, barHeight=10*mm, barWidth=0.3*mm)
             drawing = Drawing(barcode.width, barcode.height)
             drawing.add(barcode)
             buffer = io.BytesIO()
@@ -2523,6 +2535,55 @@ def api_exchange_rate():
         return jsonify(rate=rate)
     else:
         return jsonify(error="No se pudo obtener la tasa de cambio"), 500
+
+@routes_blueprint.route('/api/check_stock', methods=['POST'])
+@login_required
+def api_check_stock():
+    """
+    API endpoint to check stock for a list of products.
+    Expects JSON: {'products': [{'id': <int>, 'quantity': <int>}]}
+    """
+    data = request.get_json()
+    if not data or 'products' not in data:
+        return jsonify({'success': False, 'error': 'Invalid request format.'}), 400
+
+    product_requests = data['products']
+    product_ids = [p.get('id') for p in product_requests if p.get('id')]
+
+    if not product_ids:
+        return jsonify({'success': True}) # No products to check
+
+    try:
+        # Fetch all products in one query
+        products_in_db = Product.query.filter(Product.id.in_(product_ids)).all()
+        product_stock_map = {p.id: p.stock for p in products_in_db}
+
+        errors = []
+        for req in product_requests:
+            req_id = req.get('id')
+            req_qty = req.get('quantity')
+            
+            if not req_id or not isinstance(req_qty, int) or req_qty <= 0:
+                continue
+
+            current_stock = product_stock_map.get(int(req_id), 0)
+            if current_stock < req_qty:
+                product_name = next((p.name for p in products_in_db if p.id == int(req_id)), 'Desconocido')
+                errors.append({
+                    'id': req_id,
+                    'name': product_name,
+                    'stock': current_stock,
+                    'requested': req_qty
+                })
+
+        if errors:
+            return jsonify({'success': False, 'errors': errors})
+        else:
+            return jsonify({'success': True})
+
+    except Exception as e:
+        current_app.logger.error(f"Error in /api/check_stock: {e}")
+        return jsonify({'success': False, 'error': 'Internal server error.'}), 500
 
 @routes_blueprint.route('/api/search_clients')
 @login_required
