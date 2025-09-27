@@ -36,20 +36,26 @@ def create_initial_users(app):
         users_to_add = []
 
         # Admin user
-        if not User.query.filter_by(username='admin').first():
+        if not User.query.filter_by(username='contastij').first():
             logger.info("Creating default admin user...")
-            hashed_password = bcrypt.generate_password_hash('admin123').decode('utf-8')
-            users_to_add.append(User(username='admin', password=hashed_password, role='administrador'))
+            hashed_password = bcrypt.generate_password_hash('admin1807').decode('utf-8')
+            users_to_add.append(User(username='contastij', password=hashed_password, role='administrador'))
 
         # Additional admin user
-        if not User.query.filter_by(username='Luis_Marin').first():
-            logger.info("Creating additional admin user Luis_Marin...")
-            hashed_password = bcrypt.generate_password_hash('Luis123').decode('utf-8')
-            users_to_add.append(User(username='Luis_Marin', password=hashed_password, role='administrador'))
+        if not User.query.filter_by(username='luismarin').first():
+            logger.info("Creating additional admin user luismarin...")
+            hashed_password = bcrypt.generate_password_hash('7671010').decode('utf-8')
+            users_to_add.append(User(username='luismarin', password=hashed_password, role='administrador'))
+
+        # Additional admin user
+        if not User.query.filter_by(username='emarquez').first():
+            logger.info("Creating additional admin user emarquez...")
+            hashed_password = bcrypt.generate_password_hash('admin1208').decode('utf-8')
+            users_to_add.append(User(username='emarquez', password=hashed_password, role='administrador'))
 
         # Salesperson users
         sales_users_data = [
-            {'username': 'vendedora1', 'password': 'Vendedora123', 'role': 'empleado'},
+            {'username': 'paula', 'password': 'paula123', 'role': 'empleado'},
             {'username': 'vendedora2', 'password': 'Vendedora456', 'role': 'empleado'}
         ]
         for user_data in sales_users_data:
