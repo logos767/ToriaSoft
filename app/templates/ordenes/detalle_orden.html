@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto p-4 max-w-4xl">
+<div class="container mx-auto">
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-shopping-cart mr-2"></i>Detalles de Orden #{{ order.id|order_id_format }}</h1>
         <div class="flex space-x-2">
@@ -19,78 +19,149 @@
     </div>
 
     <div class="bg-white p-8 rounded-lg shadow-md">
-        <div class="mb-6 border-b pb-4">
-            <h2 class="text-xl font-semibold text-gray-700">Información General</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 text-gray-600">
-                <p><strong>Cliente:</strong> {{ order.client.name }}</p>
-                <p><strong>Fecha:</strong> {{ order.date_created|ve_datetime }}</p>
-                <p><strong>Estado:</strong> {{ order.status }}</p>
-            </div>
-            
-            {% if order.client.cedula_rif or order.client.phone or order.client.address %}
-            <div class="mt-4 pt-4 border-t">
-                <h3 class="text-lg font-semibold text-gray-700 mb-2">Información del Cliente</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-600">
-                    {% if order.client.cedula_rif %}
-                    <p><strong>Cédula/RIF:</strong> {{ order.client.cedula_rif }}</p>
-                    {% endif %}
-                    {% if order.client.phone %}
-                    <p><strong>Teléfono:</strong> {{ order.client.phone }}</p>
-                    {% endif %}
-                    {% if order.client.address %}
-                    <p><strong>Dirección:</strong> {{ order.client.address }}</p>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
+        <div class="flex justify-end mb-4">
+            <p class="text-gray-600"><strong>Fecha de la Orden:</strong> {{ order.date_created|ve_datetime }}</p>
         </div>
 
-        <div>
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">Productos en la Orden</h2>
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
-                            <th class="px-6 py-3 text-end text-xs font-medium text-gray-500 uppercase tracking-wider">Precio Unitario (Bs)</th>
-                            <th class="px-6 py-3 text-end text-xs font-medium text-gray-500 uppercase tracking-wider">Precio Total (Bs)</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        {% for item in order.items %}
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ item.product.name }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ item.quantity }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-end text-gray-500">Bs. {{ "%.2f" % item.price }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-end font-bold text-green-700">Bs. {{ "%.2f" % (item.price * item.quantity) }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Totales -->
-            <div class="mt-6 bg-gray-50 p-4 rounded-lg">
-                <div class="flex justify-end">
-                    <div class="w-1/3">
-                        <div class="flex justify-between py-2">
-                            <span class="font-semibold">Subtotal:</span>
-                            <span>Bs. {{ "%.2f" % subtotal }}</span>
-                        </div>
-                        {% if order.discount_usd > 0 %}
-                        <div class="flex justify-between py-2">
-                            <span class="font-semibold">Descuento:</span>
-                            <span class="text-red-600">- Bs. {{ "%.2f"|format(subtotal - order.total_amount) }}</span>
-                        </div>
+        <!-- Main two-column layout -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            <!-- LEFT COLUMN: Client and Order Info -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Client Info -->
+                <div class="border p-4 rounded-lg bg-gray-50 shadow-lg">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Información del Cliente</h2>
+                    <div class="space-y-2 text-sm text-gray-600">
+                        <p><strong>Nombre: </strong>{{ order.client.name }}</p>
+                        {% if order.client.cedula_rif %}
+                        <p><strong>Cédula/RIF: </strong>{{ order.client.cedula_rif }}</p>
                         {% endif %}
-                        <div class="flex justify-between py-2 hidden">
-                            <span class="font-semibold">IVA (16%):</span>
-                            <span>Bs. {{ "%.2f" % iva }}</span>
-                        </div>
-                        <div class="flex justify-between py-2 border-t-2 border-gray-400 pt-2">
-                            <span class="font-bold text-lg">Total:</span>
-                            <span class="font-bold text-lg text-green-700">Bs. {{ "%.2f"|format(order.total_amount) }}</span>
+                        {% if order.client.phone %}
+                        <p><strong>Teléfono: </strong>{{ order.client.phone }}</p>
+                        {% endif %}
+                        {% if order.client.address %}
+                        <p><strong>Dirección: </strong>{{ order.client.address }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <!-- Order Info -->
+                <div class="border p-4 rounded-lg shadow-lg">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Detalles de la Orden</h2>
+                    <div class="space-y-2 text-sm text-gray-600">
+                        <p><strong>Estado:</strong> <span class="font-semibold">{{ order.status }}</span></p>
+                        <p><strong>Tipo:</strong> <span class="font-semibold">{{ order.order_type.replace('regular', 'Venta Regular').replace('credit', 'Crédito').replace('reservation', 'Apartado')|title }}</span></p>
+                        {% if order.order_type == 'reservation' %}
+                            <a href="{{ url_for('main.reservation_detail', order_id=order.id) }}" class="ml-4 text-sm text-blue-600 hover:underline" title="Ir a la gestión del apartado">
+                                <i class="fas fa-box-open mr-1"></i>Ver Apartado
+                            </a>
+                        {% endif %}
+                        <p><strong>Tasa de Cambio:</strong> <span class="font-semibold">Bs. {{ "%.2f"|format(order.exchange_rate_at_sale) }}</span></p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- RIGHT COLUMN: Products and Financials -->
+            <div class="lg:col-span-3 space-y-8">
+                <!-- Products -->
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">Productos en la Orden</h2>
+                    <div class="overflow-x-auto border rounded-lg shadow-lg">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-200">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Códigos</th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Precio Unit. (Bs)</th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total (Bs)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                {% for item in order.items %}
+                                <tr>
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ item.product.name }}</td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <div><strong>Prod:</strong> {{ item.product.codigo_producto or 'N/A' }}</div>
+                                        <div><strong>Barra:</strong> {{ item.product.barcode }}</div>
+                                    </td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-500">{{ item.quantity }}</td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-500">Bs. {{ "%.2f" % item.price }}</td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-center font-bold text-gray-800">Bs. {{ "%.2f" % (item.price * item.quantity) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Payments and Financial Summary -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- Payments Column -->
+                    <div class="bg-gray-50 p-4 rounded-lg self-start shadow-lg">
+                        <h2 class="text-xl font-semibold text-gray-700 mb-4">Formas de Pago</h2>
+                        {% if order.payments %}
+                            <div class="space-y-3">
+                            {% for payment in order.payments %}
+                                <div class="bg-gray-50 p-3 rounded-lg border">
+                                    <div class="flex justify-between items-center">
+                                        <span class="font-semibold text-gray-800">{{ payment.method.replace('_', ' ')|title }}</span>
+                                        <span class="font-bold {% if payment.currency_paid == 'USD' %}text-green-700{% else %}text-blue-700{% endif %}">
+                                            {% if payment.currency_paid == 'USD' %}${% elif payment.currency_paid == 'EUR' %}€{% else %}Bs.{% endif %}
+                                            {{ "%.2f"|format(payment.amount_paid) }}
+                                        </span>
+                                    </div>
+                                    <div class="text-xs text-gray-500 mt-1">
+                                        <p>Fecha: {{ payment.date|ve_datetime }}</p>
+                                        {% if payment.reference %}<p>Referencia: {{ payment.reference }}</p>{% endif %}
+                                        {% if payment.issuing_bank %}<p>Banco Emisor: {{ payment.issuing_bank }}</p>{% endif %}
+                                        {% if payment.sender_id %}<p>CI/Tlf Emisor: {{ payment.sender_id }}</p>{% endif %}
+                                        <p>Equivalente en Bs (para la orden): {{ "%.2f"|format(payment.amount_ves_equivalent) }}</p>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                            </div>
+                        {% else %}
+                            <p class="text-gray-500">No se han registrado pagos para esta orden.</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Financial Summary Column -->
+                    <div class="bg-gray-50 p-4 rounded-lg self-start shadow-lg">
+                        <div class="space-y-2">
+                            <div class="flex justify-between">
+                                <span class="font-semibold">Subtotal:</span>
+                                <span>Bs. {{ "%.2f"|format(subtotal) }}</span>
+                            </div>
+                            {% if order.discount_usd > 0 and order.exchange_rate_at_sale > 0 %}
+                            <div class="flex justify-between">
+                                <span class="font-semibold">Descuento (${{ "%.2f"|format(order.discount_usd) }}):</span>
+                                <span class="text-red-600">- Bs. {{ "%.2f"|format(order.discount_usd * order.exchange_rate_at_sale) }}</span>
+                            </div>
+                            {% endif %}
+                            <div class="flex justify-between hidden">
+                                <span class="font-semibold">IVA (16%):</span>
+                                <span>Bs. {{ "%.2f"|format(iva) }}</span>
+                            </div>
+                            <div class="flex justify-between border-t-2 border-gray-300 pt-2 mt-2">
+                                <span class="font-bold text-lg">Total Orden:</span>
+                                <div class="text-right">
+                                    <span class="font-bold text-lg text-gray-800">Bs. {{ "%.2f"|format(order.total_amount) }}</span><br>
+                                    <span class="text-sm text-gray-600">${{ "%.2f"|format(order.total_amount_usd) }}</span>
+                                </div>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="font-semibold">Total Pagado:</span>
+                                <div class="text-right">
+                                    <span class="font-semibold text-green-700">Bs. {{ "%.2f"|format(order.paid_amount) }}</span><br>
+                                    <span class="text-sm text-green-700">${{ "%.2f"|format(order.paid_amount_usd) }}</span>
+                                </div>
+                            </div>
+                            <div class="flex justify-between border-t border-gray-300 pt-2 mt-2">
+                                <span class="font-bold text-lg">Saldo Pendiente:</span>
+                                <div class="text-right">
+                                    <span class="font-bold text-lg text-red-600">Bs. {{ "%.2f"|format(order.due_amount) }}</span><br>
+                                    <span class="text-sm text-red-600">${{ "%.2f"|format(order.due_amount_usd) }}</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

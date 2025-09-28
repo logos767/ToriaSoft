@@ -1,6 +1,6 @@
 <!-- Payment Modal -->
 <div id="payment-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-10 mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-md bg-white">
+    <div class="relative top-10 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white">
         <!-- Modal Header -->
         <div class="flex justify-between items-center pb-3 border-b">
             <h3 id="payment-modal-title" class="text-2xl font-bold text-gray-800">Finalizar Venta</h3>
@@ -8,32 +8,48 @@
                 <i class="fas fa-times fa-lg"></i>
             </button>
         </div>
-
+        
         <!-- Modal Body -->
-        <div class="mt-4">
-            <!-- Order Summary -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 text-center">
+        <div class="mt-4 grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <!-- Left Column: Financial Summary -->
+            <div class="lg:col-span-2 space-y-4">
+                <h4 class="text-lg font-semibold text-gray-700 mb-2">Resumen de la Deuda</h4>
+                <!-- Total -->
                 <div class="bg-gray-100 p-4 rounded-lg">
-                    <p class="text-sm font-medium text-gray-500">Total a Pagar</p>
+                    <p class="text-sm font-medium text-gray-500">Total de la Orden</p>
                     <p id="modal-total-amount" class="text-2xl font-bold text-gray-800">0.00 Bs</p>
+                    <p id="modal-total-amount-usd" class="text-md font-semibold text-gray-600">0.00 {{ currency_symbol }}</p>
                 </div>
+                <!-- Paid -->
                 <div class="bg-green-100 p-4 rounded-lg">
                     <p class="text-sm font-medium text-green-700">Total Pagado</p>
                     <p id="modal-paid-amount" class="text-2xl font-bold text-green-800">0.00 Bs</p>
+                    <p id="modal-paid-amount-usd" class="text-md font-semibold text-green-600">0.00 {{ currency_symbol }}</p>
                 </div>
+                <!-- Remaining -->
                 <div class="bg-red-100 p-4 rounded-lg">
                     <p class="text-sm font-medium text-red-700">Monto Restante</p>
                     <p id="modal-remaining-amount" class="text-2xl font-bold text-red-800">0.00 Bs</p>
+                    <p id="modal-remaining-amount-usd" class="text-md font-semibold text-red-600">0.00 {{ currency_symbol }}</p>
+                </div>
+                <!-- Credit Sale Notice -->
+                <div id="credit-sale-notice" class="p-3 bg-yellow-100 text-yellow-800 rounded-lg text-sm hidden">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    <span>Se registrará una venta a crédito. El monto restante quedará como una cuenta por cobrar.</span>
                 </div>
             </div>
 
-            <!-- Payment Form -->
-            <div class="border-t pt-4">
-                <h4 class="text-lg font-semibold text-gray-700 mb-4">Agregar Método de Pago</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-                    <!-- Left Column: Payment Details -->
-                    <div>
-                        <div class="mb-4">
+            <!-- Right Column: Payment Form -->
+            <div class="lg:col-span-3 border-l lg:pl-6">
+                <h4 class="text-lg font-semibold text-gray-700 mb-4">Agregar Abono</h4>
+                <div class="space-y-4">
+                    <div class="mb-4">
+                        <label for="payment-date" class="block text-gray-700 font-bold mb-2">Fecha del Pago</label>
+                        <input type="datetime-local" id="payment-date" name="payment-date" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
                             <label for="payment-method" class="block text-gray-700 font-bold mb-2">Método de Pago</label>
                             <select id="payment-method" name="payment-method" class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 <option value="efectivo_ves">Efectivo (Bs.)</option>
@@ -42,72 +58,88 @@
                                 <option value="punto_de_venta">Punto de Venta</option>
                             </select>
                         </div>
-
-                        <div class="mb-4">
+                        <div>
                             <label for="payment-amount" class="block text-gray-700 font-bold mb-2">Monto</label>
                             <input type="number" id="payment-amount" name="payment-amount" step="0.01" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
                         </div>
-
-                        <!-- Conditional Fields -->
-                        <div id="payment-reference-group" class="mb-4 hidden">
-                            <label for="payment-reference" class="block text-gray-700 font-bold mb-2">Referencia</label>
-                            <input type="text" id="payment-reference" name="payment-reference" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        </div>
-                        <div id="payment-bank-group" class="mb-4 hidden">
-                            <label for="payment-bank" class="block text-gray-700 font-bold mb-2">Banco Destino</label>
-                            <select id="payment-bank" name="payment-bank" class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <option value="">Seleccione un banco</option>
-                                {% for bank in banks %}
-                                <option value="{{ bank.id }}">{{ bank.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div id="payment-pos-group" class="mb-4 hidden">
-                            <label for="payment-pos" class="block text-gray-700 font-bold mb-2">Punto de Venta</label>
-                            <select id="payment-pos" name="payment-pos" class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <option value="">Seleccione un punto</option>
-                                {% for pos in points_of_sale %}
-                                <option value="{{ pos.id }}">{{ pos.name }} ({{ pos.bank.name }})</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div id="payment-cashbox-group" class="mb-4 hidden">
-                            <label for="payment-cashbox" class="block text-gray-700 font-bold mb-2">Caja</p>
-                            <select id="payment-cashbox" name="payment-cashbox" class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <option value="">Seleccione una caja</option>
-                                {% for box in cash_boxes %}
-                                <option value="{{ box.id }}">{{ box.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-
-                        <button id="add-payment-btn-modal" class="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
-                            <i class="fas fa-plus mr-2"></i>Agregar Pago
-                        </button>
                     </div>
 
-                    <!-- Right Column: Payments List -->
-                    <div class="border-l pl-4">
-                        <h4 class="text-lg font-semibold text-gray-700 mb-4">Pagos Agregados</h4>
-                        <div id="payments-list" class="space-y-2 max-h-48 overflow-y-auto">
-                            <!-- Payment items will be injected here by JS -->
-                            <p class="text-gray-500 text-sm">No hay pagos agregados.</p>
-                        </div>
+                    <!-- Conditional Fields -->
+                    <div id="payment-reference-group" class="mb-4 hidden">
+                        <label for="payment-reference" class="block text-gray-700 font-bold mb-2">Referencia</label>
+                        <input type="text" id="payment-reference" name="payment-reference" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div id="payment-issuing-bank-group" class="mb-4 hidden">
+                        <label for="payment-issuing-bank" class="block text-gray-700 font-bold mb-2">Banco Origen</label>
+                        <select id="payment-issuing-bank" name="payment-issuing-bank" class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Seleccione un banco</option>
+                            <option value="Banco de Venezuela">Banco de Venezuela</option>
+                            <option value="BBVA Provincial">BBVA Provincial</option>
+                            <option value="Banesco">Banesco</option>
+                            <option value="BNC (Banco Nacional de Crédito)">BNC (Banco Nacional de Crédito)</option>
+                            <option value="Mercantil">Mercantil</option>
+                            <option value="Bancamiga">Bancamiga</option>
+                            <option value="BDT (Banco del Tesoro)">BDT (Banco del Tesoro)</option>
+                            <option value="Banplus">Banplus</option>
+                            <option value="Plaza">Plaza</option>
+                            <option value="Bancaribe">Bancaribe</option>
+                            <option value="Banco Exterior">Banco Exterior</option>
+                            <option value="Banco Caroní">Banco Caroní</option>
+                            <option value="Banco Activo">Banco Activo</option>
+                            <option value="Fondo Común (BFC)">Fondo Común (BFC)</option>
+                            <option value="Bancrecer">Bancrecer</option>
+                            <option value="Banco Del Sur">Banco Del Sur</option>
+                            <option value="Otro">Otro</option>
+                        </select>
+                    </div>
+                    <div id="payment-sender-id-group" class="mb-4 hidden">
+                        <label for="payment-sender-id" class="block text-gray-700 font-bold mb-2">Cédula/Teléfono Emisor</label>
+                        <input type="text" id="payment-sender-id" name="payment-sender-id" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div id="payment-bank-group" class="mb-4 hidden">
+                        <label for="payment-bank" class="block text-gray-700 font-bold mb-2">Banco Destino</label>
+                        <select id="payment-bank" name="payment-bank" class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Seleccione un banco</option>
+                            {% for bank in banks %}
+                            <option value="{{ bank.id }}">{{ bank.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div id="payment-pos-group" class="mb-4 hidden">
+                        <label for="payment-pos" class="block text-gray-700 font-bold mb-2">Punto de Venta</label>
+                        <select id="payment-pos" name="payment-pos" class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Seleccione un punto</option>
+                            {% for pos in points_of_sale %}
+                            <option value="{{ pos.id }}">{{ pos.name }} ({{ pos.bank.name }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div id="payment-cashbox-group" class="mb-4 hidden">
+                        <label for="payment-cashbox" class="block text-gray-700 font-bold mb-2">Caja</p>
+                        <select id="payment-cashbox" name="payment-cashbox" class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Seleccione una caja</option>
+                            {% for box in cash_boxes %}
+                            <option value="{{ box.id }}">{{ box.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <button id="add-payment-btn-modal" class="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
+                        <i class="fas fa-plus mr-2"></i>Confirmar Datos del Abono
+                    </button>
+
+                    <div id="payments-list" class="mt-4 space-y-2 max-h-48 overflow-y-auto hidden">
+                        <!-- Payment items will be injected here by JS -->
+                        <p class="text-gray-500 text-sm">No hay pagos agregados.</p>
                     </div>
                 </div>
-            </div>
-            
-            <!-- Credit Sale Notice -->
-            <div id="credit-sale-notice" class="mt-4 p-3 bg-yellow-100 text-yellow-800 rounded-lg text-sm hidden">
-                <i class="fas fa-info-circle mr-2"></i>
-                <span>Se registrará una venta a crédito. El monto restante quedará como una cuenta por cobrar.</span>
             </div>
         </div>
 
         <!-- Modal Footer -->
         <div class="flex items-center justify-end pt-4 border-t mt-6">
             <button id="finalize-order-btn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline disabled:bg-gray-400" disabled>
-                <i class="fas fa-check-circle mr-2"></i>Finalizar Venta
+                <i class="fas fa-check-circle mr-2"></i>Registrar Abono
             </button>
         </div>
     </div>

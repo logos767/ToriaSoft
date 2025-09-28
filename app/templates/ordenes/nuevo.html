@@ -1165,8 +1165,8 @@
             if (remaining < -0.001) { // Overpaid, show change
                 const change = Math.abs(remaining);
                 const changeInBs = change.toFixed(2);
-                const changeInUsd = (change / activeRate).toFixed(2);
-                modalChangeAmount.textContent = `Bs ${changeInBs} / $${changeInUsd}`;
+                const changeInForeign = (change / activeRate).toFixed(2);
+                modalChangeAmount.textContent = `Bs ${changeInBs} / {{ currency_symbol }}${changeInForeign}`;
                 modalChangeDisplay.classList.remove('hidden');
             } else {
                 modalChangeDisplay.classList.add('hidden');

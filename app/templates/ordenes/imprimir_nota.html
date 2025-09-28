@@ -151,16 +151,16 @@
             <tr>
                 <td>{{ item.quantity }}x</td>
                 <td>{{ item.product.name }}</td>
-                {% if is_credit_sale and order.exchange_rate_at_sale > 0 %}
-                    <td style="text-align: right;">{{ currency_symbol }}{{ "%.2f"|format((item.price * item.quantity) / order.exchange_rate_at_sale) }}</td>
+                {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}
+                    <td style="text-align: right;">{{ currency_symbol }} {{ "%.2f"|format((item.price * item.quantity) / order.exchange_rate_at_sale) }}</td>
                 {% else %}
                     <td style="text-align: right;">Bs. {{ "%.2f"|format(item.price * item.quantity) }}</td>
                 {% endif %}
             </tr>
             <tr style="font-size: 8px;">
                 <td></td>
-                {% if is_credit_sale and order.exchange_rate_at_sale > 0 %}
-                    <td colspan="2" style="padding-left: 5px;">@ {{ currency_symbol }}{{ "%.2f"|format(item.price / order.exchange_rate_at_sale) }} c/u</td>
+                {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}
+                    <td colspan="2" style="padding-left: 5px;">@ {{ currency_symbol }} {{ "%.2f"|format(item.price / order.exchange_rate_at_sale) }} c/u</td>
                 {% else %}
                     <td colspan="2" style="padding-left: 5px;">@ Bs. {{ "%.2f"|format(item.price) }} c/u</td>
                 {% endif %}
@@ -214,8 +214,8 @@
     <div class="totals">
         <div class="total-item">
             <span>Subtotal:</span>
-            {% if is_credit_sale and order.exchange_rate_at_sale > 0 %}
-                <span>{{ currency_symbol }}{{ "%.2f"|format(subtotal / order.exchange_rate_at_sale) }}</span>
+            {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}
+                <span>{{ currency_symbol }} {{ "%.2f"|format(subtotal / order.exchange_rate_at_sale) }}</span>
             {% else %}
                 <span>Bs. {{ "%.2f"|format(subtotal) }}</span>
             {% endif %}
@@ -223,8 +223,8 @@
         {% if order.discount_usd > 0 %}
         <div class="total-item">
             <span>Descuento:</span>
-            {% if is_credit_sale and order.exchange_rate_at_sale > 0 %}
-                <span>-{{ currency_symbol }}{{ "%.2f"|format((subtotal - order.total_amount) / order.exchange_rate_at_sale) }}</span>
+            {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}
+                <span>-{{ currency_symbol }} {{ "%.2f"|format((subtotal - order.total_amount) / order.exchange_rate_at_sale) }}</span>
             {% else %}
                 <span>-Bs. {{ "%.2f"|format(subtotal - order.total_amount) }}</span>
             {% endif %}
@@ -232,24 +232,24 @@
         {% endif %}
         <div class="total-item" style="display: none;">
             <span>IVA (16%):</span>
-            {% if is_credit_sale and order.exchange_rate_at_sale > 0 %}
-                <span>{{ currency_symbol }}{{ "%.2f"|format(iva / order.exchange_rate_at_sale) }}</span>
+            {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}
+                <span>{{ currency_symbol }} {{ "%.2f"|format(iva / order.exchange_rate_at_sale) }}</span>
             {% else %}
                 <span>Bs. {{ "%.2f"|format(iva) }}</span>
             {% endif %}
         </div>
         <div class="total-item grand-total">
             <span>Total:</span>
-            {% if is_credit_sale and order.exchange_rate_at_sale > 0 %}
-                <span>{{ currency_symbol }}{{ "%.2f"|format(order.total_amount / order.exchange_rate_at_sale) }}</span>
+            {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}
+                <span>{{ currency_symbol }} {{ "%.2f"|format(order.total_amount_usd) }}</span>
             {% else %}
                 <span>Bs. {{ "%.2f"|format(order.total_amount) }}</span>
             {% endif %}
         </div>
         <div class="total-item">
             <span>Total Pagado:</span>
-            {% if is_credit_sale and order.exchange_rate_at_sale > 0 %}
-                <span>{{ currency_symbol }}{{ "%.2f"|format(order.paid_amount / order.exchange_rate_at_sale) }}</span>
+            {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}
+                <span>{{ currency_symbol }} {{ "%.2f"|format(order.paid_amount_usd) }}</span>
             {% else %}
                 <span>Bs. {{ "%.2f"|format(order.paid_amount) }}</span>
             {% endif %}
@@ -257,8 +257,8 @@
         {% if change > 0.01 %}
         <div class="total-item">
             <span>Vuelto:</span>
-            {% if is_credit_sale and order.exchange_rate_at_sale > 0 %}
-                <span>{{ currency_symbol }}{{ "%.2f"|format(change / order.exchange_rate_at_sale) }}</span>
+            {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}
+                <span>{{ currency_symbol }} {{ "%.2f"|format(change / order.exchange_rate_at_sale) }}</span>
             {% else %}
                 <span>Bs. {{ "%.2f"|format(change) }}</span>
             {% endif %}
@@ -267,8 +267,8 @@
         {% if order.due_amount > 0.01 %}
         <div class="total-item grand-total" style="color: red;">
             <span>Saldo Pendiente:</span>
-            {% if is_credit_sale and order.exchange_rate_at_sale > 0 %}
-                <span>{{ currency_symbol }}{{ "%.2f"|format(order.due_amount / order.exchange_rate_at_sale) }}</span>
+            {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}
+                <span>{{ currency_symbol }} {{ "%.2f"|format(order.due_amount_usd) }}</span>
             {% else %}
                 <span>Bs. {{ "%.2f"|format(order.due_amount) }}</span>
             {% endif %}

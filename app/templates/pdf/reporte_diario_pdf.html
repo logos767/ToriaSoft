@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Reporte de Cierre Mensual</title>
+    <title>Reporte de Cierre Diario</title>
     <style>
         @page {
             size: A4;
@@ -98,12 +98,12 @@
         Reporte generado el {{ generation_date }}
     </div>
 
-    <h1>Reporte de Cierre Mensual</h1>
+    <h1>Reporte de Cierre Diario</h1>
     <p class="report-subtitle">{{ report_period }}</p>
 
     <!-- Sección 1: Resumen de Resultados (P&L) -->
     <div class="section">
-        <h2 class="section-title">1. Estado de Resultados</h2>
+        <h2 class="section-title">1. Estado de Resultados del Día</h2>
         <div class="summary-grid">
             <div class="summary-box"><h3>Ventas Totales</h3><p class="positive"><span class="currency">{{ "{:,.2f}".format(pnl_summary.sales) }}</span></p></div>
             <div class="summary-box"><h3>Costo de Mercancía (CMV)</h3><p class="negative"><span class="currency">({{ "{:,.2f}".format(pnl_summary.cogs) }})</span></p></div>
@@ -111,7 +111,7 @@
             <div class="summary-box"><h3>Gastos Operativos</h3><p class="negative"><span class="currency">({{ "{:,.2f}".format(pnl_summary.variable_expenses + pnl_summary.fixed_expenses) }})</span></p></div>
         </div>
         <div class="summary-box" style="margin-top: 15px; background-color: #f9fafb;">
-            <h3>Utilidad / Pérdida Neta del Mes</h3>
+            <h3>Utilidad / Pérdida Neta del Día</h3>
             <p class="{{ 'positive' if pnl_summary.net_profit >= 0 else 'negative' }}"><span class="currency">{{ "{:,.2f}".format(pnl_summary.net_profit) }}</span></p>
         </div>
         <div class="chart-container">
@@ -133,10 +133,10 @@
                 </tr>
             </thead>
             <tbody>
-                <tr><td>Saldo Inicial del Mes</td><td class="text-right">Bs. {{ "{:,.2f}".format(account.initial_balance_ves) }}</td></tr>
+                <tr><td>Saldo Inicial del Día</td><td class="text-right">Bs. {{ "{:,.2f}".format(account.initial_balance_ves) }}</td></tr>
                 <tr><td style="padding-left: 25px;">(+) Entradas</td><td class="text-right positive">Bs. {{ "{:,.2f}".format(account.inflows_ves) }}</td></tr>
                 <tr><td style="padding-left: 25px;">(-) Salidas</td><td class="text-right negative">(Bs. {{ "{:,.2f}".format(account.outflows_ves) }})</td></tr>
-                <tr style="font-weight: bold; background-color: #f2f2f2;"><td>Saldo Final del Mes</td><td class="text-right">Bs. {{ "{:,.2f}".format(account.final_balance_ves) }}</td></tr>
+                <tr style="font-weight: bold; background-color: #f2f2f2;"><td>Saldo Final del Día</td><td class="text-right">Bs. {{ "{:,.2f}".format(account.final_balance_ves) }}</td></tr>
             </tbody>
         </table>
         {% endfor %}
@@ -153,7 +153,7 @@
             </thead>
             <tbody>
                 <tr>
-                    <td>Saldo Inicial del Mes</td>
+                    <td>Saldo Inicial del Día</td>
                     <td class="text-right">Bs. {{ "{:,.2f}".format(account.initial_balance_ves) }}</td>
                     <td class="text-right"><span class="currency">{{ "{:,.2f}".format(account.initial_balance_usd) }}</span></td>
                 </tr>
@@ -168,7 +168,7 @@
                     <td class="text-right negative">(<span class="currency">{{ "{:,.2f}".format(account.outflows_usd) }}</span>)</td>
                 </tr>
                 <tr style="font-weight: bold; background-color: #f2f2f2;">
-                    <td>Saldo Final del Mes</td>
+                    <td>Saldo Final del Día</td>
                     <td class="text-right">Bs. {{ "{:,.2f}".format(account.final_balance_ves) }}</td>
                     <td class="text-right"><span class="currency">{{ "{:,.2f}".format(account.final_balance_usd) }}</span></td>
                 </tr>
@@ -177,93 +177,33 @@
         {% endfor %}
     </div>
 
-    <!-- Sección 3: Análisis de Ventas -->
-    <div class="section">
-        <h2 class="section-title">3. Análisis de Ventas del Mes</h2>
-        <h3>Ventas por Tipo de Orden</h3>
-        <table>
-            <thead><tr><th>Tipo de Orden</th><th class="text-center"># de Ventas</th><th class="text-right">Monto Total</th></tr></thead>
-            <tbody>
-                {% for type_name, data in sales_by_type.items() %}
-                <tr><td>{{ type_name }}</td><td class="text-center">{{ data.num_ventas }}</td><td class="text-right"><span class="currency">{{ "{:,.2f}".format(data.total_ventas) }}</span></td></tr>
-                {% else %}
-                <tr><td colspan="3" class="text-center">No hay ventas en este período.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-
-        <h3 style="margin-top: 20px;">Top 10 Productos Más Vendidos (por Cantidad)</h3>
-        <table>
-            <thead><tr><th>Producto</th><th class="text-center">Cantidad Vendida</th></tr></thead>
-            <tbody>
-                {% for product in top_products %}
-                <tr><td>{{ product.nombre }}</td><td class="text-center">{{ product.total_vendido|int }}</td></tr>
-                {% else %}
-                <tr><td colspan="2" class="text-center">No hay productos vendidos en este período.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Sección 4: Cuentas por Cobrar y Cobros -->
+    <!-- Sección 3: Detalle de Ventas -->
     <div class="section" style="page-break-before: auto;">
-        <h2 class="section-title">4. Gestión de Cobranza</h2>
-        
-        <h3>Cuentas por Cobrar Pendientes (al {{ end_date.strftime('%d/%m/%Y') }})</h3>
+        <h2 class="section-title">3. Detalle de Ventas del Día</h2>
         <table>
             <thead>
                 <tr>
-                    <th>Fecha Venta</th>
+                    <th># Orden</th>
                     <th>Cliente</th>
-                    <th>Factura #</th>
-                    <th class="text-right">Total</th>
-                    <th class="text-right">Pagado</th>
-                    <th class="text-right">Saldo</th>
+                    <th>Tipo</th>
+                    <th class="text-right">Total (USD)</th>
+                    <th class="text-right">Pagado (USD)</th>
+                    <th class="text-right">Deuda (USD)</th>
                 </tr>
             </thead>
             <tbody>
-                {% set total_receivable = namespace(value=0) %}
-                {% for order in pending_accounts_receivable %}
-                {# Usar los valores en USD ya calculados y guardados en la orden #}
-                {% set total_receivable.value = total_receivable.value + order.due_amount_usd %}
+                {% for order in orders_today %}
                 <tr>
-                    <td>{{ order.date_created.strftime('%d/%m/%Y') }}</td>
-                    <td>{{ order.client.name }}</td>
                     <td>#{{ order.id|order_id_format }}</td>
+                    <td>{{ order.client.name }}</td>
+                    <td>{{ order.status }}</td>
                     <td class="text-right"><span class="currency">{{ "{:,.2f}".format(order.total_amount_usd) }}</span></td>
-                    <td class="text-right"><span class="currency">{{ "{:,.2f}".format(order.paid_amount_usd) }}</span></td>
-                    <td class="text-right" style="font-weight: bold;"><span class="currency">{{ "{:,.2f}".format(order.due_amount_usd) }}</span></td>
+                    <td class="text-right positive"><span class="currency">{{ "{:,.2f}".format(order.paid_amount_usd) }}</span></td>
+                    <td class="text-right negative"><span class="currency">{{ "{:,.2f}".format(order.due_amount_usd) }}</span></td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6" class="text-center">No hay cuentas por cobrar pendientes.</td></tr>
+                <tr><td colspan="6" class="text-center">No se registraron ventas en este día.</td></tr>
                 {% endfor %}
-                <tr style="font-weight: bold; background-color: #f2f2f2;">
-                    <td colspan="5">Total Cuentas por Cobrar</td>
-                    <td class="text-right"><span class="currency">{{ "{:,.2f}".format(total_receivable.value) }}</span></td>
-                </tr>
-            </tbody>
-        </table>
-
-        <h3 style="margin-top: 20px;">Cobros Realizados en el Mes</h3>
-        <table>
-            <thead><tr><th>Fecha Cobro</th><th>Cliente</th><th>Factura # Afectada</th><th class="text-right">Monto Cobrado</th></tr></thead>
-            <tbody>
-                {% set total_collected = namespace(value=0) %}
-                {% for p in collections_in_month %}
-                {% set total_collected.value = total_collected.value + p.amount_ves_equivalent %}
-                <tr>
-                    <td>{{ p.date|ve_datetime(fmt='%d/%m/%Y') }}</td>
-                    <td>{{ p.order.client.name }}</td>
-                    <td>{{ p.order_id }}</td>
-                    <td class="text-right">Bs. {{ "{:,.2f}".format(p.amount_ves_equivalent) }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="4" class="text-center">No se realizaron cobros en este mes.</td></tr>
-                {% endfor %}
-                <tr style="font-weight: bold; background-color: #f2f2f2;">
-                    <td colspan="3">Total Cobrado en el Mes</td>
-                    <td class="text-right">Bs. {{ "{:,.2f}".format(total_collected.value) }}</td>
-                </tr>
             </tbody>
         </table>
     </div>

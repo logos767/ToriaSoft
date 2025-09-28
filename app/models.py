@@ -84,6 +84,7 @@ class Order(db.Model):
     order_type = db.Column(db.String(20), nullable=False, default='regular')
     status = db.Column(db.String(20), nullable=False, default='Pendiente')
     total_amount = db.Column(db.Float, nullable=False, default=0.0)
+    total_amount_usd = db.Column(db.Float, nullable=False, default=0.0) # Total en USD al momento de la venta
     discount_usd = db.Column(db.Float, nullable=True, default=0.0)
     exchange_rate_at_sale = db.Column(db.Float, nullable=True)
 
@@ -92,30 +93,39 @@ class Order(db.Model):
     payments = db.relationship('Payment', backref='order', lazy=True, cascade="all, delete-orphan")
 
     @property
-    def total_amount_usd(self):
-        """Calculates the total amount of the order in USD, after discount."""
-        if self.exchange_rate_at_sale and self.exchange_rate_at_sale > 0:
-            # self.total_amount already includes the discount
-            return self.total_amount / self.exchange_rate_at_sale
-        return 0.0
-
-    @property
     def paid_amount_usd(self):
         """Calculates the total paid amount for this order in USD."""
-        if self.exchange_rate_at_sale and self.exchange_rate_at_sale > 0:
-            # self.paid_amount is in VES
-            return self.paid_amount / self.exchange_rate_at_sale
-        return 0.0
+        total_paid_usd = 0
+        # Use a generator expression with sum() and handle None values
+        return sum(p.amount_usd_equivalent or 0.0 for p in self.payments)
 
     @property
     def paid_amount(self):
         """Calcula el monto total pagado para esta orden en VES."""
-        return sum(p.amount_ves_equivalent for p in self.payments)
+        # Handle possible None values for consistency
+        return sum(p.amount_ves_equivalent or 0.0 for p in self.payments)
 
     @property
     def due_amount(self):
-        """Calcula el monto adeudado para esta orden en VES."""
-        due = self.total_amount - self.paid_amount
+        """
+        Calcula el monto adeudado para esta orden en VES.
+        Para créditos y apartados, el saldo en USD se convierte a VES con la tasa actual.
+        """
+        from .routes import get_cached_exchange_rate # Importación local para evitar dependencia circular
+        
+        due_usd = self.due_amount_usd
+        if due_usd > 0:
+            current_rate = get_cached_exchange_rate('USD') or self.exchange_rate_at_sale or 1
+            return due_usd * current_rate
+        
+        return 0.0
+
+    @property
+    def due_amount_usd(self):
+        """Calcula el monto adeudado para esta orden en USD."""
+        # Se usa 'or 0.0' para manejar órdenes antiguas que puedan tener total_amount_usd como None
+        total_usd = self.total_amount_usd or 0.0
+        due = total_usd - self.paid_amount_usd
         return due if due > 0.01 else 0.0
 
     def __repr__(self):
@@ -175,6 +185,7 @@ class Payment(db.Model):
     amount_paid = db.Column(db.Float, nullable=False) # The amount in the currency it was paid
     currency_paid = db.Column(db.String(3), nullable=False) # 'VES', 'USD'
     amount_ves_equivalent = db.Column(db.Float, nullable=False) # The equivalent in VES for the order total
+    amount_usd_equivalent = db.Column(db.Float, nullable=False, default=0.0) # El equivalente en USD para el total de la orden
     method = db.Column(db.String(50), nullable=False) # 'transferencia', 'pago_movil', 'punto_de_venta', 'efectivo_usd', 'efectivo_ves'
     reference = db.Column(db.String(100), nullable=True)
     issuing_bank = db.Column(db.String(100), nullable=True) # Banco emisor

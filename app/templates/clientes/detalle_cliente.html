@@ -25,8 +25,13 @@
         <div class="bg-white p-6 rounded-lg shadow-md flex flex-col justify-center items-center text-center">
             <h2 class="text-xl font-semibold text-gray-700 mb-2">Cuentas por Cobrar</h2>
             {% if total_due > 0 %}
-                <p class="text-4xl font-bold text-red-600">Bs. {{ "%.2f"|format(total_due) }}</p>
-                <p class="text-lg font-semibold text-red-500">({{ currency_symbol }}{{ "%.2f"|format(total_due / current_rate) }})</p>
+                {# La variable 'total_due' viene en USD desde la ruta #}
+                <p class="text-4xl font-bold text-red-600">{{ currency_symbol }}{{ "%.2f"|format(total_due) }}</p>
+                {% if current_rate > 0 %}
+                <p class="text-lg text-gray-500 mt-1">(Aprox. Bs. {{ "%.2f"|format(total_due * current_rate) }})</p>
+                {% else %}
+                <p class="text-sm text-gray-500 mt-1">(Tasa de cambio no disponible)</p>
+                {% endif %}
             {% else %}
                 <p class="text-4xl font-bold text-green-600">Bs. 0.00</p>
                 <p class="text-lg text-gray-500 mt-2">¡Cliente al día!</p>
@@ -115,8 +120,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const modalTotalAmount = document.getElementById('modal-total-amount');
     const modalPaidAmount = document.getElementById('modal-paid-amount');
     const modalRemainingAmount = document.getElementById('modal-remaining-amount');
+    const modalTotalAmountUsd = document.getElementById('modal-total-amount-usd');
+    const modalPaidAmountUsd = document.getElementById('modal-paid-amount-usd');
+    const modalRemainingAmountUsd = document.getElementById('modal-remaining-amount-usd');
     
     const paymentMethodSelect = document.getElementById('payment-method');
+    const paymentDateInput = document.getElementById('payment-date');
+    const paymentIssuingBankGroup = document.getElementById('payment-issuing-bank-group');
+    const paymentSenderIdGroup = document.getElementById('payment-sender-id-group');
     const paymentAmountInput = document.getElementById('payment-amount');
     const paymentReferenceGroup = document.getElementById('payment-reference-group');
     const paymentBankGroup = document.getElementById('payment-bank-group');
@@ -128,6 +139,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const paymentFormOrderIdInput = document.getElementById('payment-form-order-id');
     const paymentFormDataInput = document.getElementById('payment-form-data-input');
 
+    const currencySymbol = '{{ currency_symbol }}';
     let payments = [];
     let orderTotal = 0;
     let currentRate = {{ current_rate }};
@@ -140,11 +152,20 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('credit-sale-notice').classList.add('hidden');
         finalizeOrderBtn.textContent = 'Registrar Abono';
 
+        // Set current date for the payment
+        paymentDateInput.value = new Date().toISOString().slice(0, 16);
+
         paymentFormOrderIdInput.value = orderId;
         
         modalTotalAmount.textContent = orderTotal.toFixed(2) + ' Bs';
+        modalTotalAmountUsd.textContent = (orderTotal / currentRate).toFixed(2) + ' ' + currencySymbol;
+
         updatePaymentSummary();
         paymentModal.classList.remove('hidden');
+
+        // Ocultar la lista de pagos, ya que solo se manejará un abono a la vez.
+        paymentsListDiv.innerHTML = '';
+        paymentsListDiv.classList.add('hidden');
     }
 
     function closePaymentModal() {
@@ -155,8 +176,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
         const remaining = orderTotal - totalPaid;
 
-        modalPaidAmount.textContent = totalPaid.toFixed(2) + ' Bs';
-        modalRemainingAmount.textContent = Math.max(0, remaining).toFixed(2) + ' Bs';
+        modalPaidAmount.textContent = totalPaid.toFixed(2) + ' Bs'; // Esto mostrará el abono actual
+        modalPaidAmountUsd.textContent = (totalPaid / currentRate).toFixed(2) + ' ' + currencySymbol;
+
+        modalRemainingAmount.textContent = Math.max(0, remaining).toFixed(2) + ' Bs'; // Esto mostrará el saldo después del abono
+        modalRemainingAmountUsd.textContent = (Math.max(0, remaining) / currentRate).toFixed(2) + ' ' + currencySymbol;
 
         finalizeOrderBtn.disabled = totalPaid <= 0;
         
@@ -171,11 +195,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function addPayment() {
         // This modal only allows one payment at a time for simplicity
-        payments = []; 
+        payments = [];
+        
+        // Cambiar el texto del botón para que sea más intuitivo
+        addPaymentBtnModal.textContent = 'Actualizar Datos del Abono';
 
         const method = paymentMethodSelect.value;
         const amount = parseFloat(paymentAmountInput.value);
         
+        const paymentDate = paymentDateInput.value;
+        const issuingBank = document.getElementById('payment-issuing-bank').value;
+        const senderId = document.getElementById('payment-sender-id').value;
+
         if (!amount || amount <= 0) {
             alert("Por favor, ingrese un monto válido.");
             return;
@@ -194,6 +225,9 @@ document.addEventListener('DOMContentLoaded', function() {
             currency_paid: currency_paid,
             amount_ves_equivalent: amount_ves_equivalent,
             reference: document.getElementById('payment-reference').value,
+            date: paymentDate,
+            issuing_bank: issuingBank,
+            sender_id: senderId,
             bank_id: document.getElementById('payment-bank').value ? parseInt(document.getElementById('payment-bank').value) : null,
             pos_id: document.getElementById('payment-pos').value ? parseInt(document.getElementById('payment-pos').value) : null,
             cash_box_id: document.getElementById('payment-cashbox').value ? parseInt(document.getElementById('payment-cashbox').value) : null,
@@ -217,13 +251,24 @@ document.addEventListener('DOMContentLoaded', function() {
     paymentMethodSelect.addEventListener('change', function() {
         const method = this.value;
         paymentReferenceGroup.classList.toggle('hidden', method !== 'transferencia');
+        paymentIssuingBankGroup.classList.toggle('hidden', method !== 'transferencia');
+        paymentSenderIdGroup.classList.toggle('hidden', method !== 'transferencia');
         paymentBankGroup.classList.toggle('hidden', method !== 'transferencia');
         paymentPosGroup.classList.toggle('hidden', method !== 'punto_de_venta');
         paymentCashboxGroup.classList.toggle('hidden', !method.startsWith('efectivo'));
+
+        if (method === 'transferencia') {
+            document.getElementById('payment-sender-id').value = '{{ client.phone or '' }}';
+        }
+
         updatePaymentSummary();
     });
 
     finalizeOrderBtn.addEventListener('click', function() {
+        if (payments.length === 0) {
+            // Si no hay pagos en el array, intenta agregarlo desde los campos del formulario.
+            addPayment();
+        }
         if (payments.length === 0) {
             alert("Debe agregar al menos un método de pago para registrar el abono.");
             return;

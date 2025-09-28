@@ -116,50 +116,58 @@
     <div class="section-title">RESUMEN DE VENTAS</div>
     <div class="info-item">
         <span>Ventas de Contado:</span>
-        <span>{{ sales_summary.contado.count }} Órdenes / Bs. {{ "%.2f"|format(sales_summary.contado.amount_ves) }}</span>
+        <span>${{ "%.2f"|format(sales_summary.contado.amount_usd) }} ({{ sales_summary.contado.count }} Órdenes)</span>
     </div>
     <div class="info-item">
         <span>Ventas a Crédito:</span>
-        <span>{{ sales_summary.credito.count }} Órdenes / Bs. {{ "%.2f"|format(sales_summary.credito.amount_ves) }}</span>
+        <span>${{ "%.2f"|format(sales_summary.credito.amount_usd) }} ({{ sales_summary.credito.count }} Órdenes)</span>
     </div>
     <div class="info-item">
         <span>Apartados:</span>
-        <span>{{ sales_summary.apartado.count }} Órdenes / Bs. {{ "%.2f"|format(sales_summary.apartado.amount_ves) }}</span>
+        <span>${{ "%.2f"|format(sales_summary.apartado.amount_usd) }} ({{ sales_summary.apartado.count }} Órdenes)</span>
+    </div>
+    <div class="info-item" style="border-top: 1px solid #000; padding-top: 1mm; margin-top: 1mm;">
+        <span>TOTAL VENTAS:</span>
+        <span class="font-bold">${{ "%.2f"|format(sales_summary.total.amount_usd) }} ({{ sales_summary.total.count }} Órdenes)</span>
+    </div>
+    <div class="info-item">
+        <span>(-) Costo Mercancía (CMV):</span>
+        <span>${{ "%.2f"|format(sales_summary.total.cogs_usd) }}</span>
     </div>
     <div class="info-item font-bold" style="border-top: 1px solid #000; padding-top: 1mm; margin-top: 1mm;">
-        <span>TOTAL VENTAS:</span>
-        <span>{{ sales_summary.total.count }} Órdenes / Bs. {{ "%.2f"|format(sales_summary.total.amount_ves) }}</span>
+        <span>UTILIDAD BRUTA:</span>
+        <span>${{ "%.2f"|format(sales_summary.total.amount_usd - sales_summary.total.cogs_usd) }}</span>
     </div>
-    <div class="info-item font-bold">
+    <div class="info-item font-bold" style="margin-bottom: 2mm;">
         <span></span>
-        <span>${{ "%.2f"|format(sales_summary.total.amount_ves / current_rate_usd) }}</span>
+        <span>(Bs. {{ "%.2f"|format(sales_summary.total.amount_ves - sales_summary.total.cogs_ves) }})</span>
     </div>
 
     <!-- RESUMEN DE PAGOS -->
     <div class="section-title">INGRESOS POR FORMA DE PAGO</div>
     <div class="info-item">
         <span>Efectivo (Bs):</span>
-        <span>Bs. {{ "%.2f"|format(payments_summary.efectivo_ves.amount) }}</span>
+        <span>${{ "%.2f"|format(payments_summary.efectivo_ves.amount / current_rate_usd if current_rate_usd > 0 else 0) }}</span>
     </div>
     <div class="info-item">
         <span>Efectivo (USD):</span>
-        <span>${{ "%.2f"|format(payments_summary.efectivo_usd.amount) }} (Bs. {{ "%.2f"|format(payments_summary.efectivo_usd.amount_ves_equivalent) }})</span>
+        <span>${{ "%.2f"|format(payments_summary.efectivo_usd.amount) }}</span>
     </div>
     <div class="info-item">
         <span>Transferencia/Pago Móvil:</span>
-        <span>Bs. {{ "%.2f"|format(payments_summary.transferencia.amount) }}</span>
+        <span>${{ "%.2f"|format(payments_summary.transferencia.amount / current_rate_usd if current_rate_usd > 0 else 0) }}</span>
     </div>
     <div class="info-item">
         <span>Punto de Venta:</span>
-        <span>Bs. {{ "%.2f"|format(payments_summary.punto_de_venta.amount) }}</span>
+        <span>${{ "%.2f"|format(payments_summary.punto_de_venta.amount / current_rate_usd if current_rate_usd > 0 else 0) }}</span>
     </div>
     <div class="info-item font-bold" style="border-top: 1px solid #000; padding-top: 1mm; margin-top: 1mm;">
         <span>TOTAL INGRESOS:</span>
-        <span>Bs. {{ "%.2f"|format(payments_summary.total_ves) }}</span>
+        <span>${{ "%.2f"|format(payments_summary.total_usd) }}</span>
     </div>
     <div class="info-item font-bold">
         <span></span>
-        <span>${{ "%.2f"|format(payments_summary.total_ves / current_rate_usd) }}</span>
+        <span>(Bs. {{ "%.2f"|format(payments_summary.total_ves) }})</span>
     </div>
 
     <!-- MOVIMIENTOS DE CAJA -->
