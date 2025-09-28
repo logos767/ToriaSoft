@@ -71,17 +71,17 @@
                                     <td class="px-1 py-1 align-top">
                                         <select name="product_id[]" required class="w-full shadow-sm appearance-none border rounded py-0.5 px-1 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 product-select text-xs">
                                     {% for product in products %}
-                                        {% if product.stock > 0 %}
+                                        {% if product.stock > 0 %} {# Producto disponible para la venta #}
                                             <option value="{{ product.id }}" data-price-usd="{{ product.price_usd }}" data-stock="{{ product.stock }}" data-codigo="{{ product.codigo_producto }}"
                                                     class="{% if product.stock < 5 %}stock-low{% elif product.stock < 20 %}stock-medium{% else %}stock-high{% endif %}">
                                                 {{ product.barcode }} | {{ product.name }}
                                             </option>
-                                        {% else %}
+                                        {% else %} {# Producto agotado, se muestra pero no se puede seleccionar #}
                                             <option value="{{ product.id }}" disabled data-price-usd="{{ product.price_usd }}" data-stock="{{ product.stock }}" data-codigo="{{ product.codigo_producto }}" class="stock-out">
                                                 {{ product.name }} (AGOTADO - Stock: {{ product.stock }})
                                             </option>
                                         {% endif %}
-                                            {% endfor %}
+                                    {% endfor %}
                                         </select>
                                         <div class="text-xs text-gray-500 mt-1 codigo-producto-display"></div>
                                     </td>
