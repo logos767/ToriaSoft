@@ -3,26 +3,25 @@
 {% block content %}
 <div class="container mx-auto p-4 max-w-7xl">
     <div class="flex items-center justify-between mb-6">
-        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-box-open mr-2"></i>{{ title }}</h1>
-        <a href="{{ url_for('main.reservation_list') }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver a Apartados</a>
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-hand-holding-usd mr-2"></i>{{ title }}</h1>
+        <a href="{{ url_for('main.credit_list') }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver a Créditos</a>
     </div>
 
-    <!-- Client Info & Reservation Summary -->
+    <!-- Client Info & Credit Summary -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <!-- Client & Order Info -->
         <div class="md:col-span-2 bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Información del Apartado</h2>
+            <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Información del Crédito</h2>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-gray-600">
                 <p><strong>Cliente:</strong> <a href="{{ url_for('main.client_detail', client_id=order.client.id) }}" class="text-blue-600 hover:underline">{{ order.client.name }}</a></p>
                 <p><strong>Cédula/RIF:</strong> {{ order.client.cedula_rif or 'N/A' }}</p>
-                <p><strong>Fecha Apartado:</strong> {{ order.date_created|ve_datetime(fmt='%d/%m/%Y %H:%M') }}</p>
+                <p><strong>Fecha Crédito:</strong> {{ order.date_created|ve_datetime(fmt='%d/%m/%Y %H:%M') }}</p>
                 <p><strong>Estado:</strong>
                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
-                        {% if order.status == 'Apartado' %}bg-yellow-100 text-yellow-800
-                        {% elif order.status == 'Pagado' %}bg-green-100 text-green-800
-                        {% elif order.status == 'Entregado' %}bg-blue-100 text-blue-800
+                        {% if order.status == 'Crédito' %}bg-yellow-100 text-yellow-800
+                        {% elif order.status == 'Pagada' %}bg-green-100 text-green-800
                         {% else %}bg-gray-100 text-gray-800{% endif %}">
-                        {{ 'Pendiente' if order.status == 'Apartado' else order.status }}
+                        {{ order.status }}
                     </span>
                 </p>
             </div>
@@ -31,7 +30,7 @@
         <!-- Financial Summary -->
         <div class="bg-white p-6 rounded-lg shadow-md flex flex-col justify-center items-center text-center">
             <h2 class="text-xl font-semibold text-gray-700 mb-2">Resumen Financiero</h2>
-            <p class="text-sm text-gray-500">Total del Apartado</p>
+            <p class="text-sm text-gray-500">Total del Crédito</p>
             <p class="text-2xl font-bold text-blue-700">{{ currency_symbol }}{{ "%.2f"|format(order.total_amount_usd) }}</p>
             <p class="text-sm text-gray-500 mt-2">Saldo Pendiente</p>
             {% if order.due_amount > 0.01 %}
@@ -54,31 +53,20 @@
                     title="Registrar Abono">
                 <i class="fas fa-hand-holding-usd mr-2"></i>Registrar Abono
             </button>
-            {% endif %}
-
-            {% if order.status == 'Entregado' %}
-            <span class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 font-bold">
-                <i class="fas fa-check-circle mr-2 text-green-500"></i>Entregado
-            </span>
-            {% elif order.due_amount <= 0.01 %}
-            <form method="POST" action="{{ url_for('main.reservation_detail', order_id=order.id) }}" onsubmit="return confirm('¿Está seguro que desea marcar este apartado como entregado? Esta acción no se puede deshacer.');">
-                <input type="hidden" name="action" value="deliver">
-                <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
-                    <i class="fas fa-check-circle mr-2"></i>Marcar como Entregado
-                </button>
-            </form>
             {% else %}
-            <p class="text-gray-500">El apartado debe estar totalmente pagado para poder marcarlo como entregado.</p>
+            <span class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 font-bold">
+                <i class="fas fa-check-circle mr-2 text-green-500"></i>Crédito Pagado
+            </span>
             {% endif %}
-             <a href="{{ url_for('main.print_reservation_receipt', order_id=order.id) }}" target="_blank" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">
-                <i class="fas fa-print mr-2"></i>Imprimir Recibo
+             <a href="{{ url_for('main.print_delivery_note', order_id=order.id) }}" target="_blank" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">
+                <i class="fas fa-print mr-2"></i>Imprimir Nota de Entrega
             </a>
         </div>
     </div>
 
     <!-- Order Items -->
     <div class="bg-white p-6 rounded-lg shadow-md">
-        <h2 class="text-2xl font-bold text-gray-800 mb-4">Productos Apartados</h2>
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Productos del Crédito</h2>
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
@@ -135,7 +123,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="4" class="px-6 py-10 text-center text-gray-500">No se han registrado abonos para este apartado.</td>
+                        <td colspan="4" class="px-6 py-10 text-center text-gray-500">No se han registrado abonos para este crédito.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -146,7 +134,7 @@
 </div>
 
 <!-- Hidden form for submitting payments -->
-<form id="payment-submission-form" method="POST" action="{{ url_for('main.reservation_detail', order_id=order.id) }}" class="hidden">
+<form id="payment-submission-form" method="POST" action="{{ url_for('main.credit_detail', order_id=order.id) }}" class="hidden">
     <input type="hidden" name="payments_data" id="payment-form-data-input">
 </form>
 
@@ -155,33 +143,10 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // --- Generic Payment Modal Logic ---
-    const paymentModal = document.getElementById('payment-modal');
-    const closeModalBtn = document.getElementById('close-modal-btn');
-    const finalizeOrderBtn = document.getElementById('finalize-order-btn');
-    const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
+    // --- Payment Modal Logic ---
+    // We will define element constants inside the functions that need them
+    // to ensure they exist when the code runs.
 
-    const modalTotalAmount = document.getElementById('modal-total-amount');
-    const modalPaidAmount = document.getElementById('modal-paid-amount');
-    const modalRemainingAmount = document.getElementById('modal-remaining-amount');
-    const modalTotalAmountUsd = document.getElementById('modal-total-amount-usd');
-    const modalPaidAmountUsd = document.getElementById('modal-paid-amount-usd');
-    const modalRemainingAmountUsd = document.getElementById('modal-remaining-amount-usd');
-    
-    const paymentMethodSelect = document.getElementById('payment-method');
-    const paymentDateInput = document.getElementById('payment-date');
-    const paymentIssuingBankGroup = document.getElementById('payment-issuing-bank-group');
-    const paymentSenderIdGroup = document.getElementById('payment-sender-id-group');
-    const paymentAmountInput = document.getElementById('payment-amount');
-    const paymentReferenceGroup = document.getElementById('payment-reference-group');
-    const paymentBankGroup = document.getElementById('payment-bank-group');
-    const paymentPosGroup = document.getElementById('payment-pos-group');
-    const paymentCashboxGroup = document.getElementById('payment-cashbox-group');
-    const paymentCurrencyGroup = document.getElementById('payment-currency-group');
-    const paymentCurrencySelect = document.getElementById('payment-currency');
-    const paymentBankSelect = document.getElementById('payment-bank');
-    
-    const paymentsListDiv = document.getElementById('payments-list');
     const paymentSubmissionForm = document.getElementById('payment-submission-form');
     const paymentFormDataInput = document.getElementById('payment-form-data-input');
     const currencySymbol = '{{ currency_symbol }}';
@@ -193,21 +158,42 @@ document.addEventListener('DOMContentLoaded', function() {
     let previousPaymentMethod;
 
     function openPaymentModalForAbono(orderId, dueAmount) {
+        // Define elements here, when the modal is about to be opened
+        const paymentModal = document.getElementById('payment-modal');
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentCurrencySelect = document.getElementById('payment-currency');
+        const paymentDateInput = document.getElementById('payment-date');
+        const modalTotalAmount = document.getElementById('modal-total-amount');
+        const modalTotalAmountUsd = document.getElementById('modal-total-amount-usd');
+
+        if (!paymentModal || !paymentMethodSelect || !paymentCurrencySelect || !paymentDateInput || !modalTotalAmount) {
+            console.error("Payment modal elements not found!");
+            alert("Error al abrir el modal de pago. Contacte al administrador.");
+            return;
+        }
+
+        // Attach event listeners only once when the modal is first opened
+        if (!paymentModal.dataset.listenersAttached) {
+            attachModalEventListeners();
+            paymentModal.dataset.listenersAttached = 'true';
+        }
+
+        // Reset state for new modal opening
         orderTotal = parseFloat(dueAmount);
         payments = []; // Reset payments for each new modal opening
         
-        document.getElementById('payment-modal-title').textContent = `Registrar Abono para Apartado #${String(orderId).padStart(9, '0')}`;
+        document.getElementById('payment-modal-title').textContent = `Registrar Abono para Crédito #${String(orderId).padStart(9, '0')}`;
         document.getElementById('credit-sale-notice').classList.add('hidden');
-        finalizeOrderBtn.textContent = 'Registrar Abono';
+
+        const finalizeOrderBtn = document.getElementById('finalize-order-btn');
+        if (finalizeOrderBtn) finalizeOrderBtn.textContent = 'Registrar Abono';
 
         // Initialize previous values here, when the modal is open and elements exist
         previousPaymentMethod = paymentMethodSelect.value;
         previousTransferCurrency = paymentCurrencySelect.value;
 
         // Set current date for the payment
-        if (paymentDateInput) {
-            paymentDateInput.value = new Date().toISOString().slice(0, 16);
-        }
+        paymentDateInput.value = new Date().toISOString().slice(0, 16);
 
         modalTotalAmount.textContent = orderTotal.toFixed(2) + ' Bs';
         if (currentRate > 0) {
@@ -218,12 +204,24 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function closePaymentModal() {
+        const paymentModal = document.getElementById('payment-modal');
+        const paymentsListDiv = document.getElementById('payments-list');
+        if (!paymentModal || !paymentsListDiv) return;
+
         payments = [];
         paymentsListDiv.innerHTML = '';
         paymentModal.classList.add('hidden');
     }
 
     function updatePaymentSummary() {
+        const modalPaidAmount = document.getElementById('modal-paid-amount');
+        const modalRemainingAmount = document.getElementById('modal-remaining-amount');
+        const modalPaidAmountUsd = document.getElementById('modal-paid-amount-usd');
+        const modalRemainingAmountUsd = document.getElementById('modal-remaining-amount-usd');
+        const finalizeOrderBtn = document.getElementById('finalize-order-btn');
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentAmountInput = document.getElementById('payment-amount');
+
         const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
         const remaining = orderTotal - totalPaid;
 
@@ -239,9 +237,9 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const method = paymentMethodSelect.value;
         if (method === 'efectivo_usd' && currentRate > 0) {
-            paymentAmountInput.value = (remaining / currentRate).toFixed(2);
+            paymentAmountInput.value = Math.max(0, remaining / currentRate).toFixed(2);
         } else {
-            paymentAmountInput.value = remaining.toFixed(2);
+            paymentAmountInput.value = Math.max(0, remaining).toFixed(2);
         }
     }
 
@@ -250,21 +248,32 @@ document.addEventListener('DOMContentLoaded', function() {
         const paymentCurrencySelect = document.getElementById('payment-currency');
         const paymentAmountInput = document.getElementById('payment-amount');
         const paymentDateInput = document.getElementById('payment-date');
+        const paymentBankSelect = document.getElementById('payment-bank');
+        const paymentPosSelect = document.getElementById('payment-pos');
+        const paymentCashboxSelect = document.getElementById('payment-cashbox');
+        const paymentIssuingBankInput = document.getElementById('payment-issuing-bank');
+        const senderIdInput = document.getElementById('payment-sender-id');
+        const paymentReferenceInput = document.getElementById('payment-reference');
         const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
-
-        if (!paymentMethodSelect || !paymentCurrencySelect || !paymentAmountInput || !paymentDateInput) {
-            return;
-        }
 
         payments = []; // This modal only allows one payment at a time for simplicity
         const method = paymentMethodSelect.value;
         const transfer_currency = paymentCurrencySelect.value;
         const amount = parseFloat(paymentAmountInput.value);
+        const bank_id = paymentBankSelect.value;
+        const pos_id = paymentPosSelect.value;
+        const cash_box_id = paymentCashboxSelect.value;
+
         if (!amount || amount <= 0) { alert("Por favor, ingrese un monto válido."); return; }
 
-        const paymentDate = paymentDateInput ? paymentDateInput.value : new Date().toISOString();
-        const issuingBank = document.getElementById('payment-issuing-bank').value;
-        const senderId = document.getElementById('payment-sender-id').value;
+        // Validar selección de destino
+        if (method === 'transferencia' && !bank_id) { alert("Por favor, seleccione un banco de destino."); return; }
+        if (method === 'punto_de_venta' && !pos_id) { alert("Por favor, seleccione un punto de venta."); return; }
+        if (method.startsWith('efectivo') && !cash_box_id) { alert("Por favor, seleccione una caja."); return; }
+
+        const paymentDate = paymentDateInput.value;
+        const issuingBank = paymentIssuingBankInput ? paymentIssuingBankInput.value : '';
+        const senderId = senderIdInput ? senderIdInput.value : '';
 
         let amount_ves_equivalent = amount;
         let currency_paid = 'VES';
@@ -275,13 +284,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const payment = {
             method: method, amount_paid: amount, currency_paid: currency_paid,
-            amount_ves_equivalent: amount_ves_equivalent, reference: document.getElementById('payment-reference').value,
+            amount_ves_equivalent: amount_ves_equivalent,
+            reference: paymentReferenceInput.value,
             date: paymentDate,
-            issuing_bank: issuingBank,
-            sender_id: senderId,
-            bank_id: document.getElementById('payment-bank').value ? parseInt(document.getElementById('payment-bank').value) : null,
-            pos_id: document.getElementById('payment-pos').value ? parseInt(document.getElementById('payment-pos').value) : null,
-            cash_box_id: document.getElementById('payment-cashbox').value ? parseInt(document.getElementById('payment-cashbox').value) : null,
+            issuing_bank: method === 'transferencia' ? issuingBank : null,
+            sender_id: method === 'transferencia' ? senderId : null,
+            bank_id: method === 'transferencia' ? parseInt(bank_id) : null,
+            pos_id: method === 'punto_de_venta' ? parseInt(pos_id) : null,
+            cash_box_id: method.startsWith('efectivo') ? parseInt(cash_box_id) : null,
         };
         payments.push(payment);
         updatePaymentSummary();
@@ -290,7 +300,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- Event Listeners ---
+    // --- Initial Event Listeners (for buttons outside the modal) ---
     document.querySelectorAll('.add-payment-button').forEach(button => {
         button.addEventListener('click', function() {
             const orderId = this.dataset.orderId;
@@ -299,74 +309,94 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    closeModalBtn.addEventListener('click', closePaymentModal);
-    addPaymentBtnModal.addEventListener('click', addPayment);
+    // This function attaches event listeners to modal elements.
+    // It's called only once to avoid duplicating listeners.
+    function attachModalEventListeners() {
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentCurrencySelect = document.getElementById('payment-currency');
+        const finalizeOrderBtn = document.getElementById('finalize-order-btn');
 
-    paymentMethodSelect.addEventListener('change', function() {
-        const method = this.value;
-        const amount = parseFloat(paymentAmountInput.value);
-        
-        function filterBankOptions() {
-            const selectedCurrency = paymentCurrencySelect.value;
-            const bankOptions = paymentBankSelect.options;
-            for (let i = 1; i < bankOptions.length; i++) { // Skip "Seleccione un banco"
-                const option = bankOptions[i];
-                if (option.dataset.currency === selectedCurrency) {
-                    option.style.display = '';
-                } else {
-                    option.style.display = 'none';
+        if (!closeModalBtn || !addPaymentBtnModal || !paymentMethodSelect || !paymentCurrencySelect || !finalizeOrderBtn) return;
+
+        closeModalBtn.addEventListener('click', closePaymentModal);
+        addPaymentBtnModal.addEventListener('click', addPayment);
+
+        paymentMethodSelect.addEventListener('change', function() {
+            const method = this.value;
+            const paymentAmountInput = document.getElementById('payment-amount');
+            const amount = parseFloat(paymentAmountInput.value);
+            
+            const paymentReferenceGroup = document.getElementById('payment-reference-group');
+            const paymentIssuingBankGroup = document.getElementById('payment-issuing-bank-group');
+            const paymentSenderIdGroup = document.getElementById('payment-sender-id-group');
+            const paymentBankGroup = document.getElementById('payment-bank-group');
+            const paymentCurrencyGroup = document.getElementById('payment-currency-group');
+            const paymentPosGroup = document.getElementById('payment-pos-group');
+            const paymentCashboxGroup = document.getElementById('payment-cashbox-group');
+            const paymentBankSelect = document.getElementById('payment-bank');
+
+            function filterBankOptions() {
+                const selectedCurrency = paymentCurrencySelect.value;
+                const bankOptions = paymentBankSelect.options;
+                for (let i = 1; i < bankOptions.length; i++) { // Skip "Seleccione un banco"
+                    const option = bankOptions[i];
+                    if (option.dataset.currency === selectedCurrency) {
+                        option.style.display = '';
+                    } else {
+                        option.style.display = 'none';
+                    }
+                }
+                if (paymentBankSelect.selectedOptions.length > 0 && paymentBankSelect.selectedOptions[0].style.display === 'none') {
+                    paymentBankSelect.value = '';
                 }
             }
-            if (paymentBankSelect.selectedOptions.length > 0 && paymentBankSelect.selectedOptions[0].style.display === 'none') {
+
+            const isTransfer = method === 'transferencia';
+            [paymentReferenceGroup, paymentIssuingBankGroup, paymentSenderIdGroup, paymentBankGroup, paymentCurrencyGroup].forEach(el => el.classList.toggle('hidden', !isTransfer));
+            paymentPosGroup.classList.toggle('hidden', method !== 'punto_de_venta');
+            paymentCashboxGroup.classList.toggle('hidden', !method.startsWith('efectivo'));
+
+            if (isTransfer) {
+                document.getElementById('payment-sender-id').value = '{{ order.client.phone or '' }}';
+                filterBankOptions();
+            } else {
                 paymentBankSelect.value = '';
             }
-        }
 
-        const isTransfer = method === 'transferencia';
-        [paymentReferenceGroup, paymentIssuingBankGroup, paymentSenderIdGroup, paymentBankGroup, paymentCurrencyGroup].forEach(el => el.classList.toggle('hidden', !isTransfer));
-        paymentPosGroup.classList.toggle('hidden', method !== 'punto_de_venta');
-        paymentCashboxGroup.classList.toggle('hidden', !method.startsWith('efectivo'));
+            const newTransferCurrency = paymentCurrencySelect.value;
 
-        if (isTransfer) {
-            document.getElementById('payment-sender-id').value = '{{ order.client.phone or '' }}';
-            filterBankOptions();
-        } else {
-            paymentBankSelect.value = '';
-        }
+            if (amount && amount > 0 && currentRate > 0) {
+                const wasUsd = previousPaymentMethod === 'efectivo_usd' || (previousPaymentMethod === 'transferencia' && previousTransferCurrency === 'USD');
+                const isUsd = method === 'efectivo_usd' || (isTransfer && newTransferCurrency === 'USD');
 
-        const newTransferCurrency = paymentCurrencySelect.value;
-
-        if (amount && amount > 0 && currentRate > 0) {
-            const wasUsd = previousPaymentMethod === 'efectivo_usd' || (previousPaymentMethod === 'transferencia' && previousTransferCurrency === 'USD');
-            const isUsd = method === 'efectivo_usd' || (isTransfer && newTransferCurrency === 'USD');
-
-            if (wasUsd && !isUsd) { // USD -> VES
-                paymentAmountInput.value = (amount * currentRate).toFixed(2);
-            } else if (!wasUsd && isUsd) { // VES -> USD
-                paymentAmountInput.value = (amount / currentRate).toFixed(2);
+                if (wasUsd && !isUsd) { // USD -> VES
+                    paymentAmountInput.value = (amount * currentRate).toFixed(2);
+                } else if (!wasUsd && isUsd) { // VES -> USD
+                    paymentAmountInput.value = (amount / currentRate).toFixed(2);
+                }
+            } else {
+                updatePaymentSummary();
             }
-        } else {
-            updatePaymentSummary();
-        }
-        
-        previousPaymentMethod = method;
-        previousTransferCurrency = newTransferCurrency;
-    });
+            
+            previousPaymentMethod = method;
+            previousTransferCurrency = newTransferCurrency;
+        });
 
-    paymentCurrencySelect.addEventListener('change', function() {
-        paymentMethodSelect.dispatchEvent(new Event('change'));
-    });
+        paymentCurrencySelect.addEventListener('change', function() {
+            paymentMethodSelect.dispatchEvent(new Event('change'));
+        });
 
-    finalizeOrderBtn.addEventListener('click', function() {
-        if (payments.length === 0) {
-            addPayment(); // Try to add payment from form fields
-        }
-        if (payments.length === 0) { alert("Debe agregar al menos un método de pago para registrar el abono."); return; }
-        paymentFormDataInput.value = JSON.stringify(payments);
-        paymentSubmissionForm.submit();
-    });
-
-    paymentMethodSelect.dispatchEvent(new Event('change'));
+        finalizeOrderBtn.addEventListener('click', function() {
+            if (payments.length === 0) {
+                addPayment(); // Try to add payment from form fields
+            }
+            if (payments.length === 0) { alert("Debe agregar al menos un método de pago para registrar el abono."); return; }
+            paymentFormDataInput.value = JSON.stringify(payments);
+            paymentSubmissionForm.submit();
+        });
+    }
 });
 </script>
 {% endblock %}

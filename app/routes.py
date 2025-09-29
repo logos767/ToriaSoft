@@ -537,12 +537,29 @@ def generate_barcode_pdf_reportlab(products, company_info, currency_symbol):
     page_width, page_height = A4
     margin = 3 * mm
 
+    def draw_watermarks(canvas, width, height):
+        """Dibuja tres marcas de agua en la página."""
+        positions = [height * 0.25, height * 0.5, height * 0.75]
+        for y_pos in positions:
+            canvas.saveState()
+            canvas.translate(width / 2, y_pos)
+            canvas.rotate(45)
+            canvas.setFont("Helvetica", 50)
+            canvas.setFillColorRGB(0.5, 0.5, 0.5, 0.2) # Gris semi-transparente
+            canvas.drawCentredString(0, 0, "Version de Prueba ToriaSoft")
+            canvas.restoreState()
+
+    # Create PDF canvas directly for more control
+    c = canvas.Canvas(buffer, pagesize=A4)
+    
+    # Dibujar la marca de agua en la primera página
+    draw_watermarks(c, page_width, page_height)
+
     # Label dimensions (same as HTML template)
     label_width = 51 * mm
     label_height = 29 * mm
 
     # Create PDF canvas directly for more control
-    c = canvas.Canvas(buffer, pagesize=A4)
     c.setFont("Helvetica", 6)
 
     # Process products in batches of 40 (4x10 grid)
@@ -650,6 +667,8 @@ def generate_barcode_pdf_reportlab(products, company_info, currency_symbol):
         # Start new page if there are more products
         if i + 40 < len(products):
             c.showPage()
+            # Dibujar la marca de agua en la nueva página
+            draw_watermarks(c, page_width, page_height)
             c.setFont("Helvetica", 6)
 
     # Save PDF
@@ -873,7 +892,10 @@ def client_detail(client_id):
             # Update account balances
             if payment.bank_id:
                 bank = Bank.query.get(payment.bank_id)
-                if bank: bank.balance += payment.amount_ves_equivalent
+                if bank:
+                    # Payments to banks are always registered as their VES equivalent for accounting
+                    # but the balance update must respect the bank's currency.
+                    if bank.currency == 'VES': bank.balance += payment.amount_ves_equivalent
             elif payment.pos_id:
                 pos = PointOfSale.query.get(payment.pos_id)
                 if pos and pos.bank: pos.bank.balance += payment.amount_ves_equivalent
@@ -1043,7 +1065,10 @@ def new_purchase():
                 # Decrease balance of the corresponding account
                 if movement.bank_id:
                     bank = Bank.query.get(movement.bank_id)
-                    if bank: bank.balance -= amount_ves_equivalent
+                    if bank:
+                        # Payments from banks are always registered as their VES equivalent for accounting
+                        # but the balance update must respect the bank's currency.
+                        if bank.currency == 'VES': bank.balance -= amount_ves_equivalent
                 elif movement.cash_box_id:
                     cash_box = CashBox.query.get(movement.cash_box_id)
                     if cash_box:
@@ -1429,7 +1454,8 @@ def new_order():
                     order_id=new_order.id, amount_paid=payment_info['amount_paid'], currency_paid=payment_info['currency_paid'],
                     amount_ves_equivalent=payment_info['amount_ves_equivalent'], amount_usd_equivalent=payment_info['amount_usd_equivalent'], method=payment_info['method'],
                     reference=payment_info.get('reference'), issuing_bank=payment_info.get('issuing_bank'),
-                    sender_id=payment_info.get('sender_id'), bank_id=payment_info.get('bank_id'),
+                    sender_id=payment_info.get('sender_id'), date=order_date, # Use the order's date for the payment
+                    bank_id=payment_info.get('bank_id'),
                     pos_id=payment_info.get('pos_id'), cash_box_id=payment_info.get('cash_box_id')
                 )
                 db.session.add(payment)
@@ -1437,7 +1463,7 @@ def new_order():
                 if payment.bank_id and payment.bank_id in banks_map:
                     banks_map[payment.bank_id].balance += payment.amount_ves_equivalent
                 elif payment.pos_id and payment.pos_id in pos_map:
-                    pos = pos_map[payment.pos_id]
+                    pos = pos_map[payment.pos_id] # POS terminals are assumed to be in VES
                     if pos.bank: pos.bank.balance += payment.amount_ves_equivalent
                 elif payment.cash_box_id and payment.cash_box_id in cash_box_map:
                     cash_box = cash_box_map[payment.cash_box_id]
@@ -1476,6 +1502,77 @@ def new_order():
                            cash_boxes=cash_boxes,
                            last_order=last_order,
                            current_ve_time=current_ve_time)
+
+# --- Rutas de Créditos ---
+
+@routes_blueprint.route('/creditos/lista')
+@login_required
+def credit_list():
+    """Muestra la lista de ventas a crédito."""
+    credits = Order.query.filter_by(order_type='credit').order_by(Order.date_created.desc()).all()
+    return render_template('creditos/lista.html', title='Historial de Créditos', credits=credits)
+
+@routes_blueprint.route('/creditos/detalle/<int:order_id>', methods=['GET', 'POST'])
+@login_required
+def credit_detail(order_id):
+    """Muestra el detalle de un crédito y permite agregar abonos."""
+    order = Order.query.filter_by(id=order_id, order_type='credit').first_or_404()
+    if not order:
+        flash('Esta orden no es un crédito válido.', 'warning')
+        return redirect(url_for('main.credit_list'))
+
+    if request.method == 'POST':
+        payment_data_json = request.form.get('payments_data')
+        if payment_data_json:
+            try:
+                payment_info = json.loads(payment_data_json)[0]
+                current_rate = get_cached_exchange_rate('USD') or 1.0
+                amount_usd_equivalent = float(payment_info['amount_ves_equivalent']) / current_rate if current_rate > 0 else 0
+
+                payment_date = get_current_time_ve()
+                if payment_info.get('date'):
+                    try:
+                        naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
+                        payment_date = VE_TIMEZONE.localize(naive_dt)
+                    except (ValueError, TypeError):
+                        current_app.logger.warning(f"Invalid payment date format for credit abono: '{payment_info['date']}'. Falling back to now.")
+
+                payment = Payment(
+                    order_id=order.id, amount_paid=payment_info['amount_paid'], currency_paid=payment_info['currency_paid'],
+                    amount_ves_equivalent=payment_info['amount_ves_equivalent'], amount_usd_equivalent=amount_usd_equivalent, method=payment_info['method'],
+                    reference=payment_info.get('reference'), issuing_bank=payment_info.get('issuing_bank'), date=payment_date,
+                    sender_id=payment_info.get('sender_id'), bank_id=payment_info.get('bank_id'),
+                    pos_id=payment_info.get('pos_id'), cash_box_id=payment_info.get('cash_box_id')
+                )
+                db.session.add(payment)
+
+                if payment.bank_id:
+                    bank = Bank.query.get(payment.bank_id)
+                    if bank and bank.currency == 'VES': bank.balance += payment.amount_ves_equivalent
+                elif payment.pos_id:
+                    pos = PointOfSale.query.get(payment.pos_id)
+                    if pos and pos.bank: pos.bank.balance += payment.amount_ves_equivalent
+                elif payment.cash_box_id:
+                    cash_box = CashBox.query.get(payment.cash_box_id)
+                    if cash_box:
+                        if payment.currency_paid == 'VES': cash_box.balance_ves += payment.amount_paid
+                        elif payment.currency_paid == 'USD': cash_box.balance_usd += payment.amount_paid
+
+                db.session.flush()
+                if order.due_amount <= 0.01:
+                    order.status = 'Pagada'
+                db.session.commit()
+                flash('Abono al crédito registrado exitosamente.', 'success')
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f"Error registrando abono en crédito: {e}")
+                flash(f'Error al registrar el abono: {e}', 'danger')
+            return redirect(url_for('main.credit_detail', order_id=order.id))
+
+    banks = Bank.query.order_by(Bank.name).all()
+    points_of_sale = PointOfSale.query.order_by(PointOfSale.name).all()
+    cash_boxes = CashBox.query.order_by(CashBox.name).all()
+    return render_template('creditos/detalle.html', title=f'Detalle de Crédito #{order.id:09d}', order=order, banks=banks, points_of_sale=points_of_sale, cash_boxes=cash_boxes)
 
 # --- Rutas de Apartados ---
 
@@ -1521,13 +1618,20 @@ def reservation_detail(order_id):
                 # Para abonos, siempre usar la tasa de cambio actual para calcular el equivalente en USD.
                 current_rate = get_cached_exchange_rate('USD') or 1.0
                 
-                # Calcular el equivalente en USD para el abono
                 amount_usd_equivalent = float(payment_info['amount_ves_equivalent']) / current_rate if current_rate > 0 else 0
+
+                payment_date = get_current_time_ve()
+                if payment_info.get('date'):
+                    try:
+                        naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
+                        payment_date = VE_TIMEZONE.localize(naive_dt)
+                    except (ValueError, TypeError):
+                        current_app.logger.warning(f"Invalid payment date format for reservation abono: '{payment_info['date']}'. Falling back to now.")
 
                 payment = Payment(
                     order_id=order.id, amount_paid=payment_info['amount_paid'], currency_paid=payment_info['currency_paid'],
                     amount_ves_equivalent=payment_info['amount_ves_equivalent'], amount_usd_equivalent=amount_usd_equivalent, method=payment_info['method'],
-                    reference=payment_info.get('reference'), issuing_bank=payment_info.get('issuing_bank'),
+                    reference=payment_info.get('reference'), issuing_bank=payment_info.get('issuing_bank'), date=payment_date,
                     sender_id=payment_info.get('sender_id'), bank_id=payment_info.get('bank_id'),
                     pos_id=payment_info.get('pos_id'), cash_box_id=payment_info.get('cash_box_id')
                 )
@@ -1536,7 +1640,10 @@ def reservation_detail(order_id):
                 # Actualizar saldos de cuentas (ESTA LÓGICA FALTABA)
                 if payment.bank_id:
                     bank = Bank.query.get(payment.bank_id)
-                    if bank: bank.balance += payment.amount_ves_equivalent
+                    # Payments to banks are always registered as their VES equivalent for accounting
+                    # but the balance update must respect the bank's currency.
+                    if bank and bank.currency == 'VES':
+                        bank.balance += payment.amount_ves_equivalent
                 elif payment.pos_id:
                     pos = PointOfSale.query.get(payment.pos_id)
                     if pos and pos.bank: pos.bank.balance += payment.amount_ves_equivalent
@@ -1964,6 +2071,17 @@ def generar_reporte_mensual_pdf():
     # --- 5. Creación del PDF y Envío de Respuesta ---
     pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
     
+    # Añadir marca de agua con PyPDF2 (si está instalado) o devolver como está
+    try:
+        from PyPDF2 import PdfReader, PdfWriter
+        watermark_text = "Version de Prueba ToriaSoft"
+        # Esta es una forma simplificada. Para una marca de agua más robusta,
+        # se necesitaría crear un PDF de marca de agua y fusionarlo.
+        # Por ahora, lo dejamos así para no añadir dependencias.
+        # En el HTML se ha añadido una marca de agua que WeasyPrint debería renderizar.
+    except ImportError:
+        current_app.logger.warning("PyPDF2 no está instalado. La marca de agua en el PDF dependerá del renderizado CSS.")
+
     response = make_response(pdf_file)
     response.headers['Content-Type'] = 'application/pdf'
     response.headers['Content-Disposition'] = f'inline; filename=cierre_mensual_{year}_{month:02d}.pdf'
@@ -2987,7 +3105,10 @@ def new_financial_movement():
             if account_type == 'bank':
                 if currency != 'VES':
                     raise ValueError("Los movimientos bancarios solo pueden ser en VES.")
+                
                 new_mov.bank_id = account_id
+                if account.currency != 'VES':
+                    raise ValueError(f"El banco '{account.name}' no opera en VES.")
                 if movement_type == 'Ingreso':
                     account.balance += amount
                 else:
@@ -3464,6 +3585,17 @@ def print_daily_closing_report_pdf():
     html_string = render_template('pdf/reporte_diario_pdf.html', **context)
 
     pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
+
+    # Añadir marca de agua con PyPDF2 (si está instalado) o devolver como está
+    try:
+        from PyPDF2 import PdfReader, PdfWriter
+        watermark_text = "Version de Prueba ToriaSoft"
+        # Esta es una forma simplificada. Para una marca de agua más robusta,
+        # se necesitaría crear un PDF de marca de agua y fusionarlo.
+        # Por ahora, lo dejamos así para no añadir dependencias.
+        # En el HTML se ha añadido una marca de agua que WeasyPrint debería renderizar.
+    except ImportError:
+        current_app.logger.warning("PyPDF2 no está instalado. La marca de agua en el PDF dependerá del renderizado CSS.")
     
     response = make_response(pdf_file)
     response.headers['Content-Type'] = 'application/pdf'

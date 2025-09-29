@@ -61,11 +61,18 @@
                         <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             <a href="{{ url_for('main.order_detail', order_id=order.id) }}" class="text-blue-600 hover:underline">#{{ order.id|order_id_format }}</a>
                         </td>
-                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{{ order.date_created|ve_datetime(fmt='%d/%m/%Y') }}</td>
-                        <td class="px-4 py-4 whitespace-nowrap text-sm text-right text-gray-800">Bs. {{ "%.2f"|format(order.total_amount) }}</td>
-                        <td class="px-4 py-4 whitespace-nowrap text-sm text-right text-green-700">Bs. {{ "%.2f"|format(order.paid_amount) }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{{ order.date_created|ve_datetime(fmt='%d/%m/%Y %H:%M') }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-right text-gray-800">
+                            <div>Bs. {{ "%.2f"|format(order.total_amount) }}</div>
+                            <div class="text-xs text-gray-500">{{ currency_symbol }} {{ "%.2f"|format(order.total_amount_usd) }}</div>
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-right text-green-700">
+                            <div>Bs. {{ "%.2f"|format(order.paid_amount) }}</div>
+                            <div class="text-xs text-gray-500">{{ currency_symbol }} {{ "%.2f"|format(order.paid_amount_usd) }}</div>
+                        </td>
                         <td class="px-4 py-4 whitespace-nowrap text-sm text-right font-bold {% if order.due_amount > 0.01 %}text-red-600{% else %}text-gray-500{% endif %}">
-                            Bs. {{ "%.2f"|format(order.due_amount) }}
+                            <div>Bs. {{ "%.2f"|format(order.due_amount) }}</div>
+                            <div class="text-xs {% if order.due_amount > 0.01 %}text-red-500{% else %}text-gray-500{% endif %}">{{ currency_symbol }} {{ "%.2f"|format(order.due_amount_usd) }}</div>
                         </td>
                         <td class="px-4 py-4 whitespace-nowrap text-center text-sm">
                             {% if order.status == 'Crédito' %}
@@ -111,49 +118,55 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // --- Generic Payment Modal Logic ---
-    const paymentModal = document.getElementById('payment-modal');
-    const closeModalBtn = document.getElementById('close-modal-btn');
-    const finalizeOrderBtn = document.getElementById('finalize-order-btn');
-    const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
-
-    const modalTotalAmount = document.getElementById('modal-total-amount');
-    const modalPaidAmount = document.getElementById('modal-paid-amount');
-    const modalRemainingAmount = document.getElementById('modal-remaining-amount');
-    const modalTotalAmountUsd = document.getElementById('modal-total-amount-usd');
-    const modalPaidAmountUsd = document.getElementById('modal-paid-amount-usd');
-    const modalRemainingAmountUsd = document.getElementById('modal-remaining-amount-usd');
-    
-    const paymentMethodSelect = document.getElementById('payment-method');
-    const paymentDateInput = document.getElementById('payment-date');
-    const paymentIssuingBankGroup = document.getElementById('payment-issuing-bank-group');
-    const paymentSenderIdGroup = document.getElementById('payment-sender-id-group');
-    const paymentAmountInput = document.getElementById('payment-amount');
-    const paymentReferenceGroup = document.getElementById('payment-reference-group');
-    const paymentBankGroup = document.getElementById('payment-bank-group');
-    const paymentPosGroup = document.getElementById('payment-pos-group');
-    const paymentCashboxGroup = document.getElementById('payment-cashbox-group');
-
-    const paymentsListDiv = document.getElementById('payments-list');
+    // --- Payment Modal Logic ---
     const paymentSubmissionForm = document.getElementById('payment-submission-form');
-    const paymentFormOrderIdInput = document.getElementById('payment-form-order-id');
     const paymentFormDataInput = document.getElementById('payment-form-data-input');
 
     const currencySymbol = '{{ currency_symbol }}';
     let payments = [];
     let orderTotal = 0;
     let currentRate = {{ current_rate }};
+    let previousPaymentMethod;
+
 
     function openPaymentModalForAbono(orderId, dueAmount) {
+        // Define elements here, when the modal is about to be opened
+        const paymentModal = document.getElementById('payment-modal');
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentDateInput = document.getElementById('payment-date');
+        const modalTotalAmount = document.getElementById('modal-total-amount');
+        const modalTotalAmountUsd = document.getElementById('modal-total-amount-usd');
+        const paymentFormOrderIdInput = document.getElementById('payment-form-order-id');
+
+        if (!paymentModal || !paymentMethodSelect || !paymentDateInput || !modalTotalAmount) {
+            console.error("Payment modal elements not found!");
+            alert("Error al abrir el modal de pago. Contacte al administrador.");
+            return;
+        }
+
+        // Attach event listeners only once when the modal is first opened
+        if (!paymentModal.dataset.listenersAttached) {
+            attachModalEventListeners();
+            paymentModal.dataset.listenersAttached = 'true';
+        }
+
+        // Reset state for new modal opening
         orderTotal = parseFloat(dueAmount);
         payments = []; // Reset payments for each new modal opening
         
         document.getElementById('payment-modal-title').textContent = `Registrar Abono para Orden #${String(orderId).padStart(9, '0')}`;
         document.getElementById('credit-sale-notice').classList.add('hidden');
-        finalizeOrderBtn.textContent = 'Registrar Abono';
+
+        const finalizeOrderBtn = document.getElementById('finalize-order-btn');
+        if (finalizeOrderBtn) finalizeOrderBtn.textContent = 'Registrar Abono';
+
+        // Initialize previous values here, when the modal is open and elements exist
+        previousPaymentMethod = paymentMethodSelect.value;
 
         // Set current date for the payment
-        paymentDateInput.value = new Date().toISOString().slice(0, 16);
+        if (paymentDateInput) {
+            paymentDateInput.value = new Date().toISOString().slice(0, 16);
+        }
 
         paymentFormOrderIdInput.value = orderId;
         
@@ -163,16 +176,23 @@ document.addEventListener('DOMContentLoaded', function() {
         updatePaymentSummary();
         paymentModal.classList.remove('hidden');
 
-        // Ocultar la lista de pagos, ya que solo se manejará un abono a la vez.
-        paymentsListDiv.innerHTML = '';
-        paymentsListDiv.classList.add('hidden');
     }
 
     function closePaymentModal() {
+        const paymentModal = document.getElementById('payment-modal');
+        if (!paymentModal) return;
         paymentModal.classList.add('hidden');
     }
 
     function updatePaymentSummary() {
+        const modalPaidAmount = document.getElementById('modal-paid-amount');
+        const modalRemainingAmount = document.getElementById('modal-remaining-amount');
+        const modalPaidAmountUsd = document.getElementById('modal-paid-amount-usd');
+        const modalRemainingAmountUsd = document.getElementById('modal-remaining-amount-usd');
+        const finalizeOrderBtn = document.getElementById('finalize-order-btn');
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentAmountInput = document.getElementById('payment-amount');
+
         const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
         const remaining = orderTotal - totalPaid;
 
@@ -185,6 +205,14 @@ document.addEventListener('DOMContentLoaded', function() {
         finalizeOrderBtn.disabled = totalPaid <= 0;
         
         // Auto-fill amount
+        updatePaymentAmountInput(remaining);
+    }
+
+    function updatePaymentAmountInput(remaining) {
+        if (remaining <= 0.01) {
+            paymentAmountInput.value = '';
+            return;
+        }
         const method = paymentMethodSelect.value;
         if (method === 'efectivo_usd' && currentRate > 0) {
             paymentAmountInput.value = (remaining / currentRate).toFixed(2);
@@ -193,7 +221,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+
+
     function addPayment() {
+        const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentAmountInput = document.getElementById('payment-amount');
+        const paymentDateInput = document.getElementById('payment-date');
+
+        if (!addPaymentBtnModal || !paymentMethodSelect || !paymentAmountInput) return;
+
         // This modal only allows one payment at a time for simplicity
         payments = [];
         
@@ -202,8 +239,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const method = paymentMethodSelect.value;
         const amount = parseFloat(paymentAmountInput.value);
+        const paymentCurrencySelect = document.getElementById('payment-currency'); // May be null
         
-        const paymentDate = paymentDateInput.value;
+        const paymentDate = paymentDateInput ? paymentDateInput.value : new Date().toISOString();
         const issuingBank = document.getElementById('payment-issuing-bank').value;
         const senderId = document.getElementById('payment-sender-id').value;
 
@@ -214,7 +252,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         let amount_ves_equivalent = amount;
         let currency_paid = 'VES';
-        if (method === 'efectivo_usd') {
+        const transfer_currency = paymentCurrencySelect ? paymentCurrencySelect.value : 'VES';
+        if (method === 'efectivo_usd' || (method === 'transferencia' && transfer_currency === 'USD')) {
             amount_ves_equivalent = amount * currentRate;
             currency_paid = 'USD';
         }
@@ -236,7 +275,7 @@ document.addEventListener('DOMContentLoaded', function() {
         updatePaymentSummary();
     }
 
-    // --- Event Listeners ---
+    // --- Initial Event Listeners (for buttons outside the modal) ---
     document.querySelectorAll('.add-payment-button').forEach(button => {
         button.addEventListener('click', function() {
             const orderId = this.dataset.orderId;
@@ -245,40 +284,79 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    closeModalBtn.addEventListener('click', closePaymentModal);
-    addPaymentBtnModal.addEventListener('click', addPayment);
+    // This function attaches event listeners to modal elements.
+    // It's called only once to avoid duplicating listeners.
+    function attachModalEventListeners() {
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentCurrencySelect = document.getElementById('payment-currency'); // May be null
+        const finalizeOrderBtn = document.getElementById('finalize-order-btn');
 
-    paymentMethodSelect.addEventListener('change', function() {
-        const method = this.value;
-        paymentReferenceGroup.classList.toggle('hidden', method !== 'transferencia');
-        paymentIssuingBankGroup.classList.toggle('hidden', method !== 'transferencia');
-        paymentSenderIdGroup.classList.toggle('hidden', method !== 'transferencia');
-        paymentBankGroup.classList.toggle('hidden', method !== 'transferencia');
-        paymentPosGroup.classList.toggle('hidden', method !== 'punto_de_venta');
-        paymentCashboxGroup.classList.toggle('hidden', !method.startsWith('efectivo'));
+        if (!closeModalBtn || !addPaymentBtnModal || !paymentMethodSelect || !finalizeOrderBtn) return;
 
-        if (method === 'transferencia') {
-            document.getElementById('payment-sender-id').value = '{{ client.phone or '' }}';
+        closeModalBtn.addEventListener('click', closePaymentModal);
+        addPaymentBtnModal.addEventListener('click', addPayment);
+
+        paymentMethodSelect.addEventListener('change', function() {
+            const newMethod = this.value;
+            const paymentAmountInput = document.getElementById('payment-amount');
+            const amount = parseFloat(paymentAmountInput.value);
+
+            const paymentReferenceGroup = document.getElementById('payment-reference-group');
+            const paymentIssuingBankGroup = document.getElementById('payment-issuing-bank-group');
+            const paymentSenderIdGroup = document.getElementById('payment-sender-id-group');
+            const paymentBankGroup = document.getElementById('payment-bank-group');
+            const paymentPosGroup = document.getElementById('payment-pos-group');
+            const paymentCashboxGroup = document.getElementById('payment-cashbox-group');
+            const paymentCurrencyGroup = document.getElementById('payment-currency-group'); // May be null
+
+            const isTransfer = newMethod === 'transferencia';
+            [paymentReferenceGroup, paymentIssuingBankGroup, paymentSenderIdGroup, paymentBankGroup].forEach(el => el.classList.toggle('hidden', !isTransfer));
+            if (paymentCurrencyGroup) paymentCurrencyGroup.classList.toggle('hidden', !isTransfer);
+            paymentPosGroup.classList.toggle('hidden', newMethod !== 'punto_de_venta');
+            paymentCashboxGroup.classList.toggle('hidden', !newMethod.startsWith('efectivo'));
+
+            if (isTransfer) {
+                document.getElementById('payment-sender-id').value = '{{ client.phone or '' }}';
+            }
+
+            if (amount && amount > 0 && currentRate > 0) {
+                const wasUsd = previousPaymentMethod === 'efectivo_usd';
+                const isUsd = newMethod === 'efectivo_usd';
+                if (wasUsd && !isUsd) { // USD -> VES
+                    paymentAmountInput.value = (amount * currentRate).toFixed(2);
+                } else if (!wasUsd && isUsd) { // VES -> USD
+                    paymentAmountInput.value = (amount / currentRate).toFixed(2);
+                }
+            } else {
+                updatePaymentSummary();
+            }
+            previousPaymentMethod = newMethod;
+        });
+
+        if (paymentCurrencySelect) {
+            paymentCurrencySelect.addEventListener('change', function() {
+                paymentMethodSelect.dispatchEvent(new Event('change'));
+            });
         }
 
-        updatePaymentSummary();
-    });
+        finalizeOrderBtn.addEventListener('click', function() {
+            if (payments.length === 0) {
+                // Si no hay pagos en el array, intenta agregarlo desde los campos del formulario.
+                addPayment();
+            }
+            if (payments.length === 0) {
+                alert("Debe agregar al menos un método de pago para registrar el abono.");
+                return;
+            }
+            paymentFormDataInput.value = JSON.stringify(payments);
+            paymentSubmissionForm.submit();
+        });
 
-    finalizeOrderBtn.addEventListener('click', function() {
-        if (payments.length === 0) {
-            // Si no hay pagos en el array, intenta agregarlo desde los campos del formulario.
-            addPayment();
-        }
-        if (payments.length === 0) {
-            alert("Debe agregar al menos un método de pago para registrar el abono.");
-            return;
-        }
-        paymentFormDataInput.value = JSON.stringify(payments);
-        paymentSubmissionForm.submit();
-    });
-
-    // Initialize first state of conditional fields
-    paymentMethodSelect.dispatchEvent(new Event('change'));
+        // Initialize first state of conditional fields
+        paymentMethodSelect.dispatchEvent(new Event('change'));
+    }
 });
 </script>
 {% endblock %}

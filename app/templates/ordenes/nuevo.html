@@ -198,14 +198,17 @@
                             <div>
                                 <p class="text-xs text-gray-600">Total a Pagar</p>
                                 <p id="modal-total-amount" class="text-lg font-bold text-blue-800">0.00 Bs</p>
+                                <p id="modal-total-amount-usd" class="text-sm font-semibold text-blue-700">0.00 {{ currency_symbol }}</p>
                             </div>
                             <div>
                                 <p class="text-xs text-gray-600">Total Pagado</p>
                                 <p id="modal-paid-amount" class="text-lg font-bold text-green-600">0.00 Bs</p>
+                                <p id="modal-paid-amount-usd" class="text-sm font-semibold text-green-500">0.00 {{ currency_symbol }}</p>
                             </div>
                             <div>
                                 <p class="text-xs text-gray-600">Monto Restante</p>
                                 <p id="modal-remaining-amount" class="text-lg font-bold text-red-600">0.00 Bs</p>
+                                <p id="modal-remaining-amount-usd" class="text-sm font-semibold text-red-500">0.00 {{ currency_symbol }}</p>
                             </div>
                         </div>
                         <!-- Vuelto Display -->
@@ -241,6 +244,15 @@
                             </div>
                         </div>
                         
+                        <!-- Campo de moneda para transferencia -->
+                        <div id="payment-currency-group" class="hidden">
+                            <label for="payment-currency" class="block text-sm font-medium text-gray-700">Moneda de Transferencia</label>
+                            <select id="payment-currency" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                <option value="VES">Bolívares (VES)</option>
+                                <option value="USD">Dólares (USD)</option>
+                            </select>
+                        </div>
+
                         <!-- Campos condicionales -->
                         <div id="payment-details-group" class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
                             <div id="payment-reference-group" class="hidden">
@@ -254,8 +266,11 @@
                                     <option value="Banco de Venezuela">Banco de Venezuela</option>
                                     <option value="BBVA Provincial">BBVA Provincial</option>
                                     <option value="Banesco">Banesco</option>
+                                    <option value="Banesco Panama">Banesco Panamá</option>
+                                    <option value="Binance">Binance</option>
                                     <option value="BNC (Banco Nacional de Crédito)">BNC (Banco Nacional de Crédito)</option>
                                     <option value="Mercantil">Mercantil</option>
+                                    <option value="Mercantil Panama">Mercantil Panamá</option>
                                     <option value="Bancamiga">Bancamiga</option>
                                     <option value="BDT (Banco del Tesoro)">BDT (Banco del Tesoro)</option>
                                     <option value="Banplus">Banplus</option>
@@ -267,17 +282,18 @@
                                     <option value="Fondo Común (BFC)">Fondo Común (BFC)</option>
                                     <option value="Bancrecer">Bancrecer</option>
                                     <option value="Banco Del Sur">Banco Del Sur</option>
+                                    <option value="ZELLE">ZELLE</option>
                                 </select>
                             </div>
                             <div id="payment-sender-id-group" class="hidden">
-                                <label for="payment-sender-id" class="block text-sm font-medium text-gray-700">Teléfono/Número de Cédula</label>
+                                <label for="payment-sender-id" class="block text-sm font-medium text-gray-700">Teléfono/C.I./Email</label>
                                 <input type="text" id="payment-sender-id" class="mt-1 block w-full py-1 px-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                             </div>
                             <div id="payment-bank-group" class="hidden">
                                 <label for="payment-bank" class="block text-sm font-medium text-gray-700">Banco Destino</label>
                                 <select id="payment-bank" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                                     <option value="">Seleccione un banco</option>
-                                    {% for bank in banks %}<option value="{{ bank.id }}">{{ bank.name }}</option>{% endfor %}
+                                    {% for bank in banks %}<option value="{{ bank.id }}" data-currency="{{ bank.currency }}">{{ bank.name }} ({{ bank.currency }})</option>{% endfor %}
                                 </select>
                             </div>
                             <div id="payment-pos-group" class="hidden">
@@ -1042,6 +1058,9 @@
         const modalTotalAmount = document.getElementById('modal-total-amount');
         const modalPaidAmount = document.getElementById('modal-paid-amount');
         const modalRemainingAmount = document.getElementById('modal-remaining-amount');
+        const modalTotalAmountUsd = document.getElementById('modal-total-amount-usd');
+        const modalPaidAmountUsd = document.getElementById('modal-paid-amount-usd');
+        const modalRemainingAmountUsd = document.getElementById('modal-remaining-amount-usd');
         const modalChangeDisplay = document.getElementById('modal-change-display');
         const modalChangeAmount = document.getElementById('modal-change-amount');
         const creditSaleNotice = document.getElementById('credit-sale-notice');
@@ -1058,6 +1077,8 @@
         const paymentBankSelect = document.getElementById('payment-bank');
         const paymentPosGroup = document.getElementById('payment-pos-group');
         const paymentPosSelect = document.getElementById('payment-pos');
+        const paymentCurrencyGroup = document.getElementById('payment-currency-group');
+        const paymentCurrencySelect = document.getElementById('payment-currency');
         const paymentCashboxGroup = document.getElementById('payment-cashbox-group');
         const paymentCashboxSelect = document.getElementById('payment-cashbox');
 
@@ -1067,6 +1088,7 @@
         let payments = [];
         let orderTotal = 0;
         let previousPaymentMethod = paymentMethodSelect.value;
+        let previousTransferCurrency = paymentCurrencySelect.value;
 
         function updatePaymentAmountInput() {
             const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
@@ -1078,15 +1100,16 @@
             }
 
             const method = paymentMethodSelect.value;
+            const transfer_currency = paymentCurrencySelect.value;
 
-            if (method === 'efectivo_usd') {
+            if ((method === 'efectivo_usd') || (method === 'transferencia' && transfer_currency === 'USD')) {
                 if (activeRate > 0) {
                     const amountUsd = remaining / activeRate;
                     paymentAmountInput.value = amountUsd.toFixed(2);
                 } else {
                     paymentAmountInput.value = '0.00'; // Avoid division by zero
                 }
-            } else {
+            } else { // For VES methods
                 paymentAmountInput.value = remaining.toFixed(2);
             }
         }
@@ -1147,6 +1170,7 @@
             paymentMethodSelect.dispatchEvent(new Event('change'));
 
             modalTotalAmount.textContent = orderTotal.toFixed(2) + ' Bs';
+            modalTotalAmountUsd.textContent = (orderTotal / activeRate).toFixed(2) + ' {{ currency_symbol }}';
             updatePaymentSummary(); // This will set up the initial state of the modal correctly
             paymentModal.classList.remove('hidden');
         }
@@ -1163,6 +1187,9 @@
             const remaining = orderTotal - totalPaid;
 
             modalPaidAmount.textContent = totalPaid.toFixed(2) + ' Bs';
+            modalPaidAmountUsd.textContent = (totalPaid / activeRate).toFixed(2) + ' {{ currency_symbol }}';
+            modalRemainingAmountUsd.textContent = (Math.max(0, remaining) / activeRate).toFixed(2) + ' {{ currency_symbol }}';
+
 
             // Handle change display
             if (remaining < -0.001) { // Overpaid, show change
@@ -1199,6 +1226,7 @@
             const issuing_bank = paymentIssuingBankInput.value;
             const sender_id = paymentSenderIdInput.value;
             const bank_id = paymentBankSelect.value;
+            const transfer_currency = paymentCurrencySelect.value;
             const pos_id = paymentPosSelect.value;
             const cash_box_id = paymentCashboxSelect.value;
 
@@ -1208,7 +1236,7 @@
             }
 
             // Validar selección de destino
-            if (method === 'transferencia' && !bank_id) {
+            if (method === 'transferencia' && !bank_id) { // This validation is now more complex due to currency filtering
                 alert("Por favor, seleccione un banco de destino.");
                 return;
             }
@@ -1224,10 +1252,11 @@
             let amount_ves_equivalent = amount;
             let currency_paid = 'VES';
 
-            if (method === 'efectivo_usd') {
+            if (method === 'efectivo_usd' || (method === 'transferencia' && transfer_currency === 'USD')) {
                 amount_ves_equivalent = amount * activeRate;
                 currency_paid = 'USD';
             }
+
 
             const payment = {
                 method: method,
@@ -1287,11 +1316,29 @@
             const newMethod = this.value;
             const amount = parseFloat(paymentAmountInput.value);
 
+            function filterBankOptions() {
+                const selectedCurrency = paymentCurrencySelect.value;
+                const bankOptions = paymentBankSelect.options;
+                let firstVisibleOption = null;
+
+                for (let i = 1; i < bankOptions.length; i++) { // Skip "Seleccione un banco"
+                    const option = bankOptions[i];
+                    if (option.dataset.currency === selectedCurrency) {
+                        option.style.display = '';
+                        if (!firstVisibleOption) firstVisibleOption = option;
+                    } else {
+                        option.style.display = 'none';
+                    }
+                }
+                // If the currently selected bank is now hidden, reset selection
+                if (paymentBankSelect.selectedOptions.length > 0 && paymentBankSelect.selectedOptions[0].style.display === 'none') {
+                    paymentBankSelect.value = '';
+                }
+            }
+
             // Toggle conditional fields first
-            paymentReferenceGroup.classList.toggle('hidden', newMethod !== 'transferencia');
-            paymentIssuingBankGroup.classList.toggle('hidden', newMethod !== 'transferencia');
-            paymentSenderIdGroup.classList.toggle('hidden', newMethod !== 'transferencia');
-            paymentBankGroup.classList.toggle('hidden', newMethod !== 'transferencia');
+            const isTransfer = newMethod === 'transferencia';
+            [paymentReferenceGroup, paymentIssuingBankGroup, paymentSenderIdGroup, paymentBankGroup, paymentCurrencyGroup].forEach(el => el.classList.toggle('hidden', !isTransfer));
             paymentPosGroup.classList.toggle('hidden', newMethod !== 'punto_de_venta');
             paymentCashboxGroup.classList.toggle('hidden', !newMethod.startsWith('efectivo'));
 
@@ -1301,14 +1348,27 @@
                 } else {
                     paymentSenderIdInput.value = '';
                 }
+                // When transfer is selected, filter banks based on the current currency selection
+                filterBankOptions();
+            } else {
+                paymentBankSelect.value = ''; // Reset bank selection if not a transfer
             }
 
+            const newTransferCurrency = paymentCurrencySelect.value;
+
             if (amount && amount > 0) {
-                // CORRECCIÓN: Se elimina la conversión automática de montos en el frontend.
-                // Esto era una fuente de errores cuando se usaba una tasa especial.
-                // Ahora, simplemente se mantiene el valor numérico y se deja que el usuario ajuste si es necesario,
-                // o se recalcula con `updatePaymentAmountInput`.
-                updatePaymentAmountInput();
+                const wasUsd = previousPaymentMethod === 'efectivo_usd' || (previousPaymentMethod === 'transferencia' && previousTransferCurrency === 'USD');
+                const isUsd = newMethod === 'efectivo_usd' || (newMethod === 'transferencia' && newTransferCurrency === 'USD');
+
+                if (wasUsd && !isUsd && activeRate > 0) {
+                    // Convert from USD to VES
+                    paymentAmountInput.value = (amount * activeRate).toFixed(2);
+                } else if (!wasUsd && isUsd && activeRate > 0) {
+                    // Convert from VES to USD
+                    paymentAmountInput.value = (amount / activeRate).toFixed(2);
+                }
+                // If currencies are the same (e.g., VES to VES), do nothing to the amount.
+
             } else {
                 // If no amount is entered, use the default behavior of filling with remaining
                 updatePaymentAmountInput();
@@ -1316,6 +1376,13 @@
             
             // Update the previous method for the next change
             previousPaymentMethod = newMethod;
+            previousTransferCurrency = newTransferCurrency;
+        });
+
+        // Add event listener for the new currency dropdown for transfers
+        paymentCurrencySelect.addEventListener('change', function() {
+            // When currency changes, re-filter the bank list
+            paymentMethodSelect.dispatchEvent(new Event('change'));
         });
 
         paymentsListDiv.addEventListener('click', function(e) {

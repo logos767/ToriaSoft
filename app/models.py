@@ -53,9 +53,9 @@ class Product(db.Model):
 class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    cedula_rif = db.Column(db.String(20), nullable=True)
-    email = db.Column(db.String(120), unique=True, nullable=True)
-    phone = db.Column(db.String(20), nullable=True)
+    cedula_rif = db.Column(db.String(40), nullable=True)
+    email = db.Column(db.String(120), unique=False, nullable=True)
+    phone = db.Column(db.String(40), nullable=True)
     address = db.Column(db.String(200), nullable=True)
     
     # Relaciones
@@ -147,13 +147,14 @@ class Bank(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
     account_number = db.Column(db.String(20), nullable=True, unique=True)
-    balance = db.Column(db.Float, nullable=False, default=0.0) # Stored in VES
+    balance = db.Column(db.Float, nullable=False, default=0.0) # Balance in the bank's currency
+    currency = db.Column(db.String(3), nullable=False, default='VES') # 'VES', 'USD', etc.
     
     payments = db.relationship('Payment', backref='bank', lazy=True)
     pos_terminals = db.relationship('PointOfSale', backref='bank', lazy=True)
 
     def __repr__(self):
-        return f"Bank('{self.name}')"
+        return f"Bank('{self.name}', '{self.currency}')"
 
 class PointOfSale(db.Model):
     __tablename__ = 'points_of_sale'

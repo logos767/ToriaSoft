@@ -10,6 +10,10 @@
             margin: 2mm;
         }
 
+        .watermark {
+            position: fixed; left: 50%; transform: translateX(-50%) rotate(-45deg); color: rgba(128, 128, 128, 0.15); font-size: 1.5rem; font-weight: bold; z-index: -1; pointer-events: none; white-space: nowrap;
+        }
+
         body {
             width: 45mm; /* 58mm - 2mm margin left - 2mm margin right */
             padding: 0;
@@ -83,6 +87,17 @@
     </style>
 </head>
 <body>
+    <div style="position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden;">
+        <div class="watermark" style="top: 15%;">
+            Version de Prueba ToriaSoft
+        </div>
+        <div class="watermark" style="top: 50%;">
+            Version de Prueba ToriaSoft
+        </div>
+        <div class="watermark" style="top: 85%;">
+            Version de Prueba ToriaSoft
+        </div>
+    </div>
     <!-- Encabezado de la empresa -->
     <div class="header">
         {% if company_info.logo_filename %}

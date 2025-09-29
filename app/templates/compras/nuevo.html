@@ -108,15 +108,18 @@
                         <div class="grid grid-cols-3 gap-2">
                             <div>
                                 <p class="text-xs text-gray-600">Total a Pagar</p>
-                                <p id="modal-total-amount" class="text-lg font-bold text-blue-800">0.00 Bs</p>
+                                <p id="modal-total-amount" class="text-lg font-bold text-blue-800">0.00 Bs</p>                                
+                                <p id="modal-total-amount-usd" class="text-sm font-semibold text-blue-700">0.00 {{ currency_symbol }}</p>
                             </div>
                             <div>
                                 <p class="text-xs text-gray-600">Total Pagado</p>
                                 <p id="modal-paid-amount" class="text-lg font-bold text-green-600">0.00 Bs</p>
+                                <p id="modal-paid-amount-usd" class="text-sm font-semibold text-green-500">0.00 {{ currency_symbol }}</p>
                             </div>
                             <div>
                                 <p class="text-xs text-gray-600">Monto Restante</p>
                                 <p id="modal-remaining-amount" class="text-lg font-bold text-red-600">0.00 Bs</p>
+                                <p id="modal-remaining-amount-usd" class="text-sm font-semibold text-red-500">0.00 {{ currency_symbol }}</p>
                             </div>
                         </div>
                     </div>
@@ -283,6 +286,9 @@
         const modalTotalAmount = document.getElementById('modal-total-amount');
         const modalPaidAmount = document.getElementById('modal-paid-amount');
         const modalRemainingAmount = document.getElementById('modal-remaining-amount');
+        const modalTotalAmountUsd = document.getElementById('modal-total-amount-usd');
+        const modalPaidAmountUsd = document.getElementById('modal-paid-amount-usd');
+        const modalRemainingAmountUsd = document.getElementById('modal-remaining-amount-usd');
         
         const paymentMethodSelect = document.getElementById('payment-method');
         const paymentAmountInput = document.getElementById('payment-amount');
@@ -304,6 +310,7 @@
                 return;
             }
             modalTotalAmount.textContent = purchaseTotal.toFixed(2) + ' Bs';
+            modalTotalAmountUsd.textContent = (purchaseTotal / activeRate).toFixed(2) + ' {{ currency_symbol }}';
             updatePaymentSummaryModal();
             paymentModal.classList.remove('hidden');
         }
@@ -319,12 +326,14 @@
             const remaining = purchaseTotal - totalPaid;
 
             modalPaidAmount.textContent = totalPaid.toFixed(2) + ' Bs';
+            modalPaidAmountUsd.textContent = (totalPaid / activeRate).toFixed(2) + ' {{ currency_symbol }}';
             modalRemainingAmount.textContent = Math.max(0, remaining).toFixed(2) + ' Bs';
+            modalRemainingAmountUsd.textContent = (Math.max(0, remaining) / activeRate).toFixed(2) + ' {{ currency_symbol }}';
 
             finalizePurchaseBtn.disabled = false; // Can always create a purchase, even with pending payment
 
             const method = paymentMethodSelect.value;
-            if (method === 'efectivo_usd' && activeRate > 0) {
+            if ((method === 'efectivo_usd' || method === 'transferencia') && activeRate > 0) { // Assuming USD for transfers in purchases
                 paymentAmountInput.value = (remaining / activeRate).toFixed(2);
             } else {
                 paymentAmountInput.value = remaining.toFixed(2);

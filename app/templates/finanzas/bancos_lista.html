@@ -18,16 +18,24 @@
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre del Banco</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Número de Cuenta</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo (Bs.)</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo</th>
                         <th class="relative px-6 py-3"><span class="sr-only">Acciones</span></th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for bank in banks %}
                     <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ bank.name }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {{ bank.name }} <span class="text-xs text-gray-500">({{ bank.currency }})</span>
+                        </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ bank.account_number }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-gray-900">Bs. {{ "%.2f"|format(bank.balance) }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-gray-900">
+                            {% if bank.currency == 'USD' %}
+                                $ {{ "%.2f"|format(bank.balance) }}
+                            {% else %}
+                                Bs. {{ "%.2f"|format(bank.balance) }}
+                            {% endif %}
+                        </td>
                         {% if current_user.is_authenticated and current_user.role == 'administrador' %}
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <a href="{{ url_for('main.bank_movement_detail', bank_id=bank.id) }}" class="text-blue-600 hover:text-blue-900 mr-3" title="Ver Movimientos">
