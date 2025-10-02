@@ -604,6 +604,9 @@ def generate_barcode_pdf_reportlab(products, company_info, currency_symbol):
     label_width = 51 * mm
     label_height = 29 * mm
 
+    # Crear el lienzo del PDF
+    c = canvas.Canvas(buffer, pagesize=A4)
+
     # Create PDF canvas directly for more control
     c.setFont("Helvetica", 6)
 
