@@ -272,6 +272,13 @@ def login():
         user = User.query.filter_by(username=username).first()
         if user and bcrypt.check_password_hash(user.password, password):
             login_user(user)
+            
+            # Actualizar la tasa de cambio al iniciar sesión
+            current_app.logger.info(f"Usuario '{username}' ha iniciado sesión. Actualizando tasas de cambio...")
+            rates = fetch_and_update_exchange_rate()
+            if not rates:
+                flash('Advertencia: No se pudo actualizar la tasa de cambio. Se usarán los últimos valores guardados.', 'warning')
+
             next_page = request.args.get('next')
             if next_page:
                 return redirect(next_page)
@@ -370,6 +377,61 @@ def dashboard():
     all_orders_count = all_orders_count or 0
     all_orders_amount_usd = float(all_orders_amount_usd or 0.0)
 
+    # --- Daily Cash & Bank Movements by Account (New Logic) ---
+    from collections import defaultdict
+    # New structure to hold amounts per currency:
+    # {'inflows': {'VES': 0.0, 'USD': 0.0}, 'outflows': {'VES': 0.0, 'USD': 0.0}}
+    daily_movements_by_account = defaultdict(lambda: {'inflows': defaultdict(float), 'outflows': defaultdict(float)})
+
+    # 1. Process Payments (Inflows)
+    payments_today = Payment.query.options(
+        joinedload(Payment.bank),
+        joinedload(Payment.pos).joinedload(PointOfSale.bank),
+        joinedload(Payment.cash_box)
+    ).filter(Payment.date.between(start_of_day, end_of_day)).all()
+
+    for p in payments_today:
+        account_name = "Cuenta Desconocida"
+        if p.cash_box: account_name = p.cash_box.name
+        elif p.bank: account_name = p.bank.name
+        elif p.pos and p.pos.bank: account_name = p.pos.bank.name
+        
+        # Payments are recorded based on the currency of the receiving account
+        # Bank accounts are in VES, cash boxes can be VES or USD
+        if p.cash_box and p.currency_paid == 'USD':
+            daily_movements_by_account[account_name]['inflows']['USD'] += float(p.amount_paid or 0.0)
+        else: # All other payments (to banks, POS, or VES cash) are considered VES inflows
+            daily_movements_by_account[account_name]['inflows']['VES'] += float(p.amount_ves_equivalent or 0.0)
+
+
+    # 2. Process Manual Movements (Inflows and Outflows)
+    manual_movements_today = ManualFinancialMovement.query.options(
+        joinedload(ManualFinancialMovement.bank),
+        joinedload(ManualFinancialMovement.cash_box)
+    ).filter(ManualFinancialMovement.date.between(start_of_day, end_of_day), ManualFinancialMovement.status == 'Aprobado').all()
+
+    for m in manual_movements_today:
+        account_name = "Cuenta Desconocida"
+        if m.cash_box: account_name = m.cash_box.name
+        elif m.bank: account_name = m.bank.name
+
+        if m.movement_type == 'Ingreso':
+            daily_movements_by_account[account_name]['inflows'][m.currency] += float(m.amount or 0.0)
+        elif m.movement_type == 'Egreso':
+            daily_movements_by_account[account_name]['outflows'][m.currency] += float(m.amount or 0.0)
+
+    # --- Credits & Reservations Summary (REMOVED as per request) ---
+    # def get_credit_reservation_stats(start_date, end_date=None):
+    #     query = db.session.query(func.count(Order.id), func.sum(Order.total_amount_usd)).filter(Order.order_type.in_(['credit', 'reservation']))
+    #     if end_date:
+    #         query = query.filter(Order.date_created.between(start_date, end_date))
+    #     else:
+    #         query = query.filter(Order.date_created >= start_date)
+    #     count, amount_usd = query.first()
+    #     return count or 0, float(amount_usd or 0.0)
+    # credits_reservations_today_count, credits_reservations_today_amount_usd = get_credit_reservation_stats(start_of_day, end_of_day)
+    # credits_reservations_month_count, credits_reservations_month_amount_usd = get_credit_reservation_stats(start_of_month_dt)
+
     # --- Accounting Donut Chart Data (Current Month) ---
     def get_accounting_data(start_date, end_date=None):
         # Sales by status
@@ -447,6 +509,7 @@ def dashboard():
                            orders_month_amount_usd=orders_month_amount_usd,
                            all_orders_count=all_orders_count,
                            all_orders_amount_usd=all_orders_amount_usd,
+                           daily_movements_by_account=daily_movements_by_account,
                            accounting_chart_data=accounting_chart_data,
                            accounting_chart_data_day=accounting_chart_data_day,
                            current_month_name=current_month_name,

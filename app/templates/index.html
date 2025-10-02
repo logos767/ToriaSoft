@@ -5,64 +5,66 @@
     <h1 class="text-3xl font-bold text-gray-800 mb-1"><i class="fas fa-tachometer-alt mr-2"></i>Dashboard</h1>
     
     <!-- Sección de Métricas -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <!-- Tarjeta de Productos Totales -->
-        <div class="bg-white rounded-lg shadow-md p-6 flex items-center justify-between relative">
+        <div class="bg-white rounded-lg shadow-md p-4 relative">
+            <h2 class="text-gray-500 text-sm font-semibold uppercase mb-2">Productos</h2>
             <div>
-                <h2 class="text-gray-500 text-sm font-semibold uppercase">Productos Totales</h2>
-                <p class="text-3xl font-bold text-gray-800">{{ "{:,}".format(total_products) }}</p>
-            </div>
-            <div class="bg-blue-100 text-blue-500 p-3 rounded-full">
-                <i class="fas fa-boxes text-2xl"></i>
+                <p class="text-2xl font-bold text-gray-800">{{ "{:,}".format(total_products) }} <span class="text-lg font-normal">productos</span></p>
+                <p class="text-lg font-semibold text-gray-600">{{ "{:,}".format(total_stock) }} <span class="text-base font-normal">unidades en stock</span></p>
+                <p class="text-lg font-semibold text-green-600 mt-1">${{ "{:,.2f}".format(total_stock_value_usd) }} <span class="text-base font-normal">valorizado</span></p>
             </div>
             <a href="{{ url_for('main.inventory_list') }}" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600" title="Ver lista de productos">
                 <i class="fas fa-list text-sm"></i>
             </a>
         </div>
-        <!-- Tarjeta de Existencias Totales -->
-        <div class="bg-white rounded-lg shadow-md p-6 flex items-center justify-between relative">
+        <!-- Tarjeta de Clientes y Cuentas por Cobrar -->
+        <div class="bg-white rounded-lg shadow-md p-4 relative">
+            <h2 class="text-gray-500 text-sm font-semibold uppercase mb-2">Clientes</h2>
             <div>
-                <h2 class="text-gray-500 text-sm font-semibold uppercase">Existencias Totales</h2>
-                <p class="text-3xl font-bold text-gray-800">{{ "{:,}".format(total_stock) }} <span class="text-lg font-normal">unidades</span></p>
-                <p class="text-lg font-semibold text-green-600">${{ "{:,.2f}".format(total_stock_value_usd) }}</p>
-            </div>
-            <div class="bg-green-100 text-green-500 p-3 rounded-full">
-                <i class="fas fa-box-open text-2xl"></i>
-            </div>
-            <a href="{{ url_for('main.inventory_stock') }}" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600" title="Ver lista de existencias">
-                <i class="fas fa-list text-sm"></i>
-            </a>
-        </div>
-        <!-- Tarjeta de Clientes Totales -->
-        <div class="bg-white rounded-lg shadow-md p-6 flex items-center justify-between relative">
-            <div>
-                <h2 class="text-gray-500 text-sm font-semibold uppercase">Clientes Totales</h2>
-                <p class="text-3xl font-bold text-gray-800">{{ "{:,}".format(total_clients) }}</p>
-            </div>
-            <div class="bg-yellow-100 text-yellow-500 p-3 rounded-full">
-                <i class="fas fa-users text-2xl"></i>
+                <p class="text-2xl font-bold text-gray-800">{{ "{:,}".format(total_clients) }}</p>
+                <p class="text-lg font-semibold text-gray-600">{{ clients_in_debt_count }} <span class="text-base font-normal">clientes con deuda</span></p>
+                <p class="text-lg font-semibold text-orange-600 mt-1">${{ "{:,.2f}".format(total_due_usd) }} <span class="text-base font-normal">por cobrar</span></p>
             </div>
             <a href="{{ url_for('main.client_list') }}" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600" title="Ver lista de clientes">
                 <i class="fas fa-list text-sm"></i>
             </a>
         </div>
-        <!-- Tarjeta de Cuentas por Cobrar -->
-        <div class="bg-white rounded-lg shadow-md p-6 flex items-center justify-between relative">
-            <div>
-                <h2 class="text-gray-500 text-sm font-semibold uppercase">Cuentas por Cobrar</h2>
-                <p class="text-3xl font-bold text-gray-800">{{ clients_in_debt_count }} <span class="text-lg font-normal">clientes</span></p>
-                <p class="text-lg font-semibold text-orange-600">${{ "{:,.2f}".format(total_due_usd) }}</p>
+        <!-- Tarjeta de Movimientos de Hoy -->
+        <div class="bg-white rounded-lg shadow-md p-4 relative">
+            <h2 class="text-gray-500 text-sm font-semibold uppercase mb-2">Movimientos de Hoy</h2>
+            <div class="space-y-3 text-sm mt-3 max-h-40 overflow-y-auto pr-2">
+                {% for account_name, movements in daily_movements_by_account.items() %}
+                    {% if movements.inflows or movements.outflows %}
+                        <div class="border-t pt-2">
+                            <p class="font-semibold text-gray-700 text-base mb-1">{{ account_name }}</p>
+                            {% if movements.inflows %}
+                                {% for currency, amount in movements.inflows.items() if amount > 0 %}
+                                <div class="flex justify-between items-baseline">
+                                    <span class="font-medium text-gray-600"><i class="fas fa-arrow-down text-green-500 mr-1"></i>Entradas ({{ currency }}):</span>
+                                    <span class="font-bold text-green-600">{% if currency == 'USD' %}${{ "{:,.2f}".format(amount) }}{% else %}Bs. {{ "{:,.2f}".format(amount) }}{% endif %}</span>
+                                </div>
+                                {% endfor %}
+                            {% endif %}
+                            {% if movements.outflows %}
+                                {% for currency, amount in movements.outflows.items() if amount > 0 %}
+                                <div class="flex justify-between items-baseline">
+                                    <span class="font-medium text-gray-600"><i class="fas fa-arrow-up text-red-500 mr-1"></i>Salidas ({{ currency }}):</span>
+                                    <span class="font-bold text-red-600">{% if currency == 'USD' %}${{ "{:,.2f}".format(amount) }}{% else %}Bs. {{ "{:,.2f}".format(amount) }}{% endif %}</span>
+                                </div>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <p class="text-gray-500 text-center mt-6">No hay movimientos registrados hoy.</p>
+                {% endfor %}
             </div>
-            <div class="bg-orange-100 text-orange-500 p-3 rounded-full">
-                <i class="fas fa-file-invoice-dollar text-2xl"></i>
-            </div>
-            <a href="{{ url_for('main.client_list') }}" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600" title="Ver clientes con deudas">
-                <i class="fas fa-list text-sm"></i>
-            </a>
+            <i class="fas fa-exchange-alt absolute bottom-4 right-4 text-gray-300 text-2xl"></i>
         </div>
         <!-- Tarjeta de Resumen de Órdenes -->
-        <div class="bg-white rounded-lg shadow-md p-6 relative">
-            <h2 class="text-gray-500 text-sm font-semibold uppercase mb-2">Resumen de Órdenes</h2>
+        <div class="bg-white rounded-lg shadow-md p-4 relative">
+            <h2 class="text-gray-500 text-sm font-semibold uppercase mb-2">Ventas</h2>
             <div class="space-y-2 text-sm">
                 <div class="flex justify-between items-baseline">
                     <span class="font-medium text-gray-700">Hoy:</span>
