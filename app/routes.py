@@ -600,24 +600,6 @@ def generate_barcode_pdf_reportlab(products, company_info, currency_symbol):
     page_width, page_height = A4
     margin = 3 * mm
 
-    def draw_watermarks(canvas, width, height):
-        """Dibuja tres marcas de agua en la página."""
-        positions = [height * 0.25, height * 0.5, height * 0.75]
-        for y_pos in positions:
-            canvas.saveState()
-            canvas.translate(width / 2, y_pos)
-            canvas.rotate(45)
-            canvas.setFont("Helvetica", 50)
-            canvas.setFillColorRGB(0.5, 0.5, 0.5, 0.2) # Gris semi-transparente
-            canvas.drawCentredString(0, 0, "Version de Prueba ToriaSoft")
-            canvas.restoreState()
-
-    # Create PDF canvas directly for more control
-    c = canvas.Canvas(buffer, pagesize=A4)
-    
-    # Dibujar la marca de agua en la primera página
-    draw_watermarks(c, page_width, page_height)
-
     # Label dimensions (same as HTML template)
     label_width = 51 * mm
     label_height = 29 * mm
@@ -730,8 +712,6 @@ def generate_barcode_pdf_reportlab(products, company_info, currency_symbol):
         # Start new page if there are more products
         if i + 40 < len(products):
             c.showPage()
-            # Dibujar la marca de agua en la nueva página
-            draw_watermarks(c, page_width, page_height)
             c.setFont("Helvetica", 6)
 
     # Save PDF
@@ -2133,17 +2113,6 @@ def generar_reporte_mensual_pdf():
 
     # --- 5. Creación del PDF y Envío de Respuesta ---
     pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
-    
-    # Añadir marca de agua con PyPDF2 (si está instalado) o devolver como está
-    try:
-        from PyPDF2 import PdfReader, PdfWriter
-        watermark_text = "Version de Prueba ToriaSoft"
-        # Esta es una forma simplificada. Para una marca de agua más robusta,
-        # se necesitaría crear un PDF de marca de agua y fusionarlo.
-        # Por ahora, lo dejamos así para no añadir dependencias.
-        # En el HTML se ha añadido una marca de agua que WeasyPrint debería renderizar.
-    except ImportError:
-        current_app.logger.warning("PyPDF2 no está instalado. La marca de agua en el PDF dependerá del renderizado CSS.")
 
     response = make_response(pdf_file)
     response.headers['Content-Type'] = 'application/pdf'
@@ -3649,17 +3618,6 @@ def print_daily_closing_report_pdf():
 
     pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
 
-    # Añadir marca de agua con PyPDF2 (si está instalado) o devolver como está
-    try:
-        from PyPDF2 import PdfReader, PdfWriter
-        watermark_text = "Version de Prueba ToriaSoft"
-        # Esta es una forma simplificada. Para una marca de agua más robusta,
-        # se necesitaría crear un PDF de marca de agua y fusionarlo.
-        # Por ahora, lo dejamos así para no añadir dependencias.
-        # En el HTML se ha añadido una marca de agua que WeasyPrint debería renderizar.
-    except ImportError:
-        current_app.logger.warning("PyPDF2 no está instalado. La marca de agua en el PDF dependerá del renderizado CSS.")
-    
     response = make_response(pdf_file)
     response.headers['Content-Type'] = 'application/pdf'
     response.headers['Content-Disposition'] = f'inline; filename=cierre_diario_{report_date.strftime("%Y_%m_%d")}.pdf'
