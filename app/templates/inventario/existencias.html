@@ -3,25 +3,41 @@
 {% block content %}
 {% if current_user.is_authenticated and current_user.role == 'administrador' %}
 <div class="container mx-auto p-4">
-    <h1 class="text-3xl font-bold text-gray-800 mb-6"><i class="fas fa-box-open mr-2"></i>Existencias de Inventario</h1>
-    <div class="bg-white p-6 rounded-lg shadow-md">
+    <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-box-open mr-2"></i>Existencias de Inventario</h1>
+        <div class="flex items-center space-x-2">
+            <a href="{{ url_for('main.inventory_stock_report_pdf') }}" target="_blank" class="bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600 transition-colors">
+                <i class="fas fa-file-pdf mr-2"></i>Imprimir Lista
+            </a>
+            <a href="{{ url_for('main.inventory_adjustment') }}" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
+                <i class="fas fa-clipboard-check mr-2"></i>Ajuste Digital
+            </a>
+        </div>
+    </div>
+    <div class="bg-white p-1 rounded-lg shadow-md">
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                     <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código Producto</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Talla</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Color</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código de Barras</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Existencias</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for product in products %}
-                    <tr class="{% if product.stock < 5 %}bg-red-50{% elif product.stock < 20 %}bg-yellow-50{% else %}bg-green-50{% endif %}">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ product.name }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.barcode }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold {% if product.stock < 5 %}text-red-700{% elif product.stock < 20 %}text-yellow-700{% else %}text-green-700{% endif %}">{{ product.stock }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    <tr class="hover:bg-gray-50 {% if product.stock < 5 %}bg-red-50{% elif product.stock < 20 %}bg-yellow-50{% else %}bg-green-50{% endif %}">
+                        <td class="px-4 py-1 whitespace-nowrap text-sm text-gray-500">{{ product.codigo_producto or 'N/A' }}</td>
+                        <td class="px-6 py-1 whitespace-nowrap text-sm font-medium text-gray-900">{{ product.name }}</td>
+                        <td class="px-4 py-1 whitespace-nowrap text-sm text-gray-500">{{ product.size or 'N/A' }}</td>
+                        <td class="px-4 py-1 whitespace-nowrap text-sm text-gray-500">{{ product.color or 'N/A' }}</td>
+                        <td class="px-6 py-1 whitespace-nowrap text-sm text-gray-500">{{ product.barcode }}</td>
+                        <td class="px-6 py-1 whitespace-nowrap text-sm font-bold {% if product.stock < 5 %}text-red-700{% elif product.stock < 20 %}text-yellow-700{% else %}text-green-700{% endif %}">{{ product.stock }}</td>
+                        <td class="px-6 py-1 whitespace-nowrap text-sm text-gray-700">
                             {% if product.stock == 0 %}
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Agotado</span>
                             {% elif product.stock < 5 %}

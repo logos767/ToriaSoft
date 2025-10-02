@@ -820,6 +820,79 @@ def inventory_stock():
     products = Product.query.filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).all()
     return render_template('inventario/existencias.html', title='Existencias', products=products)
 
+@routes_blueprint.route('/inventario/existencias/reporte_pdf')
+@login_required
+def inventory_stock_report_pdf():
+    """Genera un reporte PDF para el conteo físico del inventario."""
+    if current_user.role != 'administrador':
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.inventory_stock'))
+
+    products = Product.query.filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).order_by(Product.name).all()
+    company_info = CompanyInfo.query.first()
+    generation_date = get_current_time_ve().strftime('%d/%m/%Y %H:%M:%S')
+
+    html_string = render_template('pdf/inventory_stock_report.html',
+                                  products=products,
+                                  company_info=company_info,
+                                  generation_date=generation_date)
+
+    pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
+
+    response = Response(pdf_file, mimetype='application/pdf', headers={'Content-Disposition': 'inline; filename=reporte_existencias.pdf'})
+    return response
+
+@routes_blueprint.route('/inventario/ajuste', methods=['GET', 'POST'])
+@login_required
+def inventory_adjustment():
+    """Página para el ajuste digital del inventario."""
+    if current_user.role != 'administrador':
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+
+    if request.method == 'POST':
+        try:
+            adjustments = request.form.getlist('adjustments')
+            reason = request.form.get('reason', 'Ajuste de inventario manual')
+            
+            products_to_update = []
+            movements_to_create = []
+            
+            for adj_str in adjustments:
+                data = json.loads(adj_str)
+                product_id = int(data['product_id'])
+                real_stock = int(data['real_stock'])
+                
+                product = Product.query.get(product_id)
+                if product and product.stock != real_stock:
+                    difference = real_stock - product.stock
+                    
+                    # Preparar actualización de stock
+                    product.stock = real_stock
+                    products_to_update.append(product)
+                    
+                    # Preparar registro de movimiento
+                    movement = Movement(
+                        product_id=product.id,
+                        type='Entrada' if difference > 0 else 'Salida',
+                        quantity=abs(difference),
+                        document_type='Ajuste de Inventario',
+                        description=f"{reason} (Diferencia: {difference})",
+                        date=get_current_time_ve()
+                    )
+                    movements_to_create.append(movement)
+            
+            db.session.bulk_save_objects(movements_to_create)
+            db.session.commit()
+            flash(f'Ajuste de inventario completado para {len(products_to_update)} productos.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al procesar el ajuste: {e}', 'danger')
+        return redirect(url_for('main.inventory_stock'))
+
+    products = Product.query.filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).order_by(Product.name).all()
+    return render_template('inventario/ajuste_inventario.html', title='Ajuste de Inventario', products=products)
+
 @routes_blueprint.route('/inventario/producto/<int:product_id>')
 @login_required
 def product_detail(product_id):
