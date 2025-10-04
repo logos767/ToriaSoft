@@ -53,6 +53,10 @@
                             <a href="{{ url_for('main.reservation_detail', order_id=order.id) }}" class="ml-4 text-sm text-blue-600 hover:underline" title="Ir a la gestión del apartado">
                                 <i class="fas fa-box-open mr-1"></i>Ver Apartado
                             </a>
+                        {% elif order.order_type == 'credit' %}
+                            <a href="{{ url_for('main.credit_detail', order_id=order.id) }}" class="ml-4 text-sm text-blue-600 hover:underline" title="Ir a la gestión del crédito">
+                                <i class="fas fa-hand-holding-usd mr-1"></i>Ver Crédito
+                            </a>
                         {% endif %}
                         <p><strong>Tasa de Cambio:</strong> <span class="font-semibold">Bs. {{ "%.2f"|format(order.exchange_rate_at_sale) }}</span></p>
                     </div>
@@ -68,8 +72,8 @@
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-200">
                                 <tr>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Códigos</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
                                     <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
                                     <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Precio Unit. (Bs)</th>
                                     <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total (Bs)</th>
@@ -78,14 +82,14 @@
                             <tbody class="bg-white divide-y divide-gray-200">
                                 {% for item in order.items %}
                                 <tr>
-                                    <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ item.product.name }}</td>
-                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        <div><strong>Prod:</strong> {{ item.product.codigo_producto or 'N/A' }}</div>
-                                        <div><strong>Barra:</strong> {{ item.product.barcode }}</div>
+                                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                        <div><strong>COD:</strong> {{ item.product.codigo_producto or 'N/A' }}</div>
+                                        <div class="fas fa-barcode w-6 inline-block text-left"><a>{{ item.product.barcode }}</a></div>
                                     </td>
-                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-500">{{ item.quantity }}</td>
-                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-500">Bs. {{ "%.2f" % item.price }}</td>
-                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-center font-bold text-gray-800">Bs. {{ "%.2f" % (item.price * item.quantity) }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{{ item.product.name }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-500">{{ item.quantity }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-500">Bs. {{ "%.2f" % item.price }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold text-gray-800">Bs. {{ "%.2f" % (item.price * item.quantity) }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

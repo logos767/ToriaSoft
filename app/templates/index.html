@@ -33,28 +33,32 @@
         <!-- Tarjeta de Movimientos de Hoy -->
         <div class="bg-white rounded-lg shadow-md p-4 relative">
             <h2 class="text-gray-500 text-sm font-semibold uppercase mb-2">Movimientos de Hoy</h2>
-            <div class="space-y-3 text-sm mt-3 max-h-40 overflow-y-auto pr-2">
+            <div class="space-y-2 text-sm mt-3 max-h-40 overflow-y-auto pr-2">
                 {% for account_name, movements in daily_movements_by_account.items() %}
-                    {% if movements.inflows or movements.outflows %}
-                        <div class="border-t pt-2">
-                            <p class="font-semibold text-gray-700 text-base mb-1">{{ account_name }}</p>
-                            {% if movements.inflows %}
-                                {% for currency, amount in movements.inflows.items() if amount > 0 %}
-                                <div class="flex justify-between items-baseline">
-                                    <span class="font-medium text-gray-600"><i class="fas fa-arrow-down text-green-500 mr-1"></i>Entradas ({{ currency }}):</span>
-                                    <span class="font-bold text-green-600">{% if currency == 'USD' %}${{ "{:,.2f}".format(amount) }}{% else %}Bs. {{ "{:,.2f}".format(amount) }}{% endif %}</span>
-                                </div>
-                                {% endfor %}
-                            {% endif %}
-                            {% if movements.outflows %}
-                                {% for currency, amount in movements.outflows.items() if amount > 0 %}
-                                <div class="flex justify-between items-baseline">
-                                    <span class="font-medium text-gray-600"><i class="fas fa-arrow-up text-red-500 mr-1"></i>Salidas ({{ currency }}):</span>
-                                    <span class="font-bold text-red-600">{% if currency == 'USD' %}${{ "{:,.2f}".format(amount) }}{% else %}Bs. {{ "{:,.2f}".format(amount) }}{% endif %}</span>
-                                </div>
-                                {% endfor %}
-                            {% endif %}
+                    {% if account_name and (movements.inflows.values()|sum > 0 or movements.outflows.values()|sum > 0) %}
+                    <div class="border-t pt-2">
+                        <p class="font-semibold text-gray-700 text-base mb-1">{{ account_name }}</p>
+                        
+                        {% for currency, amount in movements.inflows.items() if amount > 0 %}
+                        <div class="flex justify-between items-baseline">
+                            <span class="font-medium text-gray-600">
+                                <i class="fas fa-arrow-down text-green-500 mr-1"></i>Entradas ({{ currency }}):
+                            </span>
+                            <span class="font-bold text-green-600">
+                                {% if currency == 'USD' %}${{ "{:,.2f}".format(amount) }}{% else %}Bs. {{ "{:,.2f}".format(amount) }}{% endif %}
+                            </span>
                         </div>
+                        {% endfor %}
+                        
+                        {% for currency, amount in movements.outflows.items() if amount > 0 %}
+                        <div class="flex justify-between items-baseline">
+                            <span class="font-medium text-gray-600">
+                                <i class="fas fa-arrow-up text-red-500 mr-1"></i>Salidas ({{ currency }}):
+                            </span>
+                            <span class="font-bold text-red-600">{% if currency == 'USD' %}${{ "{:,.2f}".format(amount) }}{% else %}Bs. {{ "{:,.2f}".format(amount) }}{% endif %}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
                     {% endif %}
                 {% else %}
                     <p class="text-gray-500 text-center mt-6">No hay movimientos registrados hoy.</p>

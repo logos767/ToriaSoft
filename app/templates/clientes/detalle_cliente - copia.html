@@ -121,8 +121,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- Payment Modal Logic ---
     const paymentSubmissionForm = document.getElementById('payment-submission-form');
     const paymentFormDataInput = document.getElementById('payment-form-data-input');
-    const paymentMethodSelect = document.getElementById('payment-method');
-    const paymentAmountInput = document.getElementById('payment-amount');
 
     const currencySymbol = '{{ currency_symbol }}';
     let payments = [];
@@ -134,6 +132,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function openPaymentModalForAbono(orderId, dueAmount) {
         // Define elements here, when the modal is about to be opened
         const paymentModal = document.getElementById('payment-modal');
+        const paymentMethodSelect = document.getElementById('payment-method');
         const paymentDateInput = document.getElementById('payment-date');
         const modalTotalAmount = document.getElementById('modal-total-amount');
         const modalTotalAmountUsd = document.getElementById('modal-total-amount-usd');
@@ -192,7 +191,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const modalRemainingAmountUsd = document.getElementById('modal-remaining-amount-usd');
         const finalizeOrderBtn = document.getElementById('finalize-order-btn');
         const paymentMethodSelect = document.getElementById('payment-method');
-        if (!paymentMethodSelect) return;
         const paymentAmountInput = document.getElementById('payment-amount');
 
         const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
@@ -205,7 +203,6 @@ document.addEventListener('DOMContentLoaded', function() {
         modalRemainingAmountUsd.textContent = (Math.max(0, remaining) / currentRate).toFixed(2) + ' ' + currencySymbol;
 
         finalizeOrderBtn.disabled = totalPaid <= 0;
-        if (!paymentAmountInput) return;
         
         // Auto-fill amount
         updatePaymentAmountInput(remaining);
@@ -213,8 +210,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function updatePaymentAmountInput(remaining) {
         if (remaining <= 0.01) {
-            const paymentAmountInput = document.getElementById('payment-amount');
-            if (!paymentAmountInput) return;
             paymentAmountInput.value = '';
             return;
         }
@@ -230,9 +225,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function addPayment() {
         const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentAmountInput = document.getElementById('payment-amount');
         const paymentDateInput = document.getElementById('payment-date');
 
-        if (!addPaymentBtnModal || !paymentMethodSelect || !paymentAmountInput || !paymentDateInput) return;
+        if (!addPaymentBtnModal || !paymentMethodSelect || !paymentAmountInput) return;
 
         // This modal only allows one payment at a time for simplicity
         payments = [];
@@ -244,7 +241,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const amount = parseFloat(paymentAmountInput.value);
         const paymentCurrencySelect = document.getElementById('payment-currency'); // May be null
         
-        const paymentDate = paymentDateInput.value;
+        const paymentDate = paymentDateInput ? paymentDateInput.value : new Date().toISOString();
         const issuingBank = document.getElementById('payment-issuing-bank').value;
         const senderId = document.getElementById('payment-sender-id').value;
 
@@ -292,6 +289,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function attachModalEventListeners() {
         const closeModalBtn = document.getElementById('close-modal-btn');
         const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
+        const paymentMethodSelect = document.getElementById('payment-method');
         const paymentCurrencySelect = document.getElementById('payment-currency'); // May be null
         const finalizeOrderBtn = document.getElementById('finalize-order-btn');
 
@@ -302,6 +300,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         paymentMethodSelect.addEventListener('change', function() {
             const newMethod = this.value;
+            const paymentAmountInput = document.getElementById('payment-amount');
             const amount = parseFloat(paymentAmountInput.value);
 
             const paymentReferenceGroup = document.getElementById('payment-reference-group');
@@ -312,38 +311,19 @@ document.addEventListener('DOMContentLoaded', function() {
             const paymentCashboxGroup = document.getElementById('payment-cashbox-group');
             const paymentCurrencyGroup = document.getElementById('payment-currency-group'); // May be null
 
-            function filterBankOptions() {
-                const selectedCurrency = paymentCurrencySelect ? paymentCurrencySelect.value : 'VES';
-                const paymentBankSelect = document.getElementById('payment-bank');
-                if (!paymentBankSelect) return;
-                const bankOptions = paymentBankSelect.options;
-                for (let i = 1; i < bankOptions.length; i++) { // Skip "Seleccione un banco"
-                    const option = bankOptions[i];
-                    if (option.dataset.currency === selectedCurrency) {
-                        option.style.display = '';
-                    } else {
-                        option.style.display = 'none';
-                    }
-                }
-                if (paymentBankSelect.selectedOptions.length > 0 && paymentBankSelect.selectedOptions[0].style.display === 'none') {
-                    paymentBankSelect.value = '';
-                }
-            }
-
             const isTransfer = newMethod === 'transferencia';
-            [paymentReferenceGroup, paymentIssuingBankGroup, paymentSenderIdGroup, paymentBankGroup].forEach(el => el && el.classList.toggle('hidden', !isTransfer));
+            [paymentReferenceGroup, paymentIssuingBankGroup, paymentSenderIdGroup, paymentBankGroup].forEach(el => el.classList.toggle('hidden', !isTransfer));
             if (paymentCurrencyGroup) paymentCurrencyGroup.classList.toggle('hidden', !isTransfer);
-            if (paymentPosGroup) paymentPosGroup.classList.toggle('hidden', newMethod !== 'punto_de_venta');
-            if (paymentCashboxGroup) paymentCashboxGroup.classList.toggle('hidden', !newMethod.startsWith('efectivo'));
+            paymentPosGroup.classList.toggle('hidden', newMethod !== 'punto_de_venta');
+            paymentCashboxGroup.classList.toggle('hidden', !newMethod.startsWith('efectivo'));
 
             if (isTransfer) {
                 document.getElementById('payment-sender-id').value = '{{ client.phone or '' }}';
-                filterBankOptions();
             }
 
             if (amount && amount > 0 && currentRate > 0) {
-                const wasUsd = previousPaymentMethod === 'efectivo_usd' || (previousPaymentMethod === 'transferencia' && document.getElementById('payment-currency')?.value === 'USD');
-                const isUsd = newMethod === 'efectivo_usd' || (isTransfer && paymentCurrencySelect?.value === 'USD');
+                const wasUsd = previousPaymentMethod === 'efectivo_usd';
+                const isUsd = newMethod === 'efectivo_usd';
                 if (wasUsd && !isUsd) { // USD -> VES
                     paymentAmountInput.value = (amount * currentRate).toFixed(2);
                 } else if (!wasUsd && isUsd) { // VES -> USD
@@ -379,5 +359,4 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
-
 {% endblock %}

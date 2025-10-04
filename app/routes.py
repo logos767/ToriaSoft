@@ -377,43 +377,44 @@ def dashboard():
     all_orders_count = all_orders_count or 0
     all_orders_amount_usd = float(all_orders_amount_usd or 0.0)
 
-    # --- Daily Cash & Bank Movements by Account (New Logic) ---
+    # --- Daily Cash & Bank Movements by Account ---
     from collections import defaultdict
-    # New structure to hold amounts per currency:
-    # {'inflows': {'VES': 0.0, 'USD': 0.0}, 'outflows': {'VES': 0.0, 'USD': 0.0}}
     daily_movements_by_account = defaultdict(lambda: {'inflows': defaultdict(float), 'outflows': defaultdict(float)})
 
-    # 1. Process Payments (Inflows)
+    # 1. Procesar Pagos (Ingresos)
     payments_today = Payment.query.options(
         joinedload(Payment.bank),
         joinedload(Payment.pos).joinedload(PointOfSale.bank),
         joinedload(Payment.cash_box)
     ).filter(Payment.date.between(start_of_day, end_of_day)).all()
 
-    for p in payments_today:
-        account_name = "Cuenta Desconocida"
-        if p.cash_box: account_name = p.cash_box.name
-        elif p.bank: account_name = p.bank.name
-        elif p.pos and p.pos.bank: account_name = p.pos.bank.name
-        
-        # Payments are recorded based on the currency of the receiving account
-        # Bank accounts are in VES, cash boxes can be VES or USD
-        if p.cash_box and p.currency_paid == 'USD':
-            daily_movements_by_account[account_name]['inflows']['USD'] += float(p.amount_paid or 0.0)
-        else: # All other payments (to banks, POS, or VES cash) are considered VES inflows
-            daily_movements_by_account[account_name]['inflows']['VES'] += float(p.amount_ves_equivalent or 0.0)
+    for payment in payments_today:
+        target_account_name = None
+        if payment.cash_box:
+            target_account_name = payment.cash_box.name
+            if payment.currency_paid == 'USD':
+                daily_movements_by_account[target_account_name]['inflows']['USD'] += float(payment.amount_paid or 0.0)
+            else: # Pagos en VES a caja
+                daily_movements_by_account[target_account_name]['inflows']['VES'] += float(payment.amount_ves_equivalent or 0.0)
+        else: # Pagos a Bancos (directo o por POS)
+            bank = payment.bank or (payment.pos.bank if payment.pos else None)
+            if bank:
+                target_account_name = bank.name
+                # Todos los ingresos a bancos se registran como VES
+                daily_movements_by_account[target_account_name]['inflows']['VES'] += float(payment.amount_ves_equivalent or 0.0)
 
-
-    # 2. Process Manual Movements (Inflows and Outflows)
+    # 2. Procesar Movimientos Manuales (Ingresos y Egresos)
     manual_movements_today = ManualFinancialMovement.query.options(
         joinedload(ManualFinancialMovement.bank),
         joinedload(ManualFinancialMovement.cash_box)
     ).filter(ManualFinancialMovement.date.between(start_of_day, end_of_day), ManualFinancialMovement.status == 'Aprobado').all()
 
     for m in manual_movements_today:
-        account_name = "Cuenta Desconocida"
-        if m.cash_box: account_name = m.cash_box.name
-        elif m.bank: account_name = m.bank.name
+        account_name = None
+        if m.cash_box:
+            account_name = m.cash_box.name
+        elif m.bank:
+            account_name = m.bank.name
 
         if m.movement_type == 'Ingreso':
             daily_movements_by_account[account_name]['inflows'][m.currency] += float(m.amount or 0.0)
@@ -3269,6 +3270,7 @@ def new_cash_withdrawal():
             currency = request.form.get('currency')
             description = request.form.get('description')
             received_by = request.form.get('received_by')
+            date_str = request.form.get('date')
 
             if not all([cash_box_id, amount, currency, description, received_by]):
                 raise ValueError("Todos los campos son requeridos.")
@@ -3289,10 +3291,18 @@ def new_cash_withdrawal():
 
             is_admin = current_user.role == 'administrador'
             
+            withdrawal_date = get_current_time_ve()
+            if date_str:
+                try:
+                    naive_dt = datetime.strptime(date_str, '%Y-%m-%dT%H:%M')
+                    withdrawal_date = VE_TIMEZONE.localize(naive_dt)
+                except (ValueError, TypeError):
+                    current_app.logger.warning(f"Invalid date format for withdrawal: '{date_str}'. Falling back to now.")
+
             new_mov = ManualFinancialMovement(
                 description=description, amount=amount, currency=currency, movement_type='Egreso',
                 cash_box_id=cash_box_id, received_by=received_by, created_by_user_id=current_user.id,
-                status='Aprobado' if is_admin else 'Pendiente'
+                status='Aprobado' if is_admin else 'Pendiente', date=withdrawal_date
             )
 
             if is_admin:

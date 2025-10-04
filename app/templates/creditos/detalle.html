@@ -1,18 +1,42 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto p-4 max-w-7xl">
-    <div class="flex items-center justify-between mb-6">
+<div class="container mx-auto p-2 max-w-7xl">
+    <div class="flex items-center justify-between mb-2">
         <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-hand-holding-usd mr-2"></i>{{ title }}</h1>
         <a href="{{ url_for('main.credit_list') }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver a Créditos</a>
     </div>
 
     <!-- Client Info & Credit Summary -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
         <!-- Client & Order Info -->
         <div class="md:col-span-2 bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Información del Crédito</h2>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-gray-600">
+            
+            <!-- Actions -->
+            
+                <div class="flex items-center space-x-4 justify-between">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-2 border-b pb-1">Información del Crédito</h2>
+                    <div>
+                    {% if order.due_amount > 0.01 %}
+                    <button type="button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg add-payment-button"
+                            data-order-id="{{ order.id }}"
+                            data-due-amount="{{ order.due_amount }}"
+                            title="Registrar Abono">
+                        <i class="fas fa-hand-holding-usd mr-2"></i>Registrar Abono
+                    </button>
+                    {% else %}
+                    <span class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 font-bold">
+                        <i class="fas fa-check-circle mr-2 text-green-500"></i>Crédito Pagado
+                    </span>
+                    {% endif %}
+                    <a href="{{ url_for('main.print_delivery_note', order_id=order.id) }}" target="_blank" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">
+                        <i class="fas fa-print mr-2"></i>Imprimir Recibo
+                    </a>
+                    </div>
+                </div>
+
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-gray-600 mt-4">
                 <p><strong>Cliente:</strong> <a href="{{ url_for('main.client_detail', client_id=order.client.id) }}" class="text-blue-600 hover:underline">{{ order.client.name }}</a></p>
                 <p><strong>Cédula/RIF:</strong> {{ order.client.cedula_rif or 'N/A' }}</p>
                 <p><strong>Fecha Crédito:</strong> {{ order.date_created|ve_datetime(fmt='%d/%m/%Y %H:%M') }}</p>
@@ -42,28 +66,7 @@
         </div>
     </div>
 
-    <!-- Actions -->
-    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
-        <h2 class="text-2xl font-bold text-gray-800 mb-4">Acciones</h2>
-        <div class="flex items-center space-x-4">
-            {% if order.due_amount > 0.01 %}
-            <button type="button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg add-payment-button"
-                    data-order-id="{{ order.id }}"
-                    data-due-amount="{{ order.due_amount }}"
-                    title="Registrar Abono">
-                <i class="fas fa-hand-holding-usd mr-2"></i>Registrar Abono
-            </button>
-            {% else %}
-            <span class="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 font-bold">
-                <i class="fas fa-check-circle mr-2 text-green-500"></i>Crédito Pagado
-            </span>
-            {% endif %}
-             <a href="{{ url_for('main.print_delivery_note', order_id=order.id) }}" target="_blank" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">
-                <i class="fas fa-print mr-2"></i>Imprimir Nota de Entrega
-            </a>
-        </div>
-    </div>
-
+    
     <!-- Order Items -->
     <div class="bg-white p-6 rounded-lg shadow-md">
         <h2 class="text-2xl font-bold text-gray-800 mb-4">Productos del Crédito</h2>
@@ -71,24 +74,32 @@
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                     <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
-                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
-                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Precio Unit. ({{ currency_symbol }})</th>
-                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Subtotal ({{ currency_symbol }})</th>
+                        <th class="px-4 py-3 text-center text-center font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
+                        <th class="px-4 py-3 text-right text-center font-medium text-gray-500 uppercase tracking-wider">Precio Unit. ({{ currency_symbol }})</th>
+                        <th class="px-4 py-3 text-right text-center font-medium text-gray-500 uppercase tracking-wider">Subtotal ({{ currency_symbol }})</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for item in order.items %}
                     <tr>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-start text-gray-500">
+                             <div><strong class="w-12 inline-block">COD:</strong> {{ item.product.codigo_producto or 'N/A' }}</div>
+                             <div><i class="fas fa-barcode w-4 inline-block text-left"></i> {{ item.product.barcode }}</div>
+                        </td>
                         <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ item.product.name }}</td>
                         <td class="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-500">{{ item.quantity }}</td>
-                        <td class="px-4 py-4 whitespace-nowrap text-sm text-right text-gray-800">{{ "%.2f"|format(item.price / order.exchange_rate_at_sale) }}</td>
-                        <td class="px-4 py-4 whitespace-nowrap text-sm text-right text-gray-800">{{ "%.2f"|format((item.price * item.quantity) / order.exchange_rate_at_sale) }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-800">{{ "%.2f"|format(item.price / order.exchange_rate_at_sale) }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-800">{{ "%.2f"|format((item.price * item.quantity) / order.exchange_rate_at_sale) }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+         <a href="{{ url_for('main.order_detail', order_id=order.id) }}" class="text-blue-500 hover:underline">
+           <i class="fas fa-arrow-right mr-1"></i>Ir a detalles de la orden
+        </a>
     </div>
 
     <!-- Payment History -->
@@ -134,7 +145,7 @@
 </div>
 
 <!-- Hidden form for submitting payments -->
-<form id="payment-submission-form" method="POST" action="{{ url_for('main.credit_detail', order_id=order.id) }}" class="hidden">
+<form  id="payment-submission-form" method="POST" action="{{ url_for('main.credit_detail', order_id=order.id) }}" class="hidden">
     <input type="hidden" name="payments_data" id="payment-form-data-input">
 </form>
 
@@ -220,6 +231,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const modalRemainingAmountUsd = document.getElementById('modal-remaining-amount-usd');
         const finalizeOrderBtn = document.getElementById('finalize-order-btn');
         const paymentMethodSelect = document.getElementById('payment-method');
+        if (!paymentMethodSelect) return;
         const paymentAmountInput = document.getElementById('payment-amount');
 
         const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
@@ -234,6 +246,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         finalizeOrderBtn.disabled = totalPaid <= 0;
+        if (!paymentAmountInput) return;
         
         const method = paymentMethodSelect.value;
         if (method === 'efectivo_usd' && currentRate > 0) {
@@ -399,4 +412,5 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+
 {% endblock %}
