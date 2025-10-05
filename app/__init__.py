@@ -171,6 +171,20 @@ def create_app():
         def inject_ve_time():
             return dict(get_current_time_ve=models.get_current_time_ve)
 
+        # Bank icons dictionary
+        BANK_ICONS = {
+            'BBVA PROVINCIAL': '0108.png',
+            'Banesco Panama': '0134.png',
+            'ZELLE davidamaciasp@gmail.com': '0053.png',
+            'Efectivo VES': 'VES.png',
+            'Efectivo USD': 'USD.png'
+        }
+
+        @app.context_processor
+        def inject_bank_icons():
+            # Make the dictionary available to all templates
+            return dict(BANK_ICONS=BANK_ICONS)
+
     @app.teardown_appcontext
     def shutdown_session(exception=None):
         db.session.remove()

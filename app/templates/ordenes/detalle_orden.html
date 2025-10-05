@@ -84,7 +84,7 @@
                                 <tr>
                                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                                         <div><strong>COD:</strong> {{ item.product.codigo_producto or 'N/A' }}</div>
-                                        <div class="fas fa-barcode w-6 inline-block text-left"><a>{{ item.product.barcode }}</a></div>
+                                        <div> <i class="fas fa-barcode w-4 inline-block text-left"></i> {{ item.product.barcode }}</div>
                                     </td>
                                     <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{{ item.product.name }}</td>
                                     <td class="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-500">{{ item.quantity }}</td>
@@ -107,7 +107,20 @@
                             {% for payment in order.payments %}
                                 <div class="bg-gray-50 p-3 rounded-lg border">
                                     <div class="flex justify-between items-center">
-                                        <span class="font-semibold text-gray-800">{{ payment.method.replace('_', ' ')|title }}</span>
+                                        <span class="font-semibold text-gray-800 flex items-center">
+                                            {% set icon_found = namespace(path=None, name=None) %}
+                                            {% for bank_name, icon_file in BANK_ICONS.items() %}
+                                                {% if bank_name.lower() in payment.method.replace('_', ' ').lower() %}
+                                                    {% set icon_found.path = url_for('static', filename='img/bancos/' + icon_file) %}
+                                                    {% set icon_found.name = bank_name %}
+                                                {% endif %}
+                                            {% endfor %}
+
+                                            {% if icon_found.path %}
+                                                <img src="{{ icon_found.path }}" alt="{{ icon_found.name }}" class="inline-block h-6 w-6 mr-2" title="{{ icon_found.name }}">
+                                            {% endif %}
+                                            {{ payment.method.replace('_', ' ')|title }}
+                                        </span>
                                         <span class="font-bold {% if payment.currency_paid == 'USD' %}text-green-700{% else %}text-blue-700{% endif %}">
                                             {% if payment.currency_paid == 'USD' %}${% elif payment.currency_paid == 'EUR' %}€{% else %}Bs.{% endif %}
                                             {{ "%.2f"|format(payment.amount_paid) }}

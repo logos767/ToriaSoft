@@ -83,6 +83,7 @@
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                     <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Códigos</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
                         <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
                         <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Precio Unit. ({{ currency_symbol }})</th>
@@ -92,6 +93,10 @@
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for item in order.items %}
                     <tr>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                            <div><strong>COD:</strong> {{ item.product.codigo_producto or 'N/A' }}</div>
+                            <div> <i class="fas fa-barcode w-4 inline-block text-left"></i> {{ item.product.barcode }}</div>
+                        </td>
                         <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ item.product.name }}</td>
                         <td class="px-4 py-4 whitespace-nowrap text-sm text-center text-gray-500">{{ item.quantity }}</td>
                         <td class="px-4 py-4 whitespace-nowrap text-sm text-right text-gray-800">{{ "%.2f"|format(item.price / order.exchange_rate_at_sale) }}</td>
@@ -101,6 +106,9 @@
                 </tbody>
             </table>
         </div>
+        <a href="{{ url_for('main.order_detail', order_id=order.id) }}" class="text-blue-500 hover:underline">
+           <i class="fas fa-arrow-right mr-1"></i>Ir a detalles de la orden
+        </a>
     </div>
 
     <!-- Payment History -->
@@ -120,7 +128,20 @@
                     {% for payment in order.payments %}
                     <tr>
                         <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{{ payment.date|ve_datetime(fmt='%d/%m/%Y %H:%M') }}</td>
-                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-800">{{ payment.method.replace('_', ' ')|title }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-800 flex items-center">
+                            {% set icon_found = namespace(path=None, name=None) %}
+                            {% for bank_name, icon_file in BANK_ICONS.items() %}
+                                {% if bank_name.lower() in payment.method.replace('_', ' ').lower() %}
+                                    {% set icon_found.path = url_for('static', filename='img/bancos/' + icon_file) %}
+                                    {% set icon_found.name = bank_name %}
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if icon_found.path %}
+                                <img src="{{ icon_found.path }}" alt="{{ icon_found.name }}" class="inline-block h-6 w-6 mr-2" title="{{ icon_found.name }}">
+                            {% endif %}
+                            {{ payment.method.replace('_', ' ')|title }}
+                        </td>
                         <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                             {% if payment.reference %}Ref: {{ payment.reference }}{% endif %}
                             {% if payment.issuing_bank %} Bco: {{ payment.issuing_bank }}{% endif %}
@@ -231,7 +252,7 @@ document.addEventListener('DOMContentLoaded', function() {
         modalPaidAmountUsd.textContent = (totalPaid / currentRate).toFixed(2) + ' ' + currencySymbol;
 
         modalRemainingAmount.textContent = Math.max(0, remaining).toFixed(2) + ' Bs';
-        if (currentRate > 0) {
+        if (currentrate > 0) {
             modalRemainingAmountUsd.textContent = (Math.max(0, remaining) / currentRate).toFixed(2) + ' ' + currencySymbol;
         }
 

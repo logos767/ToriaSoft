@@ -26,6 +26,9 @@
                     {% for bank in banks %}
                     <tr>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {% if bank.name in BANK_ICONS %}
+                                <img src="{{ url_for('static', filename='img/bancos/' + BANK_ICONS[bank.name]) }}" alt="{{ bank.name }}" class="inline-block h-6 w-6 mr-2">
+                            {% endif %}
                             {{ bank.name }} <span class="text-xs text-gray-500">({{ bank.currency }})</span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ bank.account_number }}</td>
