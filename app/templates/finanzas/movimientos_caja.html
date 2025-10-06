@@ -130,7 +130,7 @@
                             </td>
                             <td class="px-4 py-2 whitespace-nowrap text-right text-sm">
                                 {% if movement.type == 'manual' and movement.obj.movement_type == 'Egreso' and movement.status == 'Aprobado' %}
-                                <a href="{{ url_for('main.print_withdrawal_receipt', movement_id=movement.obj..id) }}" target="_blank" class="text-blue-600 hover:text-blue-900" title="Imprimir Recibo">
+                                <a href="{{ url_for('main.print_withdrawal_receipt', movement_id=movement.obj.id) }}" target="_blank" class="text-blue-600 hover:text-blue-900" title="Imprimir Recibo">
                                     <i class="fas fa-print"></i>
                                 </a>
                                 {% endif %}
