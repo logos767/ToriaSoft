@@ -39,6 +39,22 @@ def get_main_calculation_currency_info():
     symbol = '€' if currency == 'EUR' else '$'
     return currency, symbol
 
+# --- Helper functions for role-based access control ---
+def is_superuser():
+    return current_user.is_authenticated and current_user.role == 'Superusuario'
+
+def is_gerente():
+    return current_user.is_authenticated and current_user.role in ['Superusuario', 'Gerente']
+
+def is_contador():
+    return current_user.is_authenticated and current_user.role in ['Superusuario', 'Gerente', 'Contador']
+
+def is_vendedor():
+    return current_user.is_authenticated and current_user.role in ['Superusuario', 'Gerente', 'Contador', 'Vendedor']
+
+# --- End Helper functions for role-based access control ---
+
+
 routes_blueprint = Blueprint('main', __name__)
 
 # --- INICIO DE SECCIÓN DE TASAS DE CAMBIO ---
@@ -136,14 +152,14 @@ def fetch_and_update_exchange_rate():
 def create_notification_for_admins(message, link):
     """
     Crea una notificación para todos los usuarios con rol 'administrador'.
+    Actualizado para Superusuario y Gerente.
     """
     current_app.logger.info(f"Attempting to create notification for admins: {message}")
     try:
-        admins = User.query.filter_by(role='administrador').all()
+        admins = User.query.filter(User.role.in_(['Superusuario', 'Gerente'])).all()
         if not admins:
             current_app.logger.warning("No admin users found to send notification.")
             return
-
         admin_ids = [admin.id for admin in admins]
         current_app.logger.info(f"Found admins: {admin_ids}")
 
@@ -170,7 +186,7 @@ def create_notification_for_admins(message, link):
 
 @routes_blueprint.context_processor
 def inject_notifications():
-    if not current_user.is_authenticated or current_user.role != 'administrador':
+    if not current_user.is_authenticated or not is_gerente(): # Superusuario and Gerente receive notifications
         return dict(unread_notifications=[], unread_notification_count=0)
 
     try:
@@ -187,7 +203,7 @@ def inject_notifications():
 
 @routes_blueprint.context_processor
 def inject_pending_withdrawals_count():
-    if not current_user.is_authenticated or current_user.role != 'administrador':
+    if not current_user.is_authenticated or not is_gerente(): # Superusuario and Gerente manage withdrawals
         return dict(pending_withdrawals_count=0)
     
     try:
@@ -241,7 +257,7 @@ def inject_current_rate():
 @routes_blueprint.route('/notifications/mark-as-read', methods=['POST'])
 @login_required
 def mark_notifications_as_read():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can mark as read
         return jsonify(success=False, message='Acceso denegado'), 403
     try:
         Notification.query.filter_by(user_id=current_user.id, is_read=False).update({'is_read': True})
@@ -262,7 +278,7 @@ def handle_connect():
 @routes_blueprint.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        if current_user.role == 'administrador':
+        if is_gerente(): # Gerente and Superuser go to dashboard
             return redirect(url_for('main.dashboard'))
         else:
             return redirect(url_for('main.new_order'))
@@ -279,7 +295,7 @@ def login():
             if not rates:
                 flash('Advertencia: No se pudo actualizar la tasa de cambio. Se usarán los últimos valores guardados.', 'warning')
 
-            next_page = request.args.get('next')
+            next_page = request.args.get('next') # type: ignore
             if next_page:
                 return redirect(next_page)
             if user.role == 'administrador':
@@ -301,7 +317,7 @@ def logout():
 @login_required
 def dashboard():
     """Muestra la página principal con información de dashboard."""
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can access dashboard
         return redirect(url_for('main.new_order'))
 
     # --- General Metrics ---
@@ -556,7 +572,7 @@ def inventory_list():
 @routes_blueprint.route('/inventario/codigos_barra', methods=['GET'])
 @login_required
 def codigos_barra():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can access
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -568,7 +584,7 @@ def codigos_barra():
 @routes_blueprint.route('/inventario/codigos_barra_api', methods=['GET']) # type: ignore
 @login_required
 def codigos_barra_api():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can access
         return jsonify(error='Acceso denegado'), 403
 
     search_term = request.args.get('search', '').lower()
@@ -731,7 +747,7 @@ def generate_barcode_pdf_reportlab(products, company_info, currency_symbol):
 @routes_blueprint.route('/inventario/imprimir_codigos_barra', methods=['POST'])
 @login_required
 def imprimir_codigos_barra():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can access
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -824,8 +840,8 @@ def inventory_stock():
 @routes_blueprint.route('/inventario/existencias/reporte_pdf')
 @login_required
 def inventory_stock_report_pdf():
-    """Genera un reporte PDF para el conteo físico del inventario."""
-    if current_user.role != 'administrador':
+    """Genera un reporte PDF para el conteo físico del inventario. Accesible por Gerente y Superusuario."""
+    if not is_gerente():
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.inventory_stock'))
 
@@ -846,8 +862,8 @@ def inventory_stock_report_pdf():
 @routes_blueprint.route('/inventario/ajuste', methods=['GET', 'POST'])
 @login_required
 def inventory_adjustment():
-    """Página para el ajuste digital del inventario."""
-    if current_user.role != 'administrador':
+    """Página para el ajuste digital del inventario. Accesible por Gerente y Superusuario."""
+    if not is_gerente():
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -903,7 +919,7 @@ def product_detail(product_id):
 @routes_blueprint.route('/inventario/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_product():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can create products
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -978,7 +994,7 @@ def client_detail(client_id):
         order = Order.query.get_or_404(order_id)
         
         try:
-            # Para abonos, siempre usar la tasa de cambio actual para calcular el equivalente en USD.
+            # Para abonos, siempre usar la tasa de cambio actual para calcular el equivalente en USD. # type: ignore
             current_rate = get_cached_exchange_rate('USD') or 1.0
             payment_data_json = request.form.get('payments_data')
             payment_info = json.loads(payment_data_json)[0]
@@ -1062,7 +1078,7 @@ def client_detail(client_id):
 @routes_blueprint.route('/proveedores/lista')
 @login_required
 def provider_list():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can view providers
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1072,7 +1088,7 @@ def provider_list():
 @routes_blueprint.route('/proveedores/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_provider():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can create providers
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1095,7 +1111,7 @@ def new_provider():
 @routes_blueprint.route('/compras/lista')
 @login_required
 def purchase_list():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can view purchases
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1105,7 +1121,7 @@ def purchase_list():
 @routes_blueprint.route('/compras/detalle/<int:purchase_id>')
 @login_required
 def purchase_detail(purchase_id):
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can view purchase details
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1115,7 +1131,7 @@ def purchase_detail(purchase_id):
 @routes_blueprint.route('/compras/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_purchase():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can create purchases
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1227,7 +1243,7 @@ def new_purchase():
 @routes_blueprint.route('/recepciones/lista')
 @login_required
 def reception_list():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can view receptions
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1237,7 +1253,7 @@ def reception_list():
 @routes_blueprint.route('/api/purchase_details/<int:purchase_id>')
 @login_required
 def api_purchase_details(purchase_id):
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can view purchase details via API
         return jsonify({'error': 'Acceso denegado'}), 403
     
     purchase = Purchase.query.options(
@@ -1262,7 +1278,7 @@ def api_purchase_details(purchase_id):
 @routes_blueprint.route('/recepciones/nueva', methods=['GET', 'POST'])
 @login_required
 def new_reception():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can create receptions
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1306,7 +1322,7 @@ def new_reception():
                     quantity=qty_received,
                     document_id=reception.id,
                     document_type='Recepción de Compra',
-                    related_party_id=purchase.provider_id,
+                    related_party_id=purchase.provider_id, # type: ignore
                     related_party_type='Proveedor',
                     date=reception_date # Asegurar que el movimiento tenga la misma fecha que la recepción
                 )
@@ -1442,7 +1458,7 @@ def new_order():
     current_rate = get_cached_exchange_rate(calculation_currency)
     
     if current_rate is None:
-        flash('No se ha podido obtener la tasa de cambio. No se pueden crear órdenes en este momento.', 'danger')
+        flash('No se ha podido obtener la tasa de cambio. No se pueden crear órdenes en este momento.', 'danger') # type: ignore
         return redirect(url_for('main.order_list'))
     
     if request.method == 'POST':
@@ -1457,7 +1473,7 @@ def new_order():
         payments_data = json.loads(payments_data_json) if payments_data_json else []
         
         rate_for_order = current_rate
-        if current_user.role == 'administrador' and special_rate_str:
+        if is_gerente() and special_rate_str: # Only Gerente and Superuser can set special rate
             try:
                 special_rate = float(special_rate_str)
                 if special_rate > 0:
@@ -1518,7 +1534,7 @@ def new_order():
             # --- Stock validation before creating the order ---
             for p_id, q in zip(product_ids, quantities):
                 quantity = int(q)
-                product = product_map.get(p_id)
+                product = product_map.get(p_id) # type: ignore
                 if not product or quantity <= 0:
                     continue
                 if product.stock < quantity:
@@ -1535,7 +1551,7 @@ def new_order():
 
             total_amount = 0
             for p_id, q, p_usd in zip(product_ids, quantities, prices_usd):
-                product = product_map.get(p_id)
+                product = product_map.get(p_id) # type: ignore
                 quantity = int(q)
                 if not product or quantity <= 0:
                     continue
@@ -1571,7 +1587,7 @@ def new_order():
 
             for payment_info in payments_data:
                 payment = Payment(
-                    order_id=new_order.id, amount_paid=payment_info['amount_paid'], currency_paid=payment_info['currency_paid'],
+                    order_id=new_order.id, amount_paid=payment_info['amount_paid'], currency_paid=payment_info['currency_paid'], # type: ignore
                     amount_ves_equivalent=payment_info['amount_ves_equivalent'], amount_usd_equivalent=payment_info['amount_usd_equivalent'], method=payment_info['method'],
                     reference=payment_info.get('reference'), issuing_bank=payment_info.get('issuing_bank'),
                     sender_id=payment_info.get('sender_id'), date=order_date, # Use the order's date for the payment
@@ -1796,7 +1812,10 @@ def reservation_detail(order_id):
 @routes_blueprint.route('/movimientos/lista')
 @login_required
 def movement_list():
-    product_id = request.args.get('product_id', default=None, type=int)
+    if not is_contador(): # Superusuario, Gerente, Contador can view movements
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+    product_id = request.args.get('product_id', default=None, type=int) # type: ignore
     start_date_str = request.args.get('start_date', default=None)
     end_date_str = request.args.get('end_date', default=None)
 
@@ -1834,7 +1853,7 @@ def movement_list():
 @routes_blueprint.route('/estadisticas')
 @login_required
 def estadisticas():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can view statistics
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -2029,7 +2048,7 @@ def generar_reporte_mensual_pdf():
     """
     if current_user.role != 'administrador':
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.dashboard'))
+        return redirect(url_for('main.dashboard')) # type: ignore
 
     try:
         month = int(request.args.get('month'))
@@ -2201,7 +2220,7 @@ def generar_reporte_mensual_pdf():
 @routes_blueprint.route('/inventario/cargar_excel', methods=['GET', 'POST'])
 @login_required
 def cargar_excel():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can upload excel
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.inventory_list'))
 
@@ -2314,7 +2333,7 @@ def cargar_excel():
 @routes_blueprint.route('/inventario/cargar_excel_confirmar', methods=['GET', 'POST'])
 @login_required
 def cargar_excel_confirmar():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can confirm excel upload
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.inventory_list'))
         
@@ -2358,7 +2377,7 @@ def cargar_excel_confirmar():
 @routes_blueprint.route('/configuracion/empresa', methods=['GET', 'POST'])
 @login_required
 def company_settings():
-    if current_user.role != 'administrador':
+    if not is_superuser(): # Only Superuser can access company settings
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.dashboard'))
 
@@ -2448,7 +2467,7 @@ def company_settings():
 @routes_blueprint.route('/costos/lista')
 @login_required
 def cost_list():
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can view cost list
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.dashboard'))
 
@@ -2506,7 +2525,7 @@ def cost_list():
 @routes_blueprint.route('/costos/configuracion', methods=['GET', 'POST'])
 @login_required
 def cost_structure_config():
-    if current_user.role != 'administrador':
+    if not is_superuser(): # Only Superuser can configure cost structure
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.dashboard'))
 
@@ -2554,7 +2573,7 @@ def update_exchange_rate():
     Updates an exchange rate. Can be called from the settings page (form redirect)
     or from the new order modal (AJAX).
     """
-    if current_user.role != 'administrador':
+    if not is_superuser(): # Only Superuser can update exchange rate
         # CORRECCIÓN: La llamada fetch desde el modal no es JSON, pero es AJAX.
         # Usamos 'X-Requested-With' o un campo del formulario para detectar la llamada AJAX.
         is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.form.get('is_ajax')
@@ -2599,7 +2618,7 @@ def update_exchange_rate():
 @routes_blueprint.route('/costos/editar/<int:product_id>', methods=['GET', 'POST'])
 @login_required
 def edit_product_cost(product_id):
-    if current_user.role != 'administrador':
+    if not is_gerente(): # Superusuario and Gerente can edit product costs
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.dashboard'))
 
@@ -2805,7 +2824,7 @@ def api_product_by_barcode(barcode):
 @routes_blueprint.route('/api/exchange_rate')
 def api_exchange_rate():
     # CORRECCIÓN: Usar la nueva función para obtener la tasa en USD
-    rate = get_cached_exchange_rate('USD')
+    rate = get_cached_exchange_rate('USD') # type: ignore
     if rate:
         return jsonify(rate=rate)
     else:
@@ -2945,7 +2964,7 @@ def bank_list():
 @routes_blueprint.route('/finanzas/bancos/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_bank():
-    if current_user.role != 'administrador':
+    if not is_superuser(): # Only Superuser can create new banks
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -2970,7 +2989,7 @@ def new_bank():
 @routes_blueprint.route('/finanzas/bancos/movimientos')
 @login_required
 def bank_movements():
-    if current_user.role != 'administrador':
+    if not is_contador(): # Superusuario, Gerente, Contador can view bank movements
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -2984,7 +3003,7 @@ def bank_movements():
 @routes_blueprint.route('/finanzas/bancos/movimientos/<int:bank_id>')
 @login_required
 def bank_movement_detail(bank_id):
-    if current_user.role != 'administrador':
+    if not is_contador(): # Superusuario, Gerente, Contador can view bank movement details
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -3047,7 +3066,7 @@ def pos_list():
 @routes_blueprint.route('/finanzas/puntos-venta/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_pos():
-    if current_user.role != 'administrador':
+    if not is_superuser(): # Only Superuser can create new POS
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -3081,7 +3100,7 @@ def cashbox_list():
 @routes_blueprint.route('/finanzas/caja/nueva', methods=['GET', 'POST'])
 @login_required
 def new_cashbox():
-    if current_user.role != 'administrador':
+    if not is_superuser(): # Only Superuser can create new cashboxes
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -3106,7 +3125,7 @@ def new_cashbox():
 @routes_blueprint.route('/finanzas/caja/movimientos')
 @login_required
 def cashbox_movements():
-    if current_user.role != 'administrador':
+    if not is_contador(): # Superusuario, Gerente, Contador can view cashbox movements
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -3120,7 +3139,7 @@ def cashbox_movements():
 @routes_blueprint.route('/finanzas/caja/movimientos/<int:cash_box_id>')
 @login_required
 def cashbox_movement_detail(cash_box_id):
-    if current_user.role != 'administrador':
+    if not is_contador(): # Superusuario, Gerente, Contador can view cashbox movement details
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -3175,7 +3194,7 @@ def cashbox_movement_detail(cash_box_id):
 @routes_blueprint.route('/finanzas/movimiento/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_financial_movement():
-    if current_user.role != 'administrador':
+    if not is_contador(): # Superusuario, Gerente, Contador can create manual financial movements
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -3265,7 +3284,7 @@ def new_cash_withdrawal():
 
     if request.method == 'POST':
         try:
-            cash_box_id = request.form.get('cash_box_id', type=int)
+            cash_box_id = request.form.get('cash_box_id', type=int) # type: ignore
             amount = float(request.form.get('amount'))
             currency = request.form.get('currency')
             description = request.form.get('description')
@@ -3289,7 +3308,7 @@ def new_cash_withdrawal():
             else:
                 raise ValueError("Moneda no válida para la caja.")
 
-            is_admin = current_user.role == 'administrador'
+            is_admin = is_gerente() # Gerente and Superuser can approve their own withdrawals
             
             withdrawal_date = get_current_time_ve()
             if date_str:
@@ -3372,7 +3391,7 @@ def my_withdrawals():
 @routes_blueprint.route('/finanzas/retiros-pendientes')
 @login_required
 def pending_withdrawals():
-    if current_user.role != 'administrador':
+    if not is_contador(): # Superusuario, Gerente, Contador can view pending withdrawals
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
     
@@ -3383,7 +3402,7 @@ def pending_withdrawals():
 @routes_blueprint.route('/finanzas/retiro/procesar/<int:movement_id>/<string:action>', methods=['POST'])
 @login_required
 def process_withdrawal(movement_id, action):
-    if current_user.role != 'administrador':
+    if not is_contador(): # Superusuario, Gerente, Contador can process withdrawals
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.pending_withdrawals'))
 
@@ -3439,9 +3458,10 @@ def process_withdrawal(movement_id, action):
 @routes_blueprint.route('/finanzas/cierre-diario', methods=['GET'])
 @login_required
 def daily_closing():
-    """
-    Shows the page for generating the daily closing report.
-    """
+    """Shows the page for generating the daily closing report. Accessible by Contador, Gerente, Superusuario."""
+    if not is_contador():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
     date_str = request.args.get('date', get_current_time_ve().date().strftime('%Y-%m-%d'))
     try:
         report_date = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -3458,6 +3478,9 @@ def print_daily_closing_report():
     """
     Gathers all data for a specific day and generates a ticket-style report.
     """
+    if not is_contador():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
     date_str = request.args.get('date')
     try:
         report_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else get_current_time_ve().date()
@@ -3598,6 +3621,9 @@ def print_daily_closing_report_pdf():
     """
     Gathers all data for a specific day and generates a full A4 PDF report.
     """
+    if not is_contador():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
     from flask import make_response
 
     date_str = request.args.get('date')

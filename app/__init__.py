@@ -36,22 +36,29 @@ def create_initial_users(app):
         users_to_add = []
 
         # Admin user
-        if not User.query.filter_by(username='contastij').first():
-            logger.info("Creating default admin user...")
-            hashed_password = bcrypt.generate_password_hash('admin1807').decode('utf-8')
-            users_to_add.append(User(username='contastij', password=hashed_password, role='administrador'))
+        if not User.query.filter_by(username='luismarin').first():
+            logger.info("Creating Superuser luismarin...")
+            hashed_password = bcrypt.generate_password_hash('7671010').decode('utf-8')
+            users_to_add.append(User(username='luismarin', password=hashed_password, role='Superusuario'))
 
         # Additional admin user
-        if not User.query.filter_by(username='luismarin').first():
-            logger.info("Creating additional admin user luismarin...")
-            hashed_password = bcrypt.generate_password_hash('7671010').decode('utf-8')
-            users_to_add.append(User(username='luismarin', password=hashed_password, role='administrador'))
+        if not User.query.filter_by(username='contastij').first():
+            logger.info("Creating Gerente contastij...")
+            hashed_password = bcrypt.generate_password_hash('admin1807').decode('utf-8')
+            users_to_add.append(User(username='contastij', password=hashed_password, role='Gerente'))
 
         # Additional admin user
         if not User.query.filter_by(username='emarquez').first():
-            logger.info("Creating additional admin user emarquez...")
+            logger.info("Creating Contador emarquez...")
             hashed_password = bcrypt.generate_password_hash('admin1208').decode('utf-8')
-            users_to_add.append(User(username='emarquez', password=hashed_password, role='administrador'))
+            users_to_add.append(User(username='emarquez', password=hashed_password, role='Contador'))
+
+        # Additional admin user
+        if not User.query.filter_by(username='mcastellanos').first():
+            logger.info("Creating Contador mcastellanos...")
+            hashed_password = bcrypt.generate_password_hash('mg251807').decode('utf-8')
+            users_to_add.append(User(username='mcastellanos', password=hashed_password, role='Contador'))
+
 
         # Salesperson users
         sales_users_data = [
@@ -60,9 +67,9 @@ def create_initial_users(app):
         ]
         for user_data in sales_users_data:
             if not User.query.filter_by(username=user_data['username']).first():
-                logger.info(f"Creating sales user {user_data['username']}...")
+                logger.info(f"Creating Vendedor user {user_data['username']}...")
                 hashed_password = bcrypt.generate_password_hash(user_data['password']).decode('utf-8')
-                users_to_add.append(User(username=user_data['username'], password=hashed_password, role=user_data['role']))
+                users_to_add.append(User(username=user_data['username'], password=hashed_password, role='Vendedor'))
         
         if users_to_add:
             db.session.add_all(users_to_add)
@@ -170,6 +177,17 @@ def create_app():
         @app.context_processor
         def inject_ve_time():
             return dict(get_current_time_ve=models.get_current_time_ve)
+
+        # Inject role helper functions into all templates
+        @app.context_processor
+        def inject_role_helpers():
+            from .routes import is_superuser, is_gerente, is_contador, is_vendedor
+            return dict(
+                is_superuser=is_superuser,
+                is_gerente=is_gerente,
+                is_contador=is_contador,
+                is_vendedor=is_vendedor
+            )
 
         # Bank icons dictionary
         BANK_ICONS = {

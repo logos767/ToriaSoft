@@ -15,7 +15,7 @@
             <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-4">
                 <!-- LEFT COLUMN: Client and Actions -->
                 <div class="space-y-4 lg:col-span-1">
-                    <!-- Client Info -->
+                    <!-- Client Info (Accessible to Vendedor and above) -->
                     <div>
                         <h2 class="text-lg font-semibold text-gray-700 mb-2">1. Información del Cliente</h2>
                         <div class="space-y-2">
@@ -32,6 +32,16 @@
                             </div>
                         </div>
                     </div>
+
+                    {% if is_gerente() %} {# Only Superuser and Gerente can set special exchange rate #}
+                    <div class="mt-4">
+                        <label for="special_exchange_rate" class="block text-gray-700 font-bold mb-1 text-sm">Tasa de Cambio Especial (USD a Bs):</label>
+                        <input type="number" step="0.01" id="special_exchange_rate" name="special_exchange_rate" placeholder="Dejar vacío para usar la tasa actual"
+                               class="shadow appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                        <p class="text-xs text-gray-500 mt-1">Solo para administradores. Anula la tasa actual para esta orden.</p>
+                    </div>
+                    {% endif %}
+
                     
                 </div>
 
@@ -89,7 +99,7 @@
                                         <input type="number" name="quantity[]" placeholder="Cant." min="1" required class="w-16 shadow-sm appearance-none border rounded py-0.5 px-1 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 quantity-input text-sm text-center">
                                     </td>
                                     <td class="px-1 py-1 align-top">
-                                {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+                                {% if is_gerente() %} {# Only Superuser and Gerente can edit price_usd #}
                                         <input type="number" name="price_usd[]" placeholder="Precio" step="0.01" min="0" required class="w-20 shadow-sm appearance-none border rounded py-0.5 px-1 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 price-usd-input text-sm text-center">
                                 {% else %}
                                         <span class="w-20 text-center font-bold text-gray-800 price-usd-display text-sm">0.00</span>
@@ -334,7 +344,7 @@
 </div>
 
 <!-- Modal para Tasa de Cambio Temporal -->
-{% if current_user.role == 'administrador' %}
+{% if is_gerente() %} {# Only Superuser and Gerente can see this modal #}
 <div id="rate-change-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full hidden z-50">
     <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
         <div class="mt-3 text-center">
@@ -437,7 +447,7 @@
         let activeRate = defaultRate;
 
         {% if current_user.role == 'administrador' %}
-        const dateCreatedInput = document.getElementById('date_created');
+        const dateCreatedInput = document.getElementById('date_created'); // type: ignore
         const today = new Date('{{ current_ve_time.isoformat() }}');
         const todayString = today.toISOString().split('T')[0];
 
@@ -463,7 +473,7 @@
         dateCreatedInput.addEventListener('input', function() {
             const selectedDateString = this.value.split('T')[0];
             
-            if (selectedDateString && selectedDateString !== todayString) {
+            if (selectedDateString && selectedDateString !== todayString) { // type: ignore
                 // Open the modal
                 document.getElementById('rate-change-modal').classList.remove('hidden');
             }
@@ -476,7 +486,7 @@
         const modalRateInput = document.getElementById('modal_exchange_rate');
 
         cancelRateBtn.addEventListener('click', () => {
-            rateModal.classList.add('hidden');
+            rateModal.classList.add('hidden'); // type: ignore
             // Reset date to today
             dateCreatedInput.value = '{{ current_ve_time.strftime("%Y-%m-%dT%H:%M") }}';
         });
@@ -506,7 +516,7 @@
                 if (data.success) {
                     // CORRECCIÓN: No recargar la página. Actualizar la tasa activa y recalcular todo.
                     activeRate = newRate;
-                    updateAllPricesAndSummary();
+                    updateAllPricesAndSummary(); // type: ignore
                     rateModal.classList.add('hidden');
                     // Usar Toastr para notificar al usuario del éxito.
                     toastr.success(`Tasa de cambio actualizada a ${newRate.toFixed(2)} Bs.`, 'Éxito');
@@ -823,7 +833,7 @@
 
             // Limpiar valores del nuevo clon
             newProductItem.querySelector('.product-select').selectedIndex = 0;
-            newProductItem.querySelector('.quantity-input').value = '';
+            newProductItem.querySelector('.quantity-input').value = ''; // type: ignore
             {% if current_user.is_authenticated and current_user.role == 'administrador' %}
             const priceUsdInput = newProductItem.querySelector('.price-usd-input');
             if (priceUsdInput) {
@@ -831,7 +841,7 @@
             }
             {% endif %}
 
-            // Habilitar el botón de eliminar
+            // Habilitar el botón de eliminar // type: ignore
             const removeBtn = newProductItem.querySelector('.remove-product-btn');
             removeBtn.disabled = false;
             removeBtn.style.display = 'inline-block';
@@ -912,7 +922,7 @@
                 const priceUsdInput = productItem.querySelector('.price-usd-input');
                 let priceUsd = 0;
                 if (priceUsdInput) {
-                    priceUsd = parseFloat(priceUsdInput.value) || 0;
+                    priceUsd = parseFloat(priceUsdInput.value) || 0; // type: ignore
                 } else {
                     // For non-admin users, use the default price from the selected option
                     const priceUsdDisplay = productItem.querySelector('.price-usd-display');

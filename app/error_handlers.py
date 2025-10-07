@@ -1,6 +1,6 @@
 from flask import flash, redirect, request, url_for, current_app, render_template, session
 from sqlalchemy.exc import OperationalError
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError # type: ignore
 from werkzeug.exceptions import InternalServerError, NotFound, Forbidden
 from .extensions import db
 from .models import ExchangeRate, CompanyInfo
@@ -46,9 +46,13 @@ def register_error_handlers(app):
     def handle_403(error):
         """Manejador para errores 403 (Prohibido)."""
         current_app.logger.warning(f"Acceso prohibido a la ruta: {request.path} por el usuario {current_app.login_manager.current_user}")
+        from .routes import is_gerente # Import locally to avoid circular dependency
         flash('No tienes permiso para acceder a esta página.', 'danger')
-        # Redirige a la página anterior o al dashboard si no hay referente.
-        return redirect(request.referrer or url_for('main.dashboard'))
+        # Redirect to the appropriate page based on role
+        if current_app.login_manager.current_user.is_authenticated and not is_gerente():
+            return redirect(request.referrer or url_for('main.new_order'))
+        else:
+            return redirect(request.referrer or url_for('main.dashboard'))
 
     @app.errorhandler(OperationalError)
     def handle_db_connection_error(error):

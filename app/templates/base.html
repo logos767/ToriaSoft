@@ -54,7 +54,7 @@
 
             <!-- Navegación -->
             <nav class="mt-6 flex-grow overflow-y-auto space-y-2">
-                {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+                {% if is_gerente() %}
                 <a href="{{ url_for('main.dashboard') }}" class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
                     <i class="fas fa-tachometer-alt mr-2"></i><span class="sidebar-text">Dashboard</span>
                 </a>
@@ -64,7 +64,7 @@
                 <details class="group">
                     <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
                         <i class="fas fa-shopping-basket mr-2"></i><span class="sidebar-text">Compras</span>
-                    </summary>
+                    </summary> {# Superusuario and Gerente can access Purchases #}
                     <div class="ml-4 mt-2 space-y-1">
                         <a href="{{ url_for('main.new_purchase') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-plus mr-2"></i><span class="sidebar-text">Nueva Orden de Compra</span>
@@ -108,7 +108,7 @@
                         <a href="#" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-file-invoice mr-2"></i><span class="sidebar-text">Facturas</span>
                         </a>
-                        {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+                        {% if is_gerente() %}
                         <a href="{{ url_for('main.estadisticas') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-chart-line mr-2"></i><span class="sidebar-text">Estadísticas</span>
                         </a>
@@ -140,7 +140,7 @@
                             <i class="fas fa-barcode mr-2"></i><span class="sidebar-text">Códigos de Barra</span>
                         </a>
                         {% endif %}
-                    </div>
+                    </div> {# End of Inventory #}
                 </details>
 
                 <details class="group">
@@ -149,7 +149,7 @@
                     </summary>
                     <div class="ml-4 mt-2 space-y-1">
                         <a href="{{ url_for('main.bank_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-university mr-2"></i><span class="sidebar-text">Lista de Bancos</span>
+                            <i class="fas fa-university mr-2"></i><span class="sidebar-text">Bancos</span>
                         </a>                        
                         {% if current_user.is_authenticated and current_user.role == 'administrador' %}
                         <a href="{{ url_for('main.bank_movements') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
@@ -157,7 +157,7 @@
                         </a>
                         {% endif %}
                         <a href="{{ url_for('main.pos_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-credit-card mr-2"></i><span class="sidebar-text">Puntos de Venta</span>
+                            <i class="fas fa-credit-card mr-2"></i><span class="sidebar-text">POS</span>
                         </a>
                         <a href="{{ url_for('main.cashbox_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-cash-register mr-2"></i><span class="sidebar-text">Cajas</span>
@@ -171,7 +171,7 @@
                         <a href="{{ url_for('main.daily_closing') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-calendar-check mr-2"></i><span class="sidebar-text">Cierre Diario</span>
                         </a>
-                        {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+                        {% if is_contador() %} {# Superusuario, Gerente, Contador can view pending withdrawals and cashbox movements #}
                         <a href="{{ url_for('main.pending_withdrawals') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm relative">
                             <i class="fas fa-hourglass-half mr-2"></i><span class="sidebar-text">Retiros Pendientes</span>
                             {% if pending_withdrawals_count > 0 %}
@@ -185,7 +185,7 @@
                     </div>
                 </details>
 
-                {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+                {% if is_gerente() %}
                 <details class="group">
                     <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
                         <i class="fas fa-calculator mr-2"></i><span class="sidebar-text">Costos</span>
@@ -194,11 +194,15 @@
                         <a href="{{ url_for('main.cost_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-list mr-2"></i><span class="sidebar-text">Resumen</span>
                         </a>
+                        {% if is_superuser() %}
                         <a href="{{ url_for('main.cost_structure_config') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-cogs mr-2"></i><span class="sidebar-text">Configuración de Costos</span>
                         </a>
+                        {% endif %}
                     </div>
                 </details>
+                {% endif %}
+                {% if is_superuser() %}
                 <details class="group">
                     <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
                         <i class="fas fa-cogs mr-2"></i><span class="sidebar-text">Configuración</span>
@@ -303,7 +307,7 @@
     </script>
 
     <!-- NUEVO SCRIPT PARA NOTIFICACIONES EN TIEMPO REAL -->
-    {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+    {% if is_gerente() %} {# Superuser and Gerente receive notifications #}
     <script type="text/javascript">
         $(document).ready(function() {
             // Configuración de Toastr
