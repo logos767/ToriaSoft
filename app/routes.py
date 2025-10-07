@@ -278,7 +278,7 @@ def handle_connect():
 @routes_blueprint.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        if is_gerente(): # Gerente and Superuser go to dashboard
+        if current_user.role != 'Vendedor':
             return redirect(url_for('main.dashboard'))
         else:
             return redirect(url_for('main.new_order'))
@@ -298,9 +298,10 @@ def login():
             next_page = request.args.get('next') # type: ignore
             if next_page:
                 return redirect(next_page)
-            if user.role == 'administrador':
+            if user.role != 'Vendedor':
                 return redirect(url_for('main.dashboard'))
-            return redirect(url_for('main.new_order'))
+            else:
+                return redirect(url_for('main.new_order'))
         else:
             flash('Inicio de sesión fallido. Por favor, verifica tu nombre de usuario y contraseña.', 'danger')
     return render_template('login.html', title='Iniciar Sesión')
@@ -317,7 +318,7 @@ def logout():
 @login_required
 def dashboard():
     """Muestra la página principal con información de dashboard."""
-    if not is_gerente(): # Superusuario and Gerente can access dashboard
+    if current_user.role == 'Vendedor':
         return redirect(url_for('main.new_order'))
 
     # --- General Metrics ---
