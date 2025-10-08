@@ -4,7 +4,7 @@
 <div class="container mx-auto p-4">
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-university mr-2"></i>{{ title }}</h1>
-        {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+        {% if is_contador() %}
         <a href="{{ url_for('main.new_bank') }}" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors">
             <i class="fas fa-plus mr-2"></i>Nuevo Banco
         </a>
@@ -39,7 +39,7 @@
                                 Bs. {{ "%.2f"|format(bank.balance) }}
                             {% endif %}
                         </td>
-                        {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+                        {% if is_contador() %}
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <a href="{{ url_for('main.bank_movement_detail', bank_id=bank.id) }}" class="text-blue-600 hover:text-blue-900 mr-3" title="Ver Movimientos">
                                 <i class="fas fa-exchange-alt"></i>

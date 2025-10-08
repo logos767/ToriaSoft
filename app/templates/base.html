@@ -22,15 +22,14 @@
         body.sidebar-collapsed #sidebar nav summary {
             justify-content: center;
         }
-        body.sidebar-collapsed #sidebar > a { /* App Title Link */
+        body.sidebar-collapsed #sidebar > a {
             justify-content: center;
         }
-    </style>
+    </style>    
 </head>
 <body class="bg-gray-100 font-sans sidebar-collapsed">
     
     <div class="flex h-screen bg-gray-200">
-        <!-- Sidebar -->
         <div id="sidebar" class="sidebar bg-gray-800 text-gray-100 w-64 py-7 px-2 absolute inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition duration-200 ease-in-out z-30 flex flex-col">
             <!-- Título de la App -->
             <a href="{{ url_for('main.dashboard') }}" class="text-white flex items-center space-x-2 px-4 flex-shrink-0">
@@ -227,7 +226,7 @@
         </div>
 
         <!-- Sidebar Overlay -->
-        <div id="sidebar-overlay" class="hidden md:hidden fixed inset-0 bg-black opacity-50 z-20"></div>
+        <div id="sidebar-overlay" class="hidden fixed inset-0 bg-black opacity-50 z-20" style="display: none;"></div>
 
         <!-- Main Content -->
         <div class="flex-1 flex flex-col overflow-hidden">
@@ -235,7 +234,7 @@
             <header class="flex justify-between items-center p-4 bg-white shadow-md">
                 <div class="flex items-center">
                     <!-- Mobile menu button -->
-                    <button id="mobile-menu-button" class="md:hidden text-gray-500 focus:outline-none focus:text-gray-700 mr-4">
+                    <button id="mobile-menu-button" class="text-gray-500 focus:outline-none focus:text-gray-700 mr-4" >
                         <i class="fas fa-bars text-2xl"></i>
                     </button>
                     <h1 class="text-xl font-semibold text-gray-800">{{ title }}</h1>
@@ -276,26 +275,42 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const mobileMenuButton = document.getElementById('mobile-menu-button');
-            const sidebar = document.getElementById('sidebar');
+            const sidebar = document.getElementById('sidebar');            
             const sidebarOverlay = document.getElementById('sidebar-overlay');
 
-            // --- Mobile Sidebar Logic ---
             function toggleSidebar() {
                 sidebar.classList.toggle('-translate-x-full');
                 sidebarOverlay.classList.toggle('hidden');
+                document.body.classList.remove('sidebar-collapsed'); /* Ensure sidebar is fully expanded */
             }
+            
+            mobileMenuButton.addEventListener('click', toggleSidebar);
+            sidebarOverlay.addEventListener('click', toggleSidebar);
+            
+            // Collapse sidebar when clicking outside on mobile
+            document.addEventListener('click', function(event) {
+                const isClickInsideSidebar = sidebar.contains(event.target);
+                const isClickOnMenuButton = mobileMenuButton.contains(event.target);
+        
+                if (!isClickInsideSidebar && !isClickOnMenuButton && !sidebar.classList.contains('-translate-x-full')) {
+                    sidebar.classList.add('-translate-x-full');
+                    sidebarOverlay.classList.add('hidden');
+                }
+            });
+        
 
-            mobileMenuButton?.addEventListener('click', toggleSidebar);
-            sidebarOverlay?.addEventListener('click', toggleSidebar);
 
-            // --- NEW Desktop Auto-Collapsing Sidebar Logic ---
+
+
+           
+            // Auto-Collapsing Sidebar Logic
             if (sidebar) {
                 sidebar.addEventListener('mouseenter', () => {
                     // Only apply this behavior on screens wider than the 'md' breakpoint (768px)
                     if (window.innerWidth >= 768) {
                         document.body.classList.remove('sidebar-collapsed');
                     }
-                });
+                });                
 
                 sidebar.addEventListener('mouseleave', () => {
                     if (window.innerWidth >= 768) {
@@ -305,8 +320,8 @@
                             details.removeAttribute('open');
                         });
                     }
-                });
-            }
+                });                
+            };
         });
     </script>
 

@@ -10,84 +10,126 @@
     </div>
 
     <!-- Filter Form -->
-    <div class="bg-white p-4 rounded-lg shadow-md mb-6">
-        <form id="filter-form" method="GET" action="{{ url_for('main.order_list') }}" class="flex items-center gap-3 w-full">
+    <div class="bg-white p-1 rounded-lg shadow-md mb-2">
+        <form id="filter-form" method="GET" action="{{ url_for('main.order_list') }}" class="flex flex-col md:flex-row items-center gap-3 w-full">
             <!-- Search -->
             <input type="text" name="search" id="search" value="{{ filters.search or '' }}" placeholder="Buscar por N° Orden o Cliente..." class="flex-grow block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-            
-            <!-- Status -->
-            <select name="status" id="status" class="block rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                <option value="" {% if not filters.status %}selected{% endif %}>Estado: Todos</option>
-                <option value="contado" {% if filters.status == 'contado' %}selected{% endif %}>De Contado (Pagada)</option>
-                <option value="credito" {% if filters.status == 'credito' %}selected{% endif %}>Crédito</option>
-                <option value="apartado" {% if filters.status == 'apartado' %}selected{% endif %}>Apartado</option>
-                <option value="con_deuda" {% if filters.status == 'con_deuda' %}selected{% endif %}>Con Deuda</option>
-            </select>
-            
             <!-- Date Range -->
-            <span class="text-sm text-gray-600 whitespace-nowrap">Desde:</span>
-            <input type="date" name="start_date" id="start_date" value="{{ filters.start_date }}" class="block w-auto rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-            
-            <span class="text-sm text-gray-600 whitespace-nowrap">Hasta:</span>
-            <input type="date" name="end_date" id="end_date" value="{{ filters.end_date }}" class="block w-auto rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-            
-            <!-- Buttons -->
-            <a href="{{ url_for('main.order_list') }}" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 whitespace-nowrap">
-                <i class="fas fa-eraser mr-1"></i>Limpiar
-            </a>
+            <div class="flex width-full justify-between">
+                <div class="d-flex items-center">
+                    <span class="text-sm text-gray-600 whitespace-nowrap">Desde:</span>
+                    <input type="date" name="start_date" id="start_date" value="{{ filters.start_date }}" class="block w-auto rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                </div>
+                <div class="d-flex mb-1 md:mb-0 md:mr-2">
+                    <span class="text-sm text-gray-600 whitespace-nowrap">Hasta:</span>
+                    <input type="date" name="end_date" id="end_date" value="{{ filters.end_date }}" class="block w-auto rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                </div>
+            </div>
+            <!-- Status -->
+            <div class="flex justify-space-between">
+                <select name="status" id="status" class="block rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    <option value="" {% if not filters.status %}selected{% endif %}>Estado: Todos</option>
+                    <option value="contado" {% if filters.status == 'contado' %}selected{% endif %}>De Contado (Pagada)</option>
+                    <option value="credito" {% if filters.status == 'credito' %}selected{% endif %}>Crédito</option>
+                    <option value="apartado" {% if filters.status == 'apartado' %}selected{% endif %}>Apartado</option>
+                    <option value="con_deuda" {% if filters.status == 'con_deuda' %}selected{% endif %}>Con Deuda</option>
+                </select>
+                <!-- Buttons -->
+                <a href="{{ url_for('main.order_list') }}" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 whitespace-nowrap">
+                    <i class="fas fa-eraser mr-1"></i>Limpiar
+                </a>
+            </div>
         </form>
     </div>
 
-    <div class="bg-white p-6 rounded-lg shadow-md mt-6">
+    <div class="bg-white p-2 rounded-lg shadow-md mt-2">
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID de Orden</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Monto Total</th>
+            <table class="min-w-full divide-y divide-gray-200 md:table-auto">
+                <thead class="bg-gray-50">                    
+                    <tr class="hidden md:table-row">
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID de Orden</th> {# Visible on larger screens #}
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th> {# Visible on larger screens #}
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th> {# Visible on larger screens #}
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Monto Total</th> {# Visible on larger screens #}
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Deuda Pendiente</th>
                         <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                        <th class="relative px-6 py-3"><span class="sr-only">Acciones</span></th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for order in orders %}
-                    <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{{ order.id|order_id_format }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <a href="{{ url_for('main.client_detail', client_id=order.client.id) }}" class="text-blue-600 hover:underline">{{ order.client.name }}</a>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ order.date_created|ve_datetime }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-800">
-                            <div>Bs. {{ "%.2f"|format(order.total_amount) }}</div>
-                            <div class="text-xs">
-                                {{ currency_symbol }}{{ "%.2f"|format(order.total_amount_usd) }}
+                    <tr class="md:table-row">
+                        {# --- Mobile View (Stacked Data) --- #}
+                        <td class="py-4 px-6 md:hidden">
+                            <div class="flex flex-col">
+                                <a href="{{ url_for('main.order_detail', order_id=order.id) }}"  class="font-medium text-gray-900 hover:text-indigo-600">#{{ order.id|order_id_format }}</a>
+                                <span class="text-gray-500 truncate">                                    
+                                    <a href="{{ url_for('main.client_detail', client_id=order.client.id) }}" class="text-blue-600 hover:underline">{{ order.client.name }}</a>
+                                </span>
+                                <span class="text-gray-500">{{ order.date_created|ve_datetime }}
                             </div>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-bold {% if order.due_amount_usd > 0.01 %}text-red-600{% else %}text-gray-600{% endif %}">
-                            <div>Bs. {{ "%.2f"|format(order.due_amount) }}</div>
-                            <div class="text-xs">
-                                {{ currency_symbol }}{{ "%.2f"|format(order.due_amount_usd) }}
-                            </div>
+
+                        
+
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
+                        <td class="py-4 px-6 md:hidden">
                             {% if order.status == 'Crédito' %}
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Crédito</span>
                             {% elif order.status == 'Apartado' %}
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">Apartado</span>
                             {% elif order.status == 'Pagada' %}
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">Pagada</span>
-                            {% elif order.status == 'Completada' %}
+                            {% elif order.status in ['Completada', 'Entregada'] %}
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completada</span>
                             {% else %}
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">{{ order.status }}</span>
                             {% endif %}
+                            <div class="flex flex-col">
+                                <span class="font-bold text-gray-800">Bs. {{ "%.2f"|format(order.total_amount) }} <small>({{ currency_symbol }}{{ "%.2f"|format(order.total_amount_usd) }})</small> </span>
+                                <span class="font-bold {% if order.due_amount_usd > 0.01 %}text-red-600{% else %}text-gray-600{% endif %}">Bs. {{ "%.2f"|format(order.due_amount) }}<small>({{ currency_symbol }}{{ "%.2f"|format(order.due_amount_usd) }})</small></span>
+                            </div>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <a href="{{ url_for('main.order_detail', order_id=order.id) }}" class="text-indigo-600 hover:text-indigo-900">Detalles</a>
+
+
+                        {# --- Desktop View --- #}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 hidden md:table-cell">
+                            <a href="{{ url_for('main.order_detail', order_id=order.id) }}" class="hover:text-indigo-600">
+                                #{{ order.id|order_id_format }}
+                            </a>
                         </td>
+
+
+
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                            <a href="{{ url_for('main.client_detail', client_id=order.client.id) }}" class="text-blue-600 hover:underline">{{ order.client.name }}</a>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{{ order.date_created|ve_datetime }}</td> {# Visible on larger screens #}
+
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-800 hidden md:table-cell">
+                            <div>Bs. {{ "%.2f"|format(order.total_amount) }}</div>
+                            <div class="text-xs">
+                                {{ currency_symbol }}{{ "%.2f"|format(order.total_amount_usd) }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-bold {% if order.due_amount_usd > 0.01 %}text-red-600{% else %}text-gray-600{% endif %} hidden md:table-cell">
+                            <div>Bs. {{ "%.2f"|format(order.due_amount) }}</div>
+                            <div class="text-xs">
+                                {{ currency_symbol }}{{ "%.2f"|format(order.due_amount_usd) }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-center hidden md:table-cell">
+                            {% if order.status == 'Crédito' %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Crédito</span>
+                            {% elif order.status == 'Apartado' %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">Apartado</span>
+                            {% elif order.status == 'Pagada' %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">Pagada</span>
+                            {% elif order.status in ['Completada', 'Entregada'] %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completada</span>
+                            {% else %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">{{ order.status }}</span>
+                            {% endif %}
+                        
                     </tr>
                     {% else %}
                     <tr>
@@ -102,8 +144,10 @@
     </div>
 </div>
 
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+
     const form = document.getElementById('filter-form');
     const searchInput = document.getElementById('search');
     const statusSelect = document.getElementById('status');
@@ -138,5 +182,7 @@ document.addEventListener('DOMContentLoaded', function() {
         applyFilters();
     });
 });
+
 </script>
+
 {% endblock %}
