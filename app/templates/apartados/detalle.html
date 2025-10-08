@@ -209,7 +209,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let payments = [];
     let orderTotal = 0;
-    let currentRate = {{ current_rate }};
+    let currentRate = parseFloat("{{ current_rate }}");
     let previousTransferCurrency;
     let previousPaymentMethod;
 
@@ -232,7 +232,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         modalTotalAmount.textContent = orderTotal.toFixed(2) + ' Bs';
         if (currentRate > 0) {
-            modalTotalAmountUsd.textContent = (orderTotal / currentRate).toFixed(2) + ' ' + currencySymbol;
+           modalTotalAmountUsd.textContent = (orderTotal / currentRate).toFixed(2) + ' ' + currencySymbol;
         }
         updatePaymentSummary();
         paymentModal.classList.remove('hidden');
@@ -252,7 +252,7 @@ document.addEventListener('DOMContentLoaded', function() {
         modalPaidAmountUsd.textContent = (totalPaid / currentRate).toFixed(2) + ' ' + currencySymbol;
 
         modalRemainingAmount.textContent = Math.max(0, remaining).toFixed(2) + ' Bs';
-        if (currentrate > 0) {
+        if (currentRate > 0) {
             modalRemainingAmountUsd.textContent = (Math.max(0, remaining) / currentRate).toFixed(2) + ' ' + currencySymbol;
         }
 
