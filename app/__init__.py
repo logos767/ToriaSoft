@@ -62,8 +62,8 @@ def create_initial_users(app):
 
         # Salesperson users
         sales_users_data = [
-            {'username': 'paula', 'password': 'paula123', 'role': 'empleado'},
-            {'username': 'vendedora2', 'password': 'Vendedora456', 'role': 'empleado'}
+            {'username': 'paula', 'password': 'paula123', 'role': 'vendedor'},
+            {'username': 'vendedora2', 'password': 'Vendedora456', 'role': 'vendedor'}
         ]
         for user_data in sales_users_data:
             if not User.query.filter_by(username=user_data['username']).first():
@@ -95,6 +95,7 @@ def create_order_sequences(app):
             db.session.rollback()
             logger.error(f"Failed to create order ID sequences: {e}")
             logger.error("This feature is only compatible with PostgreSQL. The app may not function correctly.")
+
 
 def create_app():
     """Application Factory Function"""

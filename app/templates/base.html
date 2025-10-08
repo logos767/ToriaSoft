@@ -41,29 +41,32 @@
             <!-- Tasa de Cambio -->
             <div class="px-4 py-2 text-center bg-gray-700 rounded-lg mx-2 mt-6 flex-shrink-0 sidebar-text">
                 <p class="text-xs font-semibold uppercase ">Moneda de Cálculo</p>
+
                 <p class="text-lg font-bold ">1 {{ calculation_currency }} = Bs. {{ "%.2f"|format(current_rate) }}</p>
 
                 <!-- Selector de Moneda -->
+                {% if is_superuser() %}
                 <form action="{{ url_for('main.set_display_currency') }}" method="POST" class="mt-2" id="currency-form">
                     <select name="currency" onchange="document.getElementById('currency-form').submit()" class="bg-gray-800 text-white text-sm rounded p-1 w-full text-center appearance-none cursor-pointer">
                         <option value="USD" {% if calculation_currency == 'USD' %}selected{% endif %}>USD ($)</option>
                         <option value="EUR" {% if calculation_currency == 'EUR' %}selected{% endif %}>EUR (€)</option>
                     </select>
                 </form>
+                {% endif %}
             </div>
 
             <!-- Navegación -->
             <nav class="mt-6 flex-grow overflow-y-auto space-y-2">
-                {% if is_gerente() %}
+                {% if is_contador() %}
                 <a href="{{ url_for('main.dashboard') }}" class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
                     <i class="fas fa-tachometer-alt mr-2"></i><span class="sidebar-text">Dashboard</span>
                 </a>
                 {% endif %}
                 
-                {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+                {% if is_contador() %}
                 <details class="group">
                     <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
-                        <i class="fas fa-shopping-basket mr-2"></i><span class="sidebar-text">Compras</span>
+                        <i class="fas fa-shopping-basket mr-2"></i><span class="sidebar-text">Compras</span> {# Superusuario, Gerente, Contador #}
                     </summary> {# Superusuario and Gerente can access Purchases #}
                     <div class="ml-4 mt-2 space-y-1">
                         <a href="{{ url_for('main.new_purchase') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
@@ -121,15 +124,21 @@
                         <i class="fas fa-boxes mr-2"></i><span class="sidebar-text">Inventario</span>
                     </summary>
                     <div class="ml-4 mt-2 space-y-1">
-                        {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+                        <a href="{{ url_for('main.inventory_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm"> {# is_contador() check is inside the route #}
+                            <i class="fas fa-exchange-alt mr-2"></i><span class="sidebar-text">Productos</span>
+                        </a>
+                        {% if is_contador() %}
                         <a href="{{ url_for('main.inventory_stock') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-list mr-2"></i><span class="sidebar-text">Existencias</span>
                         </a>
+                        <a href="{{ url_for('main.adjustment_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-history mr-2"></i><span class="sidebar-text">Ajuste de Inventario</span>
+                        </a>
                         {% endif %}
-                        <a href="{{ url_for('main.movement_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                        <a href="{{ url_for('main.movement_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm"> {# is_contador() check is inside the route #}
                             <i class="fas fa-exchange-alt mr-2"></i><span class="sidebar-text">Movimientos</span>
                         </a>
-                        {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+                        {% if is_gerente() %} {# Solo Gerente y Superusuario pueden crear productos y códigos #}
                         <a href="{{ url_for('main.new_product') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-plus mr-2"></i><span class="sidebar-text">Nuevo Producto</span>
                         </a>
@@ -151,7 +160,7 @@
                         <a href="{{ url_for('main.bank_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-university mr-2"></i><span class="sidebar-text">Bancos</span>
                         </a>                        
-                        {% if current_user.is_authenticated and current_user.role == 'administrador' %}
+                        {% if is_contador() %}
                         <a href="{{ url_for('main.bank_movements') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-exchange-alt mr-2"></i><span class="sidebar-text">Movimientos Bancarios</span>
                         </a>
@@ -232,11 +241,6 @@
                     <h1 class="text-xl font-semibold text-gray-800">{{ title }}</h1>
                 </div>
                 <div>
-                    {% if current_user.is_authenticated and current_user.role == 'administrador' %}
-                    <button id="enable-notifications" class="text-blue-500 hover:text-blue-700 mr-4">
-                        <i class="fas fa-bell"></i> Activar Notificaciones
-                    </button>
-                    {% endif %}
                     {% if current_user.is_authenticated %}
                     <span class="text-gray-700 mr-4">Hola, {{ current_user.username }}</span>
                     <a href="{{ url_for('main.logout') }}" class="text-red-500 hover:text-red-700">

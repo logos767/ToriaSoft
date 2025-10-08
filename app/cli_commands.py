@@ -52,7 +52,7 @@ def register_commands(app):
     def init_order_sequences():
         """Initializes the order ID sequences for different sale types (PostgreSQL only)."""
         with current_app.app_context():
-            try:
+            try:                
                 # Sequence for 'contado' (regular) sales
                 db.session.execute(text("CREATE SEQUENCE IF NOT EXISTS order_contado_seq START 180000000"))
                 # Sequence for 'credito' (credit) sales

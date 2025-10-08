@@ -22,7 +22,7 @@ from babel.dates import get_month_names
 # Import extensions from the new extensions file
 from sqlalchemy.orm import joinedload, subqueryload
 from .extensions import db, bcrypt, socketio
-from .models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, CashBox, Payment, ManualFinancialMovement, VE_TIMEZONE
+from .models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, CashBox, Payment, ManualFinancialMovement, InventoryAdjustment, InventoryAdjustmentItem, VE_TIMEZONE
 
 # ReportLab imports for PDF generation
 from reportlab.lib.pagesizes import A4
@@ -864,7 +864,7 @@ def inventory_stock_report_pdf():
 @login_required
 def inventory_adjustment():
     """Página para el ajuste digital del inventario. Accesible por Gerente y Superusuario."""
-    if not is_gerente():
+    if not is_contador():
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -872,9 +872,30 @@ def inventory_adjustment():
         try:
             adjustments = request.form.getlist('adjustments')
             reason = request.form.get('reason', 'Ajuste de inventario manual')
+
+            if not adjustments:
+                flash('No se detectaron cambios para ajustar.', 'warning')
+                return redirect(url_for('main.inventory_adjustment'))
+
+            # Generate correlative code for the adjustment based on date.
+            # Format: AIVyymmdd-N
+            today = get_current_time_ve().date()
+            date_prefix = f"AIV{today.strftime('%y%m%d')}"
             
-            products_to_update = []
+            # Count existing adjustments for today to create a unique suffix
+            count_today = InventoryAdjustment.query.filter(
+                InventoryAdjustment.adjustment_code.like(f"{date_prefix}%")
+            ).count()
+            adjustment_code = f"{date_prefix}-{count_today + 1}"
+
+            # Create the main adjustment record
+            adjustment_record = InventoryAdjustment(
+                adjustment_code=adjustment_code, reason=reason, user_id=current_user.id
+            )
+            db.session.add(adjustment_record)
+            
             movements_to_create = []
+            total_value_difference = 0.0
             
             for adj_str in adjustments:
                 data = json.loads(adj_str)
@@ -883,33 +904,106 @@ def inventory_adjustment():
                 
                 product = Product.query.get(product_id)
                 if product and product.stock != real_stock:
-                    difference = real_stock - product.stock
+                    theoretical_stock = product.stock
+                    difference = real_stock - theoretical_stock
                     
                     # Preparar actualización de stock
                     product.stock = real_stock
-                    products_to_update.append(product)
+
+                    # Create adjustment item record
+                    adj_item = InventoryAdjustmentItem(
+                        adjustment_id=adjustment_record.id,
+                        product_id=product.id,
+                        theoretical_stock=theoretical_stock,
+                        real_stock=real_stock,
+                        comment=data.get('comment', '').strip() or None,
+                        cost_at_adjustment_usd=product.cost_usd or 0.0
+                    )
+                    db.session.add(adj_item) # This line was missing
+                    total_value_difference += difference * (product.cost_usd or 0.0)
                     
+                    # Usar el código de ajuste en la descripción del movimiento
+                    doc_identifier = adjustment_record.adjustment_code or f"Ajuste #{adjustment_record.id}"
                     # Preparar registro de movimiento
                     movement = Movement(
                         product_id=product.id,
                         type='Entrada' if difference > 0 else 'Salida',
                         quantity=abs(difference),
-                        document_type='Ajuste de Inventario',
-                        description=f"{reason} (Diferencia: {difference})",
+                        document_id=adjustment_record.id,
+                        document_type=f"Ajuste de Inventario ({doc_identifier})",
+                        description=f"Motivo: {reason}. {data.get('comment', '')}".strip(),
                         date=get_current_time_ve()
                     )
                     movements_to_create.append(movement)
-            
+
+            # Save summary data to the main adjustment record
+            adjustment_record.value_difference_usd = total_value_difference
+
             db.session.bulk_save_objects(movements_to_create)
             db.session.commit()
-            flash(f'Ajuste de inventario completado para {len(products_to_update)} productos.', 'success')
+            flash(f'Ajuste de inventario completado y guardado con ID #{adjustment_record.id}.', 'success')
+            return redirect(url_for('main.adjustment_result', adjustment_id=adjustment_record.id))
+
         except Exception as e:
             db.session.rollback()
+            current_app.logger.error(f"Error al procesar el ajuste de inventario: {e}", exc_info=True)
             flash(f'Error al procesar el ajuste: {e}', 'danger')
-        return redirect(url_for('main.inventory_stock'))
+            return redirect(url_for('main.inventory_adjustment'))
 
     products = Product.query.filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).order_by(Product.name).all()
     return render_template('inventario/ajuste_inventario.html', title='Ajuste de Inventario', products=products)
+
+@routes_blueprint.route('/inventario/ajustes/lista')
+@login_required
+def adjustment_list():
+    """Displays a list of all inventory adjustments made."""
+    if not is_contador():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+
+    adjustments = InventoryAdjustment.query.options(
+        joinedload(InventoryAdjustment.user)
+    ).order_by(InventoryAdjustment.date.desc()).all()
+
+    return render_template('inventario/list_ajustes.html',
+                           title='Historial de Ajustes de Inventario',
+                           adjustments=adjustments)
+
+@routes_blueprint.route('/inventario/ajuste/resultado/<int:adjustment_id>')
+@login_required
+def adjustment_result(adjustment_id):
+    """Muestra la página de resultados de un ajuste de inventario específico."""
+    if not is_contador():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+
+    adjustment = InventoryAdjustment.query.options(
+        joinedload(InventoryAdjustment.items).joinedload(InventoryAdjustmentItem.product),
+        joinedload(InventoryAdjustment.user)
+    ).get_or_404(adjustment_id)
+
+    # KPIs - NEW LOGIC: Calculate total inventory value before and after the adjustment.
+    # 1. Calculate the total value of the entire inventory *after* the adjustment (current state).
+    # We exclude 'Ganchos' as they are supplies, not for sale.
+    total_inventory_value_after_query = db.session.query(
+        func.sum(Product.stock * Product.cost_usd)
+    ).filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).first()
+    value_after = total_inventory_value_after_query[0] or 0.0
+
+    # 2. Calculate the value *before* by subtracting the adjustment's impact.
+    value_before = value_after - adjustment.value_difference_usd
+    value_diff = value_after - value_before
+
+    # Highlights
+    most_impactful_items = sorted(adjustment.items, key=lambda x: abs((x.real_stock - x.theoretical_stock) * x.cost_at_adjustment_usd), reverse=True)[:5]
+
+    # Previous adjustments for comparison
+    previous_adjustments = InventoryAdjustment.query.filter(InventoryAdjustment.id != adjustment_id).order_by(InventoryAdjustment.date.desc()).limit(5).all()
+
+    return render_template('inventario/ajuste_resultado.html',
+                           title=f'Resultado del Ajuste #{adjustment.id}',
+                           adjustment=adjustment, value_before=value_before, value_after=value_after, value_diff=value_diff,
+                           most_impactful_items=most_impactful_items, previous_adjustments=previous_adjustments)
 
 @routes_blueprint.route('/inventario/producto/<int:product_id>')
 @login_required

@@ -1,5 +1,5 @@
 import eventlet
-eventlet.monkey_patch()
+eventlet.monkey_patch() # Must be the very first line
 
 from app import create_app, socketio
 

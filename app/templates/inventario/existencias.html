@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-{% if current_user.is_authenticated and current_user.role == 'administrador' %}
+{% if is_contador() %}
 <div class="container mx-auto p-4">
     <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
         <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-box-open mr-2"></i>Existencias de Inventario</h1>
@@ -23,7 +23,6 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Talla</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Color</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código de Barras</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Existencias</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                     </tr>
@@ -31,11 +30,13 @@
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for product in products %}
                     <tr class="hover:bg-gray-50 {% if product.stock < 5 %}bg-red-50{% elif product.stock < 20 %}bg-yellow-50{% else %}bg-green-50{% endif %}">
-                        <td class="px-4 py-1 whitespace-nowrap text-sm text-gray-500">{{ product.codigo_producto or 'N/A' }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap">
+                                <div> <i class="fas fa-barcode w-4 inline-block text-left"></i> {{ product.barcode }}</div>                            
+                                <div class="text-xs text-gray-500">Cód: {{ product.codigo_producto or 'N/A' }}</div>
+                            </td>
                         <td class="px-6 py-1 whitespace-nowrap text-sm font-medium text-gray-900">{{ product.name }}</td>
                         <td class="px-4 py-1 whitespace-nowrap text-sm text-gray-500">{{ product.size or 'N/A' }}</td>
                         <td class="px-4 py-1 whitespace-nowrap text-sm text-gray-500">{{ product.color or 'N/A' }}</td>
-                        <td class="px-6 py-1 whitespace-nowrap text-sm text-gray-500">{{ product.barcode }}</td>
                         <td class="px-6 py-1 whitespace-nowrap text-sm font-bold {% if product.stock < 5 %}text-red-700{% elif product.stock < 20 %}text-yellow-700{% else %}text-green-700{% endif %}">{{ product.stock }}</td>
                         <td class="px-6 py-1 whitespace-nowrap text-sm text-gray-700">
                             {% if product.stock == 0 %}

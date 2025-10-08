@@ -279,11 +279,38 @@ class Movement(db.Model):
     date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
     document_id = db.Column(db.BigInteger, nullable=True) # ID de la orden, compra, etc.
     document_type = db.Column(db.String(50), nullable=True) # 'Orden de Venta', 'Orden de Compra', 'Ajuste'
+    description = db.Column(db.String(255), nullable=True) # Para comentarios de ajuste, etc.
     related_party_id = db.Column(db.Integer, nullable=True) # ID del cliente o proveedor
     related_party_type = db.Column(db.String(50), nullable=True) # 'Cliente', 'Proveedor'
 
     def __repr__(self):
         return f"Movement('{self.type}', '{self.product_id}', '{self.quantity}')"
+
+class InventoryAdjustment(db.Model):
+    __tablename__ = 'inventory_adjustments'
+    id = db.Column(db.Integer, primary_key=True)
+    adjustment_code = db.Column(db.String(50), unique=True, nullable=True) # e.g., INV18070001
+    date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
+    reason = db.Column(db.String(255), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # Summary fields
+    value_difference_usd = db.Column(db.Float, nullable=False, default=0.0)
+    
+    # Relationships
+    items = db.relationship('InventoryAdjustmentItem', backref='adjustment', lazy=True, cascade="all, delete-orphan")
+    user = db.relationship('User', backref='inventory_adjustments')
+
+class InventoryAdjustmentItem(db.Model):
+    __tablename__ = 'inventory_adjustment_items'
+    id = db.Column(db.Integer, primary_key=True)
+    adjustment_id = db.Column(db.Integer, db.ForeignKey('inventory_adjustments.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    theoretical_stock = db.Column(db.Integer, nullable=False)
+    real_stock = db.Column(db.Integer, nullable=False)
+    comment = db.Column(db.String(255), nullable=True)
+    cost_at_adjustment_usd = db.Column(db.Float, nullable=False)
+    product = db.relationship('Product')
 
 class CompanyInfo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
