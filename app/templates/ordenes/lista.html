@@ -16,11 +16,11 @@
             <input type="text" name="search" id="search" value="{{ filters.search or '' }}" placeholder="Buscar por N° Orden o Cliente..." class="flex-grow block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
             <!-- Date Range -->
             <div class="flex width-full justify-between">
-                <div class="d-flex items-center">
+                <div class="mb-1 md:mb-0 md:mr-2">
                     <span class="text-sm text-gray-600 whitespace-nowrap">Desde:</span>
                     <input type="date" name="start_date" id="start_date" value="{{ filters.start_date }}" class="block w-auto rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                 </div>
-                <div class="d-flex mb-1 md:mb-0 md:mr-2">
+                <div>
                     <span class="text-sm text-gray-600 whitespace-nowrap">Hasta:</span>
                     <input type="date" name="end_date" id="end_date" value="{{ filters.end_date }}" class="block w-auto rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                 </div>
