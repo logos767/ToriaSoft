@@ -1721,7 +1721,7 @@ def new_order():
             flash(f'Ocurrió un error inesperado al crear la orden. Por favor, contacta al administrador.', 'danger')
             return redirect(url_for('main.new_order'))
 
-    last_order = Order.query.order_by(Order.id.desc()).first()
+    last_order = Order.query.order_by(Order.date_created.desc()).first()
     current_ve_time = get_current_time_ve()
 
     return render_template('ordenes/nuevo.html', 
