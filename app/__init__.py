@@ -62,8 +62,8 @@ def create_initial_users(app):
 
         # Salesperson users
         sales_users_data = [
-            {'username': 'paula', 'password': 'paula123', 'role': 'vendedor'},
-            {'username': 'vendedora2', 'password': 'Vendedora456', 'role': 'vendedor'}
+            {'username': 'paula', 'password': 'paula123', 'role': 'Vendedor'},
+            {'username': 'vendedora2', 'password': 'Vendedora456', 'role': 'Vendedor'}
         ]
         for user_data in sales_users_data:
             if not User.query.filter_by(username=user_data['username']).first():

@@ -1658,7 +1658,7 @@ def new_order():
                 db.session.add(item)
                 
                 product.stock -= quantity
-                movement = Movement(product_id=product.id, type='Salida', quantity=quantity, document_id=new_order.id, document_type='Orden de Venta', related_party_id=new_order.client_id, related_party_type='Cliente', date=order_date)
+                movement = Movement(product_id=product.id, type='Salida', quantity=quantity, document_id=new_order.id, document_type='Orden de Venta', description=f"Venta al cliente #{new_order.client_id}", related_party_id=new_order.client_id, related_party_type='Cliente', date=order_date)
                 db.session.add(movement)
                 
                 total_amount += price_ves * quantity
@@ -3554,8 +3554,8 @@ def process_withdrawal(movement_id, action):
 @login_required
 def daily_closing():
     """Shows the page for generating the daily closing report. Accessible by Contador, Gerente, Superusuario."""
-    if not is_contador():
-        flash('Acceso denegado.', 'danger')
+    if not is_vendedor():
+        flash('No tienes permiso para acceder a esta página.', 'danger')
         return redirect(url_for('main.new_order'))
     date_str = request.args.get('date', get_current_time_ve().date().strftime('%Y-%m-%d'))
     try:
@@ -3570,12 +3570,7 @@ def daily_closing():
 @routes_blueprint.route('/finanzas/cierre-diario/imprimir', methods=['GET'])
 @login_required
 def print_daily_closing_report():
-    """
-    Gathers all data for a specific day and generates a ticket-style report.
-    """
-    if not is_contador():
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+    
     date_str = request.args.get('date')
     try:
         report_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else get_current_time_ve().date()
@@ -3716,9 +3711,7 @@ def print_daily_closing_report_pdf():
     """
     Gathers all data for a specific day and generates a full A4 PDF report.
     """
-    if not is_contador():
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+    
     from flask import make_response
 
     date_str = request.args.get('date')
