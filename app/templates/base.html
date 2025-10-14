@@ -298,11 +298,6 @@
                 }
             });
         
-
-
-
-
-           
             // Auto-Collapsing Sidebar Logic
             if (sidebar) {
                 sidebar.addEventListener('mouseenter', () => {
@@ -325,7 +320,7 @@
         });
     </script>
 
-    <!-- NUEVO SCRIPT PARA NOTIFICACIONES EN TIEMPO REAL -->
+   <!-- NUEVO SCRIPT PARA NOTIFICACIONES EN TIEMPO REAL -->
     {% if is_gerente() %} {# Superuser and Gerente receive notifications #}
     <script type="text/javascript">
         $(document).ready(function() {
@@ -373,26 +368,6 @@
                         }
                     }
                 });
-
-                // 2. Mostrar notificación de escritorio
-                if (Notification.permission === "granted") {
-                    var notification = new Notification('Nueva Notificación de ToriaSoft', {
-                        body: data.message
-                    });
-
-                    notification.onclick = function () {
-                        window.open(data.link);
-                    };
-                }
-
-                // 3. Actualizar el contador de la campana (si existe)
-                let badge = $('#notifications-dropdown .navbar-badge');
-                if (badge.length) {
-                    badge.text(parseInt(badge.text()) + 1);
-                } else {
-                    // Si no hay contador, lo crea
-                    $('#notifications-dropdown').append('<span class="badge badge-warning navbar-badge">1</span>');
-                }
             });
         });
     </script>

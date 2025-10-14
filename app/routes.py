@@ -1,5 +1,6 @@
 import os
 import requests
+import firebase_admin
 import re
 from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, session, current_app
 from flask_login import login_user, current_user, logout_user, login_required # type: ignore
@@ -19,10 +20,12 @@ matplotlib.use('Agg') # Importante: para que Matplotlib no intente mostrar una G
 import matplotlib.pyplot as plt
 from babel.dates import get_month_names
 
+# Firebase Admin SDK
+from firebase_admin import messaging
 # Import extensions from the new extensions file
 from sqlalchemy.orm import joinedload, subqueryload
 from .extensions import db, bcrypt, socketio
-from .models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, CashBox, Payment, ManualFinancialMovement, InventoryAdjustment, InventoryAdjustmentItem, VE_TIMEZONE
+from .models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, CashBox, Payment, ManualFinancialMovement, InventoryAdjustment, InventoryAdjustmentItem, VE_TIMEZONE, UserDevice
 
 # ReportLab imports for PDF generation
 from reportlab.lib.pagesizes import A4
@@ -151,18 +154,17 @@ def fetch_and_update_exchange_rate():
 
 def create_notification_for_admins(message, link):
     """
-    Crea una notificación para todos los usuarios con rol 'administrador'.
-    Actualizado para Superusuario y Gerente.
+    Crea una notificación en la BD para Superusuario y Gerente,
+    y envía una notificación push a través de FCM a sus dispositivos registrados.
     """
     current_app.logger.info(f"Attempting to create notification for admins: {message}")
     try:
         admins = User.query.filter(User.role.in_(['Superusuario', 'Gerente'])).all()
         if not admins:
-            current_app.logger.warning("No admin users found to send notification.")
+            current_app.logger.warning("No se encontraron usuarios administradores para enviar la notificación.")
             return
-        admin_ids = [admin.id for admin in admins]
-        current_app.logger.info(f"Found admins: {admin_ids}")
 
+        # 1. Guardar notificación en la base de datos para el historial y la UI web
         for admin in admins:
             notification = Notification(
                 user_id=admin.id,
@@ -170,15 +172,45 @@ def create_notification_for_admins(message, link):
                 link=link
             )
             db.session.add(notification)
-            db.session.flush()
-            current_app.logger.info(f"Notification created in DB for admin {admin.id}: {notification.message}")
+            db.session.flush() # Flush para obtener el ID y la fecha de la notificación
+            current_app.logger.info(f"Notificación creada en BD para admin {admin.id}: {notification.message}")
 
+            # 3. Emitir evento de WebSocket para clientes web
             socketio.emit('new_notification', {
                 'message': notification.message,
                 'link': notification.link,
                 'created_at': notification.created_at.strftime('%d/%m %H:%M')
             }, room=f'user_{admin.id}')
-            current_app.logger.info(f"Emitted socketio event to room user_{admin.id}")
+            current_app.logger.info(f"Emitido evento socketio a la sala user_{admin.id}")
+
+        db.session.commit() # Commit final después de todos los bucles
+        current_app.logger.info(f"Notificación guardada en la BD para {len(admins)} administradores.")
+
+        # 2. Enviar notificación push vía FCM
+        admin_ids = [admin.id for admin in admins]
+        devices = UserDevice.query.filter(UserDevice.user_id.in_(admin_ids)).all()
+        tokens = [device.fcm_token for device in devices]
+
+        if not tokens:
+            current_app.logger.info("No hay tokens de FCM registrados para los administradores. No se enviará push.")
+            return
+
+        # Construir el mensaje de FCM
+        fcm_message = messaging.MulticastMessage(
+            notification=messaging.Notification(
+                title='Nueva Notificación de ToriaSoft',
+                body=message,
+            ),
+            data={'link': link},  # Datos adicionales que la app puede usar
+            tokens=tokens,
+        )
+
+        # Enviar el mensaje
+        if firebase_admin._apps:
+            response = messaging.send_multicast(fcm_message)
+            current_app.logger.info(f'Notificaciones FCM enviadas: {response.success_count} exitosas, {response.failure_count} fallidas.')
+        else:
+            current_app.logger.warning("Firebase no está inicializado. Saltando envío de notificación FCM.")
 
     except Exception as e:
         current_app.logger.error(f"Error al crear notificaciones para administradores: {e}")
@@ -3048,6 +3080,40 @@ def api_new_client():
         current_app.logger.error(f"Error creando nuevo cliente vía API: {e}")
         return jsonify({'error': 'Ocurrió un error interno en el servidor.'}), 500
 
+@routes_blueprint.route('/api/register_fcm_token', methods=['POST'])
+@login_required
+def register_fcm_token():
+    """
+    API endpoint for mobile apps to register their FCM token.
+    """
+    data = request.get_json()
+    if not data or 'token' not in data:
+        return jsonify({'success': False, 'error': 'Token no proporcionado.'}), 400
+
+    token = data['token']
+    device_type = data.get('device_type', 'android')
+
+    try:
+        # Verificar si el token ya existe para evitar duplicados
+        existing_device = UserDevice.query.filter_by(fcm_token=token).first()
+        if existing_device:
+            # Si ya existe, solo actualizamos la fecha de último login y el usuario si ha cambiado
+            existing_device.user_id = current_user.id
+            existing_device.last_login = get_current_time_ve()
+            message = 'Token de dispositivo actualizado.'
+        else:
+            # Si no existe, lo creamos
+            new_device = UserDevice(user_id=current_user.id, fcm_token=token, device_type=device_type)
+            db.session.add(new_device)
+            message = 'Token de dispositivo registrado exitosamente.'
+        
+        db.session.commit()
+        return jsonify({'success': True, 'message': message}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al registrar el token FCM para el usuario {current_user.id}: {e}")
+        return jsonify({'success': False, 'error': 'Error interno del servidor.'}), 500
+
 # --- Rutas de Finanzas ---
 
 @routes_blueprint.route('/finanzas/bancos/lista')
@@ -3733,13 +3799,28 @@ def print_daily_closing_report_pdf():
     # 1. Resumen de Ventas y CMV (Cost of Merchandise Vended)
     orders_today = Order.query.filter(Order.date_created.between(start_dt, end_dt)).options(joinedload(Order.items).joinedload(OrderItem.product)).all()
     
+    # Modificación: Crear un desglose de ventas por tipo, similar al reporte de ticket.
     sales_summary = {
+        'contado': {'count': 0, 'amount_usd': 0.0},
+        'credito': {'count': 0, 'amount_usd': 0.0},
+        'apartado': {'count': 0, 'amount_usd': 0.0},
         'total': {'count': 0, 'amount_ves': 0.0, 'amount_usd': 0.0, 'cogs_ves': 0.0, 'cogs_usd': 0.0}
     }
     variable_expenses_usd = 0.0
     cost_structure = CostStructure.query.first() or CostStructure()
 
     for order in orders_today:
+        # Clasificar por tipo de orden para el desglose
+        if order.order_type == 'regular':
+            sales_summary['contado']['count'] += 1
+            sales_summary['contado']['amount_usd'] += order.total_amount_usd
+        elif order.order_type == 'credit':
+            sales_summary['credito']['count'] += 1
+            sales_summary['credito']['amount_usd'] += order.total_amount_usd
+        elif order.order_type == 'reservation':
+            sales_summary['apartado']['count'] += 1
+            sales_summary['apartado']['amount_usd'] += order.total_amount_usd
+
         sales_summary['total']['count'] += 1
         sales_summary['total']['amount_usd'] += order.total_amount_usd
         
@@ -3812,6 +3893,7 @@ def print_daily_closing_report_pdf():
         'bank_balances': bank_balances,
         'cash_box_balances': cash_box_balances,
         'orders_today': orders_today,
+        'sales_summary': sales_summary, # Pasar el desglose de ventas a la plantilla
         'report_date': report_date,
     }
     html_string = render_template('pdf/reporte_diario_pdf.html', **context)

@@ -1,9 +1,10 @@
 import logging
 import os
 import secrets
+import firebase_admin
+from firebase_admin import credentials
 from dotenv import load_dotenv
 from flask import Flask
-
 
 # Import extensions
 from .extensions import db, login_manager, bcrypt, socketio
@@ -15,6 +16,21 @@ load_dotenv()
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def initialize_firebase(app):
+    """Initializes the Firebase Admin SDK."""
+    with app.app_context():
+        try:
+            # La ruta al archivo de credenciales. Asume que está en la raíz del proyecto.
+            cred_path = os.path.join(app.root_path, '..', 'firebase-adminsdk.json')
+            if os.path.exists(cred_path):
+                cred = credentials.Certificate(cred_path)
+                firebase_admin.initialize_app(cred)
+                logger.info("Firebase Admin SDK inicializado correctamente.")
+            else:
+                logger.error("ERROR: No se encontró el archivo 'firebase-adminsdk.json'. Las notificaciones FCM no funcionarán.")
+        except Exception as e:
+            logger.error(f"Error al inicializar Firebase Admin SDK: {e}")
 
 def initial_exchange_rate_fetch(app):
     """Fetch exchange rate once on application startup."""
@@ -128,12 +144,6 @@ def create_app():
     login_manager.init_app(app)
     socketio.init_app(app)
 
-    # Attach socketio to the app object so we can access it in run.py
-    app.socketio = socketio
-
-    login_manager.login_view = 'main.login' # Note: 'main.' prefix from blueprint
-    login_manager.login_message_category = 'info'
-
     # --- Import and Register Blueprints & Models ---
     with app.app_context():
         from . import routes
@@ -145,6 +155,9 @@ def create_app():
         db.create_all()
         
         app.register_blueprint(routes.routes_blueprint)
+
+        login_manager.login_view = 'main.login' # Note: 'main.' prefix from blueprint
+        login_manager.login_message_category = 'info'
 
         # Define user loader inside the factory
         @login_manager.user_loader
@@ -207,6 +220,9 @@ def create_app():
     @app.teardown_appcontext
     def shutdown_session(exception=None):
         db.session.remove()
+
+    # --- Initialize Firebase ---
+    initialize_firebase(app)
 
     # --- Initial data fetch ---
     initial_exchange_rate_fetch(app)

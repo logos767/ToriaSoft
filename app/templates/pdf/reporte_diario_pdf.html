@@ -86,6 +86,7 @@
             bottom: -1.2cm;
             left: 0;
             right: 0;
+            width: 100%;
             text-align: left;
             font-size: 8pt;
             color: #888;
@@ -101,27 +102,81 @@
     <h1>Reporte de Cierre Diario</h1>
     <p class="report-subtitle">{{ report_period }}</p>
 
-    <!-- Sección 1: Resumen de Resultados (P&L) -->
-    <div class="section">
-        <h2 class="section-title">1. Estado de Resultados del Día</h2>
-        <div class="summary-grid">
-            <div class="summary-box"><h3>Ventas Totales</h3><p class="positive"><span class="currency">{{ "{:,.2f}".format(pnl_summary.sales) }}</span></p></div>
-            <div class="summary-box"><h3>Costo de Mercancía (CMV)</h3><p class="negative"><span class="currency">({{ "{:,.2f}".format(pnl_summary.cogs) }})</span></p></div>
-            <div class="summary-box"><h3>Utilidad Bruta</h3><p class="{{ 'positive' if pnl_summary.gross_profit >= 0 else 'negative' }}"><span class="currency">{{ "{:,.2f}".format(pnl_summary.gross_profit) }}</span></p></div>
-            <div class="summary-box"><h3>Gastos Operativos</h3><p class="negative"><span class="currency">({{ "{:,.2f}".format(pnl_summary.variable_expenses + pnl_summary.fixed_expenses) }})</span></p></div>
-        </div>
-        <div class="summary-box" style="margin-top: 15px; background-color: #f9fafb;">
-            <h3>Utilidad / Pérdida Neta del Día</h3>
-            <p class="{{ 'positive' if pnl_summary.net_profit >= 0 else 'negative' }}"><span class="currency">{{ "{:,.2f}".format(pnl_summary.net_profit) }}</span></p>
-        </div>
-        <div class="chart-container">
-            <img src="data:image/png;base64,{{ pnl_chart_base64 }}" alt="Gráfico de Resultados">
-        </div>
+    <!-- Sección 1 (antes 3): Detalle de Ventas -->
+    <div class="section" style="page-break-before: auto;">
+        <h2 class="section-title">1. Detalle de Ventas del Día</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 20%;">Orden / Cliente</th>
+                    <th style="width: 60%;">Detalle de Productos</th>
+                    <th style="width: 20%;" class="text-right">Montos ({{ currency_symbol }})</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders_today %}
+                <tr>
+                    <td>
+                        <strong>#{{ order.id|order_id_format }}</strong><br>
+                        <span style="font-size: 9pt;">{{ order.client.name }}</span><br>
+                        <span style="font-size: 8pt; color: #555;">Tipo: {{ order.status }}</span>
+                    </td>
+                    <td>
+                        <div style="font-size: 9pt;">
+                        {% for item in order.items %}
+                            {% set price_usd = (item.price / order.exchange_rate_at_sale) if order.exchange_rate_at_sale else 0 %}
+                                <div style="align-items: center; display: inline-flex;">
+                                    <p style="width: 85%; margin: 0; padding: 1px 0;">
+                                        <strong>{{ item.product.barcode }}</strong> - {{ item.quantity }} x {{ item.product.name }} | 
+                                    </p>
+                                    <p class="currency">{{ "{:,.2f}".format(item.quantity*price_usd) }}</p>
+                                </div>
+                        {% endfor %}
+                        </div>
+                    </td>
+                    
+                    <td class="text-right">
+                        <strong>Total:</strong> <span class="currency">{{ "{:,.2f}".format(order.total_amount_usd) }}</span><br>
+                        <strong class="positive">Pagado:</strong> <span class="currency positive">{{ "{:,.2f}".format(order.paid_amount_usd) }}</span><br>
+                        <strong class="negative">Deuda:</strong> <span class="currency negative">{{ "{:,.2f}".format(order.due_amount_usd) }}</span>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" class="text-center">No se registraron ventas en este día.</td></tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="font-weight: bold; background-color: #f2f2f2;">
+                    <td colspan="2" class="text-right">Total Ventas Regulares (Contado):</td>
+                    <td class="text-right"><span class="currency">{{ "{:,.2f}".format(sales_summary.contado.amount_usd) }}</span></td>
+                </tr>
+                <tr style="font-weight: bold; background-color: #f2f2f2;">
+                    <td colspan="2" class="text-right">Total Ventas a Crédito:</td>
+                    <td class="text-right"><span class="currency">{{ "{:,.2f}".format(sales_summary.credito.amount_usd) }}</span></td>
+                </tr>
+                <tr style="font-weight: bold; background-color: #f2f2f2;">
+                    <td colspan="2" class="text-right">Total Apartados:</td>
+                    <td class="text-right"><span class="currency">{{ "{:,.2f}".format(sales_summary.apartado.amount_usd) }}</span></td>
+                </tr>
+                <tr style="font-weight: bold; background-color: #e0e0e0; border-top: 2px solid #333;">
+                    <td colspan="2" class="text-right">GRAN TOTAL VENTAS DEL DÍA:</td>
+                    <td class="text-right"><span class="currency">{{ "{:,.2f}".format(pnl_summary.sales) }}</span></td>
+                </tr>
+                <tr style="font-weight: bold; background-color: #e8f5e9;">
+                    <td colspan="2" class="text-right positive">Total Ingresos (Pagado):</td>
+                    <td class="text-right positive"><span class="currency">{{ "{:,.2f}".format(orders_today|sum(attribute='paid_amount_usd')) }}</span></td>
+                </tr>
+                <tr style="font-weight: bold; background-color: #ffebee;">
+                    <td colspan="2" class="text-right negative">Total Cuentas por Cobrar (Deuda):</td>
+                    <td class="text-right negative"><span class="currency">{{ "{:,.2f}".format(orders_today|sum(attribute='due_amount_usd')) }}</span></td>
+                </tr>
+            </tfoot>
+        </table>
     </div>
 
-    <!-- Sección 2: Flujo de Caja -->
-    <div class="section">
-        <h2 class="section-title">2. Resumen de Flujo de Fondos por Cuenta</h2>
+    <!-- Sección 2s: Flujo de Fondos -->
+    <div class="section" style="page-break-before: auto;">
+        <h2 class="section-title">2. Resumen de Flujo de Fondos</h2>
 
         {% for account in bank_balances %}
         <h3 style="margin-top: 20px; font-size: 12pt;">Cuenta Bancaria: {{ account.name }}</h3>
@@ -176,36 +231,23 @@
         </table>
         {% endfor %}
     </div>
-
-    <!-- Sección 3: Detalle de Ventas -->
+    
+    <!-- Sección 3: Resumen de Resultados (P&L) -->
     <div class="section" style="page-break-before: auto;">
-        <h2 class="section-title">3. Detalle de Ventas del Día</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th># Orden</th>
-                    <th>Cliente</th>
-                    <th>Tipo</th>
-                    <th class="text-right">Total (USD)</th>
-                    <th class="text-right">Pagado (USD)</th>
-                    <th class="text-right">Deuda (USD)</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for order in orders_today %}
-                <tr>
-                    <td>#{{ order.id|order_id_format }}</td>
-                    <td>{{ order.client.name }}</td>
-                    <td>{{ order.status }}</td>
-                    <td class="text-right"><span class="currency">{{ "{:,.2f}".format(order.total_amount_usd) }}</span></td>
-                    <td class="text-right positive"><span class="currency">{{ "{:,.2f}".format(order.paid_amount_usd) }}</span></td>
-                    <td class="text-right negative"><span class="currency">{{ "{:,.2f}".format(order.due_amount_usd) }}</span></td>
-                </tr>
-                {% else %}
-                <tr><td colspan="6" class="text-center">No se registraron ventas en este día.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <h2 class="section-title">3. Estado de Resultados del Día</h2>
+        <div class="summary-grid">
+            <div class="summary-box"><h3>Ventas Totales</h3><p class="positive"><span class="currency">{{ "{:,.2f}".format(pnl_summary.sales) }}</span></p></div>
+            <div class="summary-box"><h3>Costo de Mercancía (CMV)</h3><p class="negative"><span class="currency">({{ "{:,.2f}".format(pnl_summary.cogs) }})</span></p></div>
+            <div class="summary-box"><h3>Utilidad Bruta</h3><p class="{{ 'positive' if pnl_summary.gross_profit >= 0 else 'negative' }}"><span class="currency">{{ "{:,.2f}".format(pnl_summary.gross_profit) }}</span></p></div>
+            <div class="summary-box"><h3>Gastos Operativos</h3><p class="negative"><span class="currency">({{ "{:,.2f}".format(pnl_summary.variable_expenses + pnl_summary.fixed_expenses) }})</span></p></div>
+        </div>
+        <div class="summary-box" style="margin-top: 15px; background-color: #f9fafb;">
+            <h3>Utilidad / Pérdida Neta del Día</h3>
+            <p class="{{ 'positive' if pnl_summary.net_profit >= 0 else 'negative' }}"><span class="currency">{{ "{:,.2f}".format(pnl_summary.net_profit) }}</span></p>
+        </div>
+        <div class="chart-container">
+            <img src="data:image/png;base64,{{ pnl_chart_base64 }}" alt="Gráfico de Resultados">
+        </div>
     </div>
 
 </body>
