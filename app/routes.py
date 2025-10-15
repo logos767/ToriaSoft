@@ -167,7 +167,7 @@ def create_notification_for_admins(message, link):
             current_app.logger.warning("No se encontraron usuarios administradores para enviar la notificación.")
             return
 
-        # 1. Guardar notificación en la base de datos para el historial y la UI web
+        # 1. Guardar notificaciones en la BD y emitir por WebSocket
         for admin in admins:
             notification = Notification(
                 user_id=admin.id,
@@ -175,22 +175,21 @@ def create_notification_for_admins(message, link):
                 link=link
             )
             db.session.add(notification)
-            db.session.flush() # Flush para obtener el ID y la fecha de la notificación
-            current_app.logger.info(f"Notificación creada en BD para admin {admin.id}: {notification.message}")
+            db.session.flush() # Flush para que la notificación tenga ID y fecha antes de emitir
 
-            # 3. Emitir evento de WebSocket para clientes web
+            # Emitir evento de WebSocket para la UI en tiempo real
             socketio.emit('new_notification', {
                 'message': notification.message,
                 'link': notification.link,
                 'created_at': notification.created_at.strftime('%d/%m %H:%M')
             }, room=f'user_{admin.id}')
-            current_app.logger.info(f"Emitido evento socketio a la sala user_{admin.id}")
+            current_app.logger.info(f"Notificación en BD y WebSocket para admin {admin.id}")
 
-        db.session.commit() # Commit final después de todos los bucles
-        current_app.logger.info(f"Notificación guardada en la BD para {len(admins)} administradores.")
+        db.session.commit()
+        current_app.logger.info(f"Commit de {len(admins)} notificaciones a la BD.")
 
-        # 2. Enviar notificaciones push
-        admin_ids = [admin.id for admin in admins] # type: ignore
+        # 2. Enviar notificaciones PUSH (Móvil y Web)
+        admin_ids = [admin.id for admin in admins]
         devices = UserDevice.query.filter(UserDevice.user_id.in_(admin_ids)).all()
         
         fcm_tokens = [d.fcm_token for d in devices if d.device_type != 'web']

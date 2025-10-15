@@ -3,13 +3,13 @@ import os
 import base64
 
 # CORRECCIÓN FINAL: Importar desde 'py_vapid', que es el nombre real del módulo.
-from vapid import VAPID
+from vapid import Vapid
     
     
 
 try:
     # MÉTODO INFALIBLE: Crear una instancia de Vapid para que genere las claves.
-    vapid = VAPID()
+    vapid = Vapid()
     
     # Convertir las claves de bytes a string en formato base64 url-safe
     private_key = base64.urlsafe_b64encode(vapid.private_key).rstrip(b'=').decode('utf-8')
