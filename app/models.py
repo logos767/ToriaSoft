@@ -25,9 +25,10 @@ class UserDevice(db.Model):
     __tablename__ = 'user_devices'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    fcm_token = db.Column(db.String(255), unique=True, nullable=False)
+    # fcm_token puede ser un token de FCM o una suscripción web push en formato JSON
+    fcm_token = db.Column(db.Text, unique=True, nullable=False)
     device_type = db.Column(db.String(50), nullable=True, default='android') # 'android', 'ios', 'web'
-    last_login = db.Column(db.DateTime(timezone=True), default=get_current_time_ve, onupdate=get_current_time_ve)
+    last_login = db.Column(db.DateTime(timezone=True), default=get_current_time_ve, onupdate=get_current_time_ve, index=True)
 
     user = db.relationship('User', backref=db.backref('devices', lazy='dynamic', cascade="all, delete-orphan"))
 

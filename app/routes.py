@@ -1,5 +1,6 @@
 import os
 import requests
+from pywebpush import webpush, WebPushException
 import firebase_admin
 import re
 from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, session, current_app
@@ -157,6 +158,8 @@ def create_notification_for_admins(message, link):
     Crea una notificación en la BD para Superusuario y Gerente,
     y envía una notificación push a través de FCM a sus dispositivos registrados.
     """
+    VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY")
+    VAPID_CLAIMS = {"sub": "mailto:your-email@example.com"} # Cambia esto a tu email
     current_app.logger.info(f"Attempting to create notification for admins: {message}")
     try:
         admins = User.query.filter(User.role.in_(['Superusuario', 'Gerente'])).all()
@@ -186,31 +189,57 @@ def create_notification_for_admins(message, link):
         db.session.commit() # Commit final después de todos los bucles
         current_app.logger.info(f"Notificación guardada en la BD para {len(admins)} administradores.")
 
-        # 2. Enviar notificación push vía FCM
-        admin_ids = [admin.id for admin in admins]
+        # 2. Enviar notificaciones push
+        admin_ids = [admin.id for admin in admins] # type: ignore
         devices = UserDevice.query.filter(UserDevice.user_id.in_(admin_ids)).all()
-        tokens = [device.fcm_token for device in devices]
+        
+        fcm_tokens = [d.fcm_token for d in devices if d.device_type != 'web']
+        web_push_subscriptions = [d for d in devices if d.device_type == 'web']
 
-        if not tokens:
-            current_app.logger.info("No hay tokens de FCM registrados para los administradores. No se enviará push.")
-            return
-
-        # Construir el mensaje de FCM
-        fcm_message = messaging.MulticastMessage(
-            notification=messaging.Notification(
-                title='Nueva Notificación de ToriaSoft',
-                body=message,
-            ),
-            data={'link': link},  # Datos adicionales que la app puede usar
-            tokens=tokens,
-        )
-
-        # Enviar el mensaje
-        if firebase_admin._apps:
+        # --- Enviar a dispositivos móviles (Android/iOS) ---
+        if fcm_tokens and firebase_admin._apps:
+            # CAMBIO IMPORTANTE: Enviar como mensaje de "solo datos"
+            # para que la app móvil lo maneje siempre.
+            fcm_message = messaging.MulticastMessage(
+                data={
+                    'title': 'Nueva Notificación de ToriaSoft',
+                    'body': message,
+                    'link': link
+                },
+                tokens=fcm_tokens,
+                # Configuración para Android para que despierte la app
+                android=messaging.AndroidConfig(
+                    priority='high',
+                ),
+                # Configuración para APNs (iOS)
+                apns=messaging.APNSConfig(
+                    payload=messaging.APNSPayload(
+                        aps=messaging.Aps(content_available=True)
+                    )
+                )
+            )
             response = messaging.send_multicast(fcm_message)
-            current_app.logger.info(f'Notificaciones FCM enviadas: {response.success_count} exitosas, {response.failure_count} fallidas.')
-        else:
-            current_app.logger.warning("Firebase no está inicializado. Saltando envío de notificación FCM.")
+            current_app.logger.info(f'Notificaciones FCM (datos) enviadas: {response.success_count} exitosas, {response.failure_count} fallidas.')
+
+        # --- Enviar a navegadores web ---
+        if web_push_subscriptions and VAPID_PRIVATE_KEY:
+            push_payload = json.dumps({
+                "title": "Nueva Notificación de ToriaSoft",
+                "body": message,
+                "icon": url_for('static', filename='images/logo.png', _external=True),
+                "url": link
+            })
+            for sub_device in web_push_subscriptions:
+                try:
+                    subscription_info = json.loads(sub_device.fcm_token)
+                    webpush(
+                        subscription_info=subscription_info,
+                        data=push_payload,
+                        vapid_private_key=VAPID_PRIVATE_KEY,
+                        vapid_claims=VAPID_CLAIMS.copy()
+                    )
+                except (WebPushException, json.JSONDecodeError, TypeError) as e:
+                    current_app.logger.error(f"Error enviando web push a {sub_device.id}: {e}. Podría ser una suscripción inválida.")
 
     except Exception as e:
         current_app.logger.error(f"Error al crear notificaciones para administradores: {e}")
@@ -299,6 +328,32 @@ def mark_notifications_as_read():
         db.session.rollback()
         current_app.logger.error(f"Error al marcar notificaciones como leídas para el usuario {current_user.id}: {e}")
         return jsonify(success=False, message='Error interno del servidor'), 500
+
+@routes_blueprint.route('/notifications/list')
+@login_required
+def notification_list():
+    """Muestra una página con todas las notificaciones del usuario."""
+    if not is_gerente():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+    
+    # Marcar todas como leídas al visitar la página
+    Notification.query.filter_by(user_id=current_user.id, is_read=False).update({'is_read': True})
+    db.session.commit()
+
+    notifications = Notification.query.filter_by(user_id=current_user.id).order_by(Notification.created_at.desc()).all()
+    return render_template('notificaciones/lista.html', title='Historial de Notificaciones', notifications=notifications)
+
+@routes_blueprint.route('/notifications/clear', methods=['POST'])
+@login_required
+def clear_all_notifications():
+    """Elimina todas las notificaciones del usuario actual."""
+    if not is_gerente():
+        return jsonify(success=False, message='Acceso denegado'), 403
+    Notification.query.filter_by(user_id=current_user.id).delete()
+    db.session.commit()
+    flash('Historial de notificaciones limpiado.', 'success')
+    return redirect(url_for('main.notification_list'))
 
 @socketio.on('connect')
 def handle_connect():
@@ -3079,6 +3134,32 @@ def api_new_client():
         db.session.rollback()
         current_app.logger.error(f"Error creando nuevo cliente vía API: {e}")
         return jsonify({'error': 'Ocurrió un error interno en el servidor.'}), 500
+
+@routes_blueprint.route('/api/subscribe_web_push', methods=['POST'])
+@login_required
+def subscribe_web_push():
+    """API para que el frontend registre una suscripción de Web Push."""
+    subscription_data = request.get_json()
+    if not subscription_data or 'endpoint' not in subscription_data:
+        return jsonify({'success': False, 'error': 'Suscripción no válida.'}), 400
+
+    try:
+        subscription_json = json.dumps(subscription_data)
+        
+        # Buscar si ya existe para el usuario para no duplicar
+        existing_device = UserDevice.query.filter_by(user_id=current_user.id, device_type='web').first()
+        if existing_device:
+            existing_device.fcm_token = subscription_json
+            existing_device.last_login = get_current_time_ve()
+        else:
+            new_device = UserDevice(user_id=current_user.id, fcm_token=subscription_json, device_type='web')
+            db.session.add(new_device)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Suscripción web push guardada.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al guardar suscripción web push para {current_user.id}: {e}")
+        return jsonify({'success': False, 'error': 'Error interno del servidor.'}), 500
 
 @routes_blueprint.route('/api/register_fcm_token', methods=['POST'])
 @login_required

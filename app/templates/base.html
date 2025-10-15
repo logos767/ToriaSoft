@@ -239,12 +239,43 @@
                     </button>
                     <h1 class="text-xl font-semibold text-gray-800">{{ title }}</h1>
                 </div>
-                <div>
+                <div class="flex items-center">
                     {% if current_user.is_authenticated %}
-                    <span class="text-gray-700 mr-4">Hola, {{ current_user.username }}</span>
-                    <a href="{{ url_for('main.logout') }}" class="text-red-500 hover:text-red-700">
-                        <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
-                    </a>
+                    <!-- Notifications Dropdown -->
+                    {% if is_gerente() %}
+                    <div class="relative" id="notifications-dropdown-container">
+                        <button id="notifications-bell-button" class="text-gray-500 hover:text-gray-700 focus:outline-none mr-4 relative">
+                            <i class="fas fa-bell text-xl"></i>
+                            {% if unread_notification_count > 0 %}
+                            <span id="notification-badge" class="absolute -top-1 -right-1 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">{{ unread_notification_count }}</span>
+                            {% endif %}
+                        </button>
+                        <div id="notifications-dropdown" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl overflow-hidden z-20">
+                            <div class="py-2 px-4 text-sm font-semibold text-gray-700 border-b">
+                                Notificaciones
+                            </div>
+                            <div id="notifications-list" class="divide-y divide-gray-100 max-h-80 overflow-y-auto">
+                                {% for notification in unread_notifications %}
+                                <a href="{{ notification.link or '#' }}" class="block py-2 px-4 text-sm text-gray-800 hover:bg-gray-100">
+                                    <p class="font-semibold">{{ notification.message }}</p>
+                                    <p class="text-xs text-gray-500">{{ notification.created_at|ve_datetime('%d/%m/%Y %H:%M') }}</p>
+                                </a>
+                                {% else %}
+                                <p class="py-4 px-4 text-sm text-center text-gray-500">No tienes notificaciones nuevas.</p>
+                                {% endfor %}
+                            </div>
+                            <a href="{{ url_for('main.notification_list') }}" class="block bg-gray-50 text-center py-2 px-4 text-sm font-semibold text-blue-600 hover:bg-gray-100 border-t">
+                                Ver todas las notificaciones
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+                    <span class="text-gray-700 mr-4">Hola, {{ current_user.username }} ({{ current_user.role }})</span>
+                    <div class="relative">
+                        <a href="{{ url_for('main.logout') }}" class="text-red-500 hover:text-red-700">
+                            <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+                        </a>
+                    </div>
                     {% endif %}
                 </div>
             </header>
@@ -317,6 +348,33 @@
                     }
                 });                
             };
+
+            // --- Lógica del Dropdown de Notificaciones ---
+            const bellButton = document.getElementById('notifications-bell-button');
+            const notificationsDropdown = document.getElementById('notifications-dropdown');
+
+            if (bellButton && notificationsDropdown) {
+                bellButton.addEventListener('click', function(event) {
+                    event.stopPropagation();
+                    notificationsDropdown.classList.toggle('hidden');
+                    
+                    // Si se abre el dropdown y hay notificaciones, marcarlas como leídas
+                    const badge = document.getElementById('notification-badge');
+                    if (!notificationsDropdown.classList.contains('hidden') && badge) {
+                        fetch("{{ url_for('main.mark_notifications_as_read') }}", { method: 'POST' })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    badge.style.display = 'none';
+                                }
+                            });
+                    }
+                });
+
+                document.addEventListener('click', function() {
+                    notificationsDropdown.classList.add('hidden');
+                });
+            }
         });
     </script>
 
@@ -332,24 +390,70 @@
                 "timeOut": "7000", // 7 segundos
             };
 
-            function requestNotificationPermission() {
-                if (!("Notification" in window)) {
-                    toastr.error("Este navegador no soporta notificaciones de escritorio.");
-                } else if (Notification.permission === "granted") {
-                    toastr.success("Las notificaciones ya están activadas.");
-                } else if (Notification.permission !== "denied") {
-                    Notification.requestPermission().then(function (permission) {
-                        if (permission === "granted") {
-                            new Notification("¡Notificaciones activadas!", {
-                                body: "Gracias por activar las notificaciones.",
-                                icon: "{{ url_for('static', filename='images/logo.png') }}" // Opcional
-                            });
+            // --- Lógica de Notificaciones Push Web ---
+            const VAPID_PUBLIC_KEY = 'BDZ7iy13K4WLejgDuNmR1WXcJtWC2H4ptC2kZ2vUE8NYtpHdY3k3ulm2SRX7zpK7TIbbX4B1nKeYyaVwehY2Xl8'; // <-- ¡REEMPLAZA ESTO!
+
+            function urlBase64ToUint8Array(base64String) {
+                const padding = '='.repeat((4 - base64String.length % 4) % 4);
+                const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+                const rawData = window.atob(base64);
+                const outputArray = new Uint8Array(rawData.length);
+                for (let i = 0; i < rawData.length; ++i) {
+                    outputArray[i] = rawData.charCodeAt(i);
+                }
+                return outputArray;
+            }
+
+            async function subscribeUserToPush() {
+                try {
+                    const registration = await navigator.serviceWorker.ready;
+                    const subscription = await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                    });
+                    
+                    console.log('Suscripción Push obtenida:', subscription);
+
+                    // Enviar la suscripción al backend
+                    await fetch("{{ url_for('main.subscribe_web_push') }}", {
+                        method: 'POST',
+                        body: JSON.stringify(subscription),
+                        headers: {
+                            'Content-Type': 'application/json'
                         }
                     });
+                    toastr.success('¡Notificaciones push activadas!');
+                } catch (error) {
+                    console.error('Error al suscribirse a las notificaciones push:', error);
+                    toastr.error('No se pudieron activar las notificaciones push.');
                 }
             }
 
-            $('#enable-notifications').on('click', requestNotificationPermission);
+            async function setupPushNotifications() {
+                if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                    console.warn('Las notificaciones push no son soportadas por este navegador.');
+                    return;
+                }
+
+                try {
+                    await navigator.serviceWorker.register("{{ url_for('static', filename='js/sw.js') }}");
+                    console.log('Service Worker registrado.');
+
+                    if (Notification.permission === 'granted') {
+                        console.log('El permiso para notificaciones ya fue otorgado.');
+                        // Opcional: podrías verificar si ya hay una suscripción y reenviarla si es necesario.
+                    } else if (Notification.permission !== 'denied') {
+                        const permission = await Notification.requestPermission();
+                        if (permission === 'granted') {
+                            await subscribeUserToPush();
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error en el registro del Service Worker:', error);
+                }
+            }
+
+            setupPushNotifications();
 
             var socket = io(); // Conectar al servidor WebSocket
 
@@ -361,13 +465,34 @@
             socket.on('new_notification', function(data) {
                 console.log('¡Evento de notificación recibido!', data);
                 // 1. Mostrar el pop-up con Toastr
-                let toast = toastr.info(data.message, 'Nueva Notificación', {
+                toastr.info(data.message, 'Nueva Notificación', {
                     "onclick": function() {
                         if (data.link) {
                             window.location.href = data.link;
                         }
                     }
                 });
+
+                // 2. Actualizar el contador de la campana
+                let badge = $('#notification-badge');
+                if (badge.length) {
+                    badge.text(parseInt(badge.text() || '0') + 1).show();
+                } else {
+                    // Si no hay contador, lo crea y lo añade al botón
+                    $('#notifications-bell-button').append('<span id="notification-badge" class="absolute -top-1 -right-1 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">1</span>');
+                }
+
+                // 3. Añadir la notificación a la lista desplegable dinámicamente
+                const newNotificationHtml = `
+                    <a href="${data.link || '#'}" class="block py-2 px-4 text-sm text-gray-800 hover:bg-gray-100">
+                        <p class="font-semibold">${data.message}</p>
+                        <p class="text-xs text-gray-500">${data.created_at}</p>
+                    </a>`;
+                const notificationsList = $('#notifications-list');
+                // Si el mensaje "No tienes notificaciones" está presente, lo removemos
+                if(notificationsList.find('p').length > 0) notificationsList.empty();
+                notificationsList.prepend(newNotificationHtml);
+
             });
         });
     </script>
