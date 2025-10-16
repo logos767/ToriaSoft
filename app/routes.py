@@ -357,8 +357,11 @@ def clear_all_notifications():
 @socketio.on('connect')
 def handle_connect():
     if current_user.is_authenticated:
-        from flask_socketio import join_room
-        join_room(f'user_{current_user.id}')
+        from flask_socketio import join_room, rooms
+        # Add a check to prevent joining the room if already in it.
+        # This can help with reconnects.
+        if f'user_{current_user.id}' not in rooms():
+            join_room(f'user_{current_user.id}')
 
 # Rutas de autenticación
 @routes_blueprint.route('/login', methods=['GET', 'POST'])
@@ -2926,12 +2929,18 @@ def print_delivery_note(order_id):
         if not order_id_str:
             return None
         try:
-            from reportlab.graphics.barcode import createBarcodeDrawing
             barcode = createBarcodeDrawing('Code128', value=order_id_str, barHeight=10*mm, barWidth=0.3*mm)
             drawing = Drawing(barcode.width, barcode.height)
             drawing.add(barcode)
             buffer = io.BytesIO()
-            renderPM.drawToFile(drawing, buffer, fmt='PNG')
+            try:
+                # First, try the C-based backend which is faster
+                from reportlab.graphics import renderPM
+                renderPM.drawToFile(drawing, buffer, fmt='PNG')
+            except ImportError:
+                # Fallback to the pure Python backend if the C-backend is not available
+                from reportlab.graphics.renderPM import draw_to_file
+                draw_to_file(drawing, buffer, fmt='PNG')
             buffer.seek(0)
             return base64.b64encode(buffer.getvalue()).decode('utf-8')
         except Exception as e:
@@ -2965,12 +2974,18 @@ def print_reservation_receipt(order_id):
         if not order_id_str:
             return None
         try:
-            from reportlab.graphics.barcode import createBarcodeDrawing
             barcode = createBarcodeDrawing('Code128', value=order_id_str, barHeight=10*mm, barWidth=0.3*mm)
             drawing = Drawing(barcode.width, barcode.height)
             drawing.add(barcode)
             buffer = io.BytesIO()
-            renderPM.drawToFile(drawing, buffer, fmt='PNG')
+            try:
+                # First, try the C-based backend which is faster
+                from reportlab.graphics import renderPM
+                renderPM.drawToFile(drawing, buffer, fmt='PNG')
+            except ImportError:
+                # Fallback to the pure Python backend if the C-backend is not available
+                from reportlab.graphics.renderPM import draw_to_file
+                draw_to_file(drawing, buffer, fmt='PNG')
             buffer.seek(0)
             return base64.b64encode(buffer.getvalue()).decode('utf-8')
         except Exception as e:

@@ -1,9 +1,10 @@
 from flask import flash, redirect, request, url_for, current_app, render_template, session
 from sqlalchemy.exc import OperationalError
 from requests.exceptions import ConnectionError # type: ignore
+from flask_login import current_user
 from werkzeug.exceptions import InternalServerError, NotFound, Forbidden
 from .extensions import db
-from .models import ExchangeRate, CompanyInfo
+from .models import ExchangeRate, CompanyInfo, ManualFinancialMovement, Notification
 
 def get_cached_exchange_rate(currency='USD'):
     """
@@ -28,18 +29,42 @@ def register_error_handlers(app):
         """Manejador para errores 404 (No Encontrado)."""
         current_app.logger.warning(f"Ruta no encontrada: {request.path}")
         
-        # Lógica para obtener la tasa de cambio y la moneda de cálculo
+        # --- Replicate context variables needed by base.html ---
+        
+        # 1. Exchange rate and currency symbol
         company_info = CompanyInfo.query.first()
         default_currency = company_info.calculation_currency if company_info and company_info.calculation_currency else 'USD'
         calculation_currency = session.get('display_currency', default_currency)
         current_rate = get_cached_exchange_rate(calculation_currency) or 0.0
         symbol = '€' if calculation_currency == 'EUR' else '$'
 
+        # 2. Pending withdrawals count
+        pending_withdrawals_count = 0
+        if current_user.is_authenticated and current_user.role in ['Superusuario', 'Gerente']:
+            try:
+                pending_withdrawals_count = ManualFinancialMovement.query.filter_by(status='Pendiente', movement_type='Egreso').count()
+            except Exception as e:
+                current_app.logger.error(f"Error getting pending withdrawals count for 404 page: {e}")
+
+        # 3. Unread notifications
+        unread_notifications = []
+        unread_notification_count = 0
+        if current_user.is_authenticated and current_user.role in ['Superusuario', 'Gerente']:
+            try:
+                unread_notifications = Notification.query.filter_by(user_id=current_user.id, is_read=False).order_by(Notification.created_at.desc()).limit(10).all()
+                unread_notification_count = Notification.query.filter_by(user_id=current_user.id, is_read=False).count()
+            except Exception as e:
+                current_app.logger.error(f"Error getting notifications for 404 page: {e}")
+
 
         return render_template('errors/404.html', 
                                current_rate=current_rate, 
                                calculation_currency=calculation_currency,
                                currency_symbol=symbol,
+                               pending_withdrawals_count=pending_withdrawals_count,
+                               # Add notification variables to the context
+                               unread_notifications=unread_notifications,
+                               unread_notification_count=unread_notification_count,
                                title="Página no encontrada"), 404
 
     @app.errorhandler(Forbidden)
