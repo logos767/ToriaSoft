@@ -239,45 +239,62 @@
                     </button>
                     <h1 class="text-xl font-semibold text-gray-800">{{ title }}</h1>
                 </div>
-                <div class="flex items-center">
-                    {% if current_user.is_authenticated %}
-                    <!-- Notifications Dropdown -->
-                    {% if is_gerente() %}
-                    <div class="relative" id="notifications-dropdown-container">
-                        <button id="notifications-bell-button" class="text-gray-500 hover:text-gray-700 focus:outline-none mr-4 relative">
-                            <i class="fas fa-bell text-xl"></i>
-                            {% if unread_notification_count > 0 %}
-                            <span id="notification-badge" class="absolute -top-1 -right-1 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">{{ unread_notification_count }}</span>
-                            {% endif %}
-                        </button>
-                        <div id="notifications-dropdown" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl overflow-hidden z-20">
-                            <div class="py-2 px-4 text-sm font-semibold text-gray-700 border-b">
-                                Notificaciones
-                            </div>
-                            <div id="notifications-list" class="divide-y divide-gray-100 max-h-80 overflow-y-auto">
-                                {% for notification in unread_notifications %}
-                                <a href="{{ notification.link or '#' }}" class="block py-2 px-4 text-sm text-gray-800 hover:bg-gray-100">
-                                    <p class="font-semibold">{{ notification.message }}</p>
-                                    <p class="text-xs text-gray-500">{{ notification.created_at|ve_datetime('%d/%m/%Y %H:%M') }}</p>
-                                </a>
-                                {% else %}
-                                <p class="py-4 px-4 text-sm text-center text-gray-500">No tienes notificaciones nuevas.</p>
-                                {% endfor %}
-                            </div>
-                            <a href="{{ url_for('main.notification_list') }}" class="block bg-gray-50 text-center py-2 px-4 text-sm font-semibold text-blue-600 hover:bg-gray-100 border-t">
-                                Ver todas las notificaciones
+                {% if current_user.is_authenticated %}
+                    <!-- Desktop User Menu (Visible on md screens and up) -->
+                    <div class="hidden md:flex items-center">
+                        {% if is_gerente() %}
+                        <div class="relative" id="notifications-dropdown-container">
+                            <button id="notifications-bell-button" class="text-gray-500 hover:text-gray-700 focus:outline-none mr-4 relative">
+                                <i class="fas fa-bell text-xl"></i>
+                                {% if unread_notification_count > 0 %}
+                                <span id="notification-badge" class="absolute -top-1 -right-1 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">{{ unread_notification_count }}</span>
+                                {% endif %}
+                            </button>
+                        </div>
+                        {% endif %}
+                        <span class="text-gray-700 mr-4">Hola, {{ current_user.username }} ({{ current_user.role }})</span>
+                        <div class="relative">
+                            <a href="{{ url_for('main.logout') }}" class="text-red-500 hover:text-red-700">
+                                <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
                             </a>
                         </div>
                     </div>
-                    {% endif %}
-                    <span class="text-gray-700 mr-4">Hola, {{ current_user.username }} ({{ current_user.role }})</span>
-                    <div class="relative">
-                        <a href="{{ url_for('main.logout') }}" class="text-red-500 hover:text-red-700">
-                            <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
-                        </a>
+
+                    <!-- Mobile User Menu (Visible on screens smaller than md) -->
+                    <div class="md:hidden relative">
+                        <button id="user-menu-button" class="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            <i class="fas fa-user"></i>
+                        </button>
+                        <div id="user-menu-dropdown" class="hidden absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl overflow-hidden z-20">
+                            <div class="p-4 border-b">
+                                <p class="font-semibold text-gray-800">{{ current_user.username }}</p>
+                                <p class="text-sm text-gray-500">{{ current_user.role }}</p>
+                            </div>
+                            <div class="py-1">
+                                {% if is_gerente() %}
+                                <a href="#" id="mobile-notifications-button" class="flex justify-between items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <span>Notificaciones</span>
+                                    {% if unread_notification_count > 0 %}
+                                    <span id="mobile-notification-badge" class="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">{{ unread_notification_count }}</span>
+                                    {% endif %}
+                                </a>
+                                {% endif %}
+                                <a href="{{ url_for('main.logout') }}" class="block px-4 py-2 text-sm text-red-500 hover:bg-gray-100">
+                                    <i class="fas fa-sign-out-alt mr-2"></i>Cerrar Sesión
+                                </a>
+                            </div>
+                        </div>
                     </div>
-                    {% endif %}
-                </div>
+
+                    <!-- Notifications Dropdown (Shared by both menus) -->
+                    <div id="notifications-dropdown" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl overflow-hidden z-20">
+                        <div class="py-2 px-4 text-sm font-semibold text-gray-700 border-b">Notificaciones</div>
+                        <div id="notifications-list" class="divide-y divide-gray-100 max-h-80 overflow-y-auto">
+                            {% for notification in unread_notifications %}<a href="{{ notification.link or '#' }}" class="block py-2 px-4 text-sm text-gray-800 hover:bg-gray-100"><p class="font-semibold">{{ notification.message }}</p><p class="text-xs text-gray-500">{{ notification.created_at|ve_datetime('%d/%m/%Y %H:%M') }}</p></a>{% else %}<p class="py-4 px-4 text-sm text-center text-gray-500">No tienes notificaciones nuevas.</p>{% endfor %}
+                        </div>
+                        <a href="{{ url_for('main.notification_list') }}" class="block bg-gray-50 text-center py-2 px-4 text-sm font-semibold text-blue-600 hover:bg-gray-100 border-t">Ver todas las notificaciones</a>
+                    </div>
+                {% endif %}
             </header>
 
             <!-- Page Content -->
@@ -353,28 +370,54 @@
             const bellButton = document.getElementById('notifications-bell-button');
             const notificationsDropdown = document.getElementById('notifications-dropdown');
 
+            // --- Lógica del Menú de Usuario Móvil ---
+            const userMenuButton = document.getElementById('user-menu-button');
+            const userMenuDropdown = document.getElementById('user-menu-dropdown');
+            const mobileNotificationsButton = document.getElementById('mobile-notifications-button');
+
+            if (userMenuButton) {
+                userMenuButton.addEventListener('click', function(event) {
+                    event.stopPropagation();
+                    userMenuDropdown.classList.toggle('hidden');
+                });
+            }
+
+            function markNotificationsAsRead() {
+                const badge = document.getElementById('notification-badge');
+                const mobileBadge = document.getElementById('mobile-notification-badge');
+                if (badge || mobileBadge) {
+                    fetch("{{ url_for('main.mark_notifications_as_read') }}", { method: 'POST' })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                if (badge) badge.style.display = 'none';
+                                if (mobileBadge) mobileBadge.style.display = 'none';
+                            }
+                        });
+                }
+            }
+
             if (bellButton && notificationsDropdown) {
                 bellButton.addEventListener('click', function(event) {
                     event.stopPropagation();
                     notificationsDropdown.classList.toggle('hidden');
-                    
-                    // Si se abre el dropdown y hay notificaciones, marcarlas como leídas
-                    const badge = document.getElementById('notification-badge');
-                    if (!notificationsDropdown.classList.contains('hidden') && badge) {
-                        fetch("{{ url_for('main.mark_notifications_as_read') }}", { method: 'POST' })
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    badge.style.display = 'none';
-                                }
-                            });
-                    }
-                });
-
-                document.addEventListener('click', function() {
-                    notificationsDropdown.classList.add('hidden');
+                    if (!notificationsDropdown.classList.contains('hidden')) markNotificationsAsRead();
                 });
             }
+
+            if (mobileNotificationsButton) {
+                mobileNotificationsButton.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    notificationsDropdown.classList.toggle('hidden');
+                    if (!notificationsDropdown.classList.contains('hidden')) markNotificationsAsRead();
+                });
+            }
+
+            document.addEventListener('click', function() {
+                if (notificationsDropdown) notificationsDropdown.classList.add('hidden');
+                if (userMenuDropdown) userMenuDropdown.classList.add('hidden');
+            });
         });
     </script>
 
@@ -474,12 +517,15 @@
                 });
 
                 // 2. Actualizar el contador de la campana
-                let badge = $('#notification-badge');
-                if (badge.length) {
-                    badge.text(parseInt(badge.text() || '0') + 1).show();
-                } else {
-                    // Si no hay contador, lo crea y lo añade al botón
+                let desktopBadge = $('#notification-badge');
+                let mobileBadge = $('#mobile-notification-badge');
+                if (desktopBadge.length) {
+                    desktopBadge.text(parseInt(desktopBadge.text() || '0') + 1).show();
+                } else if ($('#notifications-bell-button').length) {
                     $('#notifications-bell-button').append('<span id="notification-badge" class="absolute -top-1 -right-1 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">1</span>');
+                } else {
+                    // Si no hay contador, lo crea y lo añade al botón móvil
+                    $('#mobile-notifications-button').append('<span id="mobile-notification-badge" class="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">1</span>');
                 }
 
                 // 3. Añadir la notificación a la lista desplegable dinámicamente

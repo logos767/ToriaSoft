@@ -46,10 +46,11 @@ def register_error_handlers(app):
     def handle_403(error):
         """Manejador para errores 403 (Prohibido)."""
         current_app.logger.warning(f"Acceso prohibido a la ruta: {request.path} por el usuario {current_app.login_manager.current_user}")
-        from .routes import is_gerente # Import locally to avoid circular dependency
         flash('No tienes permiso para acceder a esta página.', 'danger')
+        
+        # Use the injected context processor function if available, or check the role directly.
         # Redirect to the appropriate page based on role
-        if current_app.login_manager.current_user.is_authenticated and not is_gerente():
+        if current_user.is_authenticated and current_user.role not in ['Superusuario', 'Gerente']:
             return redirect(request.referrer or url_for('main.new_order'))
         else:
             return redirect(request.referrer or url_for('main.dashboard'))
