@@ -14,6 +14,9 @@
                 <p class="text-lg font-semibold text-gray-600">{{ "{:,}".format(total_stock) }} <span class="text-base font-normal">unidades en stock</span></p>
                 <p class="text-lg font-semibold text-green-600 mt-1">${{ "{:,.2f}".format(total_stock_value_usd) }} <span class="text-base font-normal">valorizado</span></p>
             </div>
+            <a href="{{ url_for('main.new_product') }}" class="absolute top-2 right-8 text-gray-400 hover:text-gray-600" title="Agregar nuevo producto">
+                <i class="fas fa-plus-circle text-sm"></i>
+            </a>
             <a href="{{ url_for('main.inventory_list') }}" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600" title="Ver lista de productos">
                 <i class="fas fa-list text-sm"></i>
             </a>
@@ -26,6 +29,9 @@
                 <p class="text-lg font-semibold text-gray-600">{{ clients_in_debt_count }} <span class="text-base font-normal">clientes con deuda</span></p>
                 <p class="text-lg font-semibold text-orange-600 mt-1">${{ "{:,.2f}".format(total_due_usd) }} <span class="text-base font-normal">por cobrar</span></p>
             </div>
+            <a href="{{ url_for('main.new_client') }}" class="absolute top-2 right-8 text-gray-400 hover:text-gray-600" title="Agregar nuevo cliente">
+                <i class="fas fa-plus-circle text-sm"></i>
+            </a>
             <a href="{{ url_for('main.client_list') }}" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600" title="Ver lista de clientes">
                 <i class="fas fa-list text-sm"></i>
             </a>
@@ -64,7 +70,15 @@
                     <p class="text-gray-500 text-center mt-6">No hay movimientos registrados hoy.</p>
                 {% endfor %}
             </div>
-            <i class="fas fa-exchange-alt absolute bottom-4 right-4 text-gray-300 text-2xl"></i>
+            <a href="{{ url_for('main.new_financial_movement') }}" class="absolute top-2 right-14 text-gray-400 hover:text-gray-600" title="Nuevo Movimiento Caja">
+                <i class="fas fa-plus-circle text-sm"></i>
+            </a>
+            <a href="{{ url_for('main.bank_list') }}" class="absolute top-2 right-8 text-gray-400 hover:text-gray-600" title="Bancos">
+                <i class="fas fa-university text-sm"></i>
+            </a>
+            <a href="{{ url_for('main.cashbox_list') }}" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600" title="Cajas">
+                <i class="fas fa-cash-register text-sm"></i>
+            </a>
         </div>
         <!-- Tarjeta de Resumen de Órdenes -->
         <div class="bg-white rounded-lg shadow-md p-4 relative">
@@ -92,7 +106,10 @@
                     </div>
                 </div>
             </div>
-            <a href="{{ url_for('main.order_list') }}" class="absolute bottom-2 right-2 text-gray-400 hover:text-gray-600" title="Ver lista de órdenes">
+            <a href="{{ url_for('main.new_order') }}" class="absolute top-2 right-8 text-gray-400 hover:text-gray-600" title="Crear nueva orden">
+                <i class="fas fa-plus-circle text-sm"></i>
+            </a>
+            <a href="{{ url_for('main.order_list') }}" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600" title="Ver lista de órdenes">
                 <i class="fas fa-list text-sm"></i>
             </a>
         </div>
@@ -111,7 +128,7 @@
                 <li class="flex items-center space-x-3">
                     <i class="fas fa-box text-blue-500 text-xl"></i>
                     <div>
-                        <a href="{{ url_for('main.product_detail', product_id=product.id) }}" class="text-blue-600 hover:underline font-medium">{{ product.name }}</a>
+                        <a href="{{ url_for('main.product_detail', product_id=product.id) }}" class="text-blue-600 text-sm hover:underline font-medium">{{ product.name }}</a>
                         <p class="text-sm text-gray-500">
                             Código: {{ product.barcode }} |
                             Precio: {{ currency_symbol }}{{ "%.2f"|format(product.price_usd) }} |
@@ -134,7 +151,7 @@
                 <li class="flex items-center space-x-3">
                     <i class="fas fa-shopping-cart text-green-500 text-xl"></i>
                     <div>
-                        <a href="{{ url_for('main.order_detail', order_id=order.id) }}" class="text-green-600 hover:underline font-medium">Orden #{{ order.id }}</a>
+                        <a href="{{ url_for('main.order_detail', order_id=order.id) }}" class="text-green-600 text-sm hover:underline font-medium">Orden #{{ order.id }}</a>
                         <p class="text-sm text-gray-500">
                             Cliente: {{ order.client.name }} |
                             Fecha: {{ order.date_created.strftime('%d/%m/%Y') }} |

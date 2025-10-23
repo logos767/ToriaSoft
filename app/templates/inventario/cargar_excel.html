@@ -12,12 +12,12 @@
             Para cargar tus productos, tu archivo de Excel debe tener el siguiente formato de columnas, sin encabezados:
         </p>
         <ul class="list-disc list-inside text-sm text-gray-600 space-y-1">
-            <li><strong>Columna 1:</strong> Código de Barras (Obligatorio)</li>
-            <li><strong>Columna 2:</strong> Código del Producto</li>
-            <li><strong>Columna 3:</strong> Nombre del Producto</li>
-            <li><strong>Columna 4:</strong> Costo (USD)</li>
-            <li><strong>Columna 5:</strong> Precio de Venta (USD)</li>
-            <li><strong>Columna 6:</strong> Existencia (Stock)</li>
+            <li><strong>Columna 1:</strong> Código de Barras (Obligatorio, para identificar el producto)</li>
+            <li><strong>Columna 2:</strong> Código del Producto (Opcional)</li>
+            <li><strong>Columna 3:</strong> Nombre del Producto (Obligatorio)</li>
+            <li><strong>Columna 4:</strong> Costo (USD) (Obligatorio)</li>
+            <li><strong>Columna 5:</strong> Precio de Venta (USD) (Obligatorio)</li>
+            <li><strong>Columna 6:</strong> Existencia a Cargar (La cantidad que se sumará al almacén seleccionado)</li>
             <li><strong>Columna 7:</strong> URL de la Imagen (Opcional)</li>
             <li><strong>Columna 8:</strong> Marca (Opcional)</li>
             <li><strong>Columna 9:</strong> Color (Opcional)</li>
@@ -30,8 +30,16 @@
 
     <div class="bg-white p-6 rounded-lg shadow-md">
         <form action="{{ url_for('main.cargar_excel') }}" method="POST" enctype="multipart/form-data">
+            <div class="mb-6">
+                <label for="warehouse_id" class="block text-gray-700 text-sm font-bold mb-2">1. Seleccione el Almacén de Destino:</label>
+                <select id="warehouse_id" name="warehouse_id" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {% for wh in warehouses %}
+                        <option value="{{ wh.id }}" {% if wh.id == 1 %}selected{% endif %}>{{ wh.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="mb-4">
-                <label for="file" class="block text-gray-700 text-sm font-bold mb-2">Selecciona un archivo de Excel:</label>
+                <label for="file" class="block text-gray-700 text-sm font-bold mb-2">2. Selecciona un archivo de Excel:</label>
                 <input type="file" name="file" id="file" required
                        class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none">
             </div>
@@ -39,6 +47,45 @@
                 <i class="fas fa-upload mr-2"></i>Cargar Productos
             </button>
         </form>
+    </div>
+
+    <!-- Historial de Cargas -->
+    <div class="mt-12">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-history mr-2"></i>Historial de Cargas Masivas</h2>
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            {% if load_history %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white text-sm">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="py-2 px-4 text-left font-semibold text-gray-600">ID Carga</th>
+                            <th class="py-2 px-4 text-left font-semibold text-gray-600">Fecha</th>
+                            <th class="py-2 px-4 text-left font-semibold text-gray-600">Usuario</th>
+                            <th class="py-2 px-4 text-left font-semibold text-gray-600">Almacén</th>
+                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-gray-700 divide-y divide-gray-200">
+                        {% for log in load_history %}
+                        <tr>
+                            <td class="py-2 px-4 font-mono">#{{ log.id }}</td>
+                            <td class="py-2 px-4">{{ log.date | ve_datetime }}</td>
+                            <td class="py-2 px-4">{{ log.user.username }}</td>
+                            <td class="py-2 px-4">{{ log.warehouse.name }}</td>
+                            <td class="py-2 px-4 text-center">
+                                <a href="{{ url_for('main.bulk_load_detail', log_id=log.id) }}" class="text-blue-500 hover:text-blue-700 font-medium">
+                                    <i class="fas fa-eye mr-1"></i>Ver Detalles
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-center text-gray-500 py-4">No hay historial de cargas masivas todavía.</p>
+            {% endif %}
+        </div>
     </div>
 </div>
 {% endblock %}

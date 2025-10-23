@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de Traslado #{{ transfer.id }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1.5cm;
+        }
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-size: 11pt;
+            color: #333;
+        }
+        .header {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            align-items: center;
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        .header img {
+            max-width: 150px;
+            max-height: 70px;
+        }
+        .header-text {
+            text-align: right;
+        }
+        .header-text h1 {
+            margin: 0;
+            font-size: 22pt;
+        }
+        .header-text p {
+            margin: 5px 0 0;
+            font-size: 12pt;
+            color: #555;
+        }
+        .info-section {
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .info-section h2 {
+            margin-top: 0;
+            font-size: 14pt;
+            color: #0056b3;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        .info-item p {
+            margin: 0 0 5px;
+        }
+        .info-item strong {
+            display: block;
+            color: #555;
+            font-size: 10pt;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        thead {
+            background-color: #f2f2f2;
+        }
+        tfoot {
+            font-weight: bold;
+            background-color: #f9f9f9;
+        }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .mono { font-family: 'Courier New', Courier, monospace; }
+
+        .footer {
+            position: fixed;
+            bottom: -1cm;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 9pt;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            {% if company_info and company_info.logo_filename %}
+                <img src="{{ url_for('static', filename=company_info.logo_filename, _external=True) }}" alt="Logo">
+            {% endif %}
+        </div>
+        <div class="header-text">
+            <h1>Reporte de Traslado</h1>
+            <p>ID de Traslado: #{{ transfer.id }}</p>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h2>Detalles del Traslado</h2>
+        <div class="info-grid">
+            <div class="info-item"><strong>Desde Almacén (Origen):</strong> {{ from_warehouse.name }}</div>
+            <div class="info-item"><strong>Hacia Almacén (Destino):</strong> {{ to_warehouse.name }}</div>
+            <div class="info-item"><strong>Fecha y Hora:</strong> {{ transfer.date | ve_datetime('%d/%m/%Y %H:%M') }}</div>
+            <div class="info-item"><strong>Realizado por:</strong> {{ transfer.user.username }}</div>
+            <div class="info-item" style="grid-column: 1 / -1;"><strong>Motivo:</strong> {{ transfer.reason }}</div>
+        </div>
+    </div>
+
+    <h2>Productos Trasladados</h2>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 40%;">Producto</th>
+                <th>Código</th>
+                <th>Cód. Barras</th>
+                <th class="text-center">Cantidad</th>
+                <th class="text-right">Costo Unit. ($)</th>
+                <th class="text-right">Costo Total ($)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for movement in movements %}
+            <tr>
+                <td>{{ movement.product.name }}</td>
+                <td class="mono">{{ movement.product.codigo_producto or 'N/A' }}</td>
+                <td class="mono">{{ movement.product.barcode }}</td>
+                <td class="text-center">{{ movement.quantity }}</td>
+                <td class="text-right mono">{{ "%.2f"|format(movement.product.cost_usd or 0) }}</td>
+                <td class="text-right mono">{{ "%.2f"|format(movement.quantity * (movement.product.cost_usd or 0)) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="5" class="text-right"><strong>Costo Total del Traslado (USD)</strong></td>
+                <td class="text-right mono"><strong>{{ "%.2f"|format(total_cost_usd) }}</strong></td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div class="footer">
+        Generado el {{ generation_date }} por ToriaSoft
+    </div>
+</body>
+</html>

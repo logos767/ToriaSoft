@@ -65,3 +65,63 @@ def register_commands(app):
                 db.session.rollback()
                 logger.error(f"Failed to create order ID sequences: {e}")
                 logger.error("This command is only compatible with PostgreSQL.")
+
+    @app.cli.command('reset-sequences')
+    def reset_sequences():
+        """
+        Resets all primary key sequences in the database to the max ID of their
+        respective tables. Useful after manual data insertion. (PostgreSQL only).
+        """
+        with current_app.app_context():
+            if db.engine.dialect.name != 'postgresql':
+                logger.error("This command is only for PostgreSQL databases.")
+                return
+
+            logger.info("Starting sequence reset for all tables...")
+            
+            inspector = inspect(db.engine)
+            all_table_names = inspector.get_table_names()
+
+            for table_name in all_table_names:
+                # The default sequence name for a primary key 'id' is 'table_name_id_seq'
+                sequence_name = f"{table_name}_id_seq"
+                try:
+                    # This SQL command gets the max ID from the table and sets the sequence to that value.
+                    # The next call to nextval() will return max(id) + 1.
+                    sql = text(f"SELECT setval('{sequence_name}', (SELECT MAX(id) FROM {table_name}));")
+                    db.session.execute(sql)
+                    db.session.commit()
+                    logger.info(f"Successfully reset sequence '{sequence_name}' for table '{table_name}'.")
+                except Exception as e:
+                    # This might fail if a table doesn't have an 'id' sequence, which is fine.
+                    logger.warning(f"Could not reset sequence for table '{table_name}'. It might not have a standard 'id' sequence. Error: {e}")
+                    db.session.rollback()
+            
+            logger.info("Sequence reset process finished.")
+
+    @app.cli.command('clean-db-schema')
+    def clean_db_schema():
+        """
+        Detects and removes obsolete columns from the database schema to match the models.
+        """
+        with current_app.app_context():
+            if db.engine.dialect.name != 'postgresql':
+                logger.error("This command is only for PostgreSQL databases.")
+                return
+
+            logger.info("Checking for obsolete columns in the database schema...")
+            inspector = inspect(db.engine)
+            
+            # Check for obsolete 'stock' column in 'product' table
+            columns = inspector.get_columns('product')
+            if any(c['name'] == 'stock' for c in columns):
+                logger.warning("Obsolete 'stock' column found in 'product' table. Attempting to remove it...")
+                try:
+                    db.session.execute(text('ALTER TABLE product DROP COLUMN stock;'))
+                    db.session.commit()
+                    logger.info("Successfully removed 'stock' column from 'product' table.")
+                except Exception as e:
+                    db.session.rollback()
+                    logger.error(f"Failed to remove 'stock' column: {e}")
+            else:
+                logger.info("'product' table schema is up to date (no 'stock' column found).")

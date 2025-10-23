@@ -2,68 +2,77 @@
 
 {% block content %}
 <div class="container mx-auto p-4 max-w-7xl">
-    <div class="flex items-center mb-6">
-        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-exclamation-triangle mr-2 text-yellow-500"></i>Confirmar Actualización de Inventario</h1>
+    <h1 class="text-2xl font-bold mb-4">Confirmar Carga de Inventario</h1>
+    <div class="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-6" role="alert">
+        <p class="font-bold">Resumen de la Carga</p>
+        <p>Se encontraron productos nuevos y existentes en el archivo. Revisa los cambios antes de confirmar. El stock se cargará en el almacén seleccionado.</p>
     </div>
 
-    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
-        <p class="text-sm text-gray-700 mb-4">
-            El archivo que has cargado contiene productos que ya existen en tu base de datos.
-            Por favor, revisa los cambios propuestos antes de confirmar la actualización.
-        </p>
-        <p class="text-sm text-red-500 font-bold">
-            <i class="fas fa-info-circle mr-1"></i>Esta acción actualizará los campos de los productos listados.
-        </p>
-    </div>
-
-    <div class="bg-white p-6 rounded-lg shadow-md">
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
+    <!-- Productos a Actualizar -->
+    <div class="mb-8">
+        <h2 class="text-xl font-semibold mb-2">Productos Existentes a Actualizar (Se sumará el stock)</h2>
+        <div class="bg-white shadow-md rounded-lg overflow-hidden">
+            <table class="min-w-full bg-white text-sm">
+                <thead class="bg-gray-100">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Costo (Actual <i class="fas fa-arrow-right"></i> Nuevo)</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Existencia (Actual <i class="fas fa-arrow-right"></i> Nuevo)</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código Producto (Actual <i class="fas fa-arrow-right"></i> Nuevo)</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marca (Actual <i class="fas fa-arrow-right"></i> Nuevo)</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Color (Actual <i class="fas fa-arrow-right"></i> Nuevo)</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Talla (Actual <i class="fas fa-arrow-right"></i> Nuevo)</th>
+                        <th class="py-2 px-4 text-left font-semibold text-gray-600">Producto</th>
+                        <th class="py-2 px-4 text-center font-semibold text-gray-600">Stock Actual</th>
+                        <th class="py-2 px-4 text-center font-semibold text-gray-600">Stock a Añadir</th>
+                        <th class="py-2 px-4 text-center font-semibold text-gray-600">Nuevo Total</th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
+                <tbody class="text-gray-700 divide-y divide-gray-200">
                     {% for update in updates %}
                     <tr>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm text-gray-900">{{ update.name }}</div>
-                            <div class="text-xs text-gray-500">Cód. Barras: {{ update.barcode }}</div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            ${{ "%.2f"|format(update.old_cost_usd) }} <i class="fas fa-arrow-right text-gray-400"></i> ${{ "%.2f"|format(update.new_cost_usd) }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {{ update.old_stock }} <i class="fas fa-arrow-right text-gray-400"></i> {{ update.new_stock }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {{ update.old_codigo_producto }} <i class="fas fa-arrow-right text-gray-400"></i> {{ update.new_codigo_producto }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {{ update.old_marca }} <i class="fas fa-arrow-right text-gray-400"></i> {{ update.new_marca }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {{ update.old_color }} <i class="fas fa-arrow-right text-gray-400"></i> {{ update.new_color }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {{ update.old_talla }} <i class="fas fa-arrow-right text-gray-400"></i> {{ update.new_talla }}
-                        </td>
+                        <td class="py-2 px-4">{{ update.name }} <span class="text-xs text-gray-500">({{ update.barcode }})</span></td>
+                        <td class="py-2 px-4 text-center font-mono">{{ update.old_stock }}</td>
+                        <td class="py-2 px-4 text-center font-mono text-green-600 font-bold">+{{ update.stock_to_add }}</td>
+                        <td class="py-2 px-4 text-center font-mono font-bold">{{ update.new_total_stock }}</td>
                     </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="text-center py-3 text-gray-500">No hay productos existentes para actualizar.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-        
-        <form action="{{ url_for('main.cargar_excel_confirmar') }}" method="POST" class="mt-6 flex justify-end">
-            <button type="submit" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">
-                <i class="fas fa-check-circle mr-2"></i>Confirmar Actualización
+    </div>
+
+    <!-- Productos Nuevos -->
+    <div class="mb-8">
+        <h2 class="text-xl font-semibold mb-2">Productos Nuevos a Crear</h2>
+        <div class="bg-white shadow-md rounded-lg overflow-hidden">
+            <table class="min-w-full bg-white text-sm">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="py-2 px-4 text-left font-semibold text-gray-600">Nombre</th>
+                        <th class="py-2 px-4 text-left font-semibold text-gray-600">Cód. Barras</th>
+                        <th class="py-2 px-4 text-right font-semibold text-gray-600">Costo (USD)</th>
+                        <th class="py-2 px-4 text-right font-semibold text-gray-600">Precio (USD)</th>
+                        <th class="py-2 px-4 text-center font-semibold text-gray-600">Stock a Cargar</th>
+                    </tr>
+                </thead>
+                <tbody class="text-gray-700 divide-y divide-gray-200">
+                    {% for product in new_products %}
+                    <tr>
+                        <td class="py-2 px-4">{{ product.name }}</td>
+                        <td class="py-2 px-4 font-mono">{{ product.barcode }}</td>
+                        <td class="py-2 px-4 text-right font-mono">{{ "%.2f"|format(product.cost_usd) }}</td>
+                        <td class="py-2 px-4 text-right font-mono">{{ "%.2f"|format(product.price_usd) }}</td>
+                        <td class="py-2 px-4 text-center font-mono font-bold">{{ product.stock_to_add }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center py-3 text-gray-500">No hay productos nuevos para crear.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="mt-6 flex justify-end items-center">
+        <a href="{{ url_for('main.cargar_excel') }}" class="text-red-600 hover:text-red-800 font-medium mr-6">Cancelar</a>
+        <form action="{{ url_for('main.cargar_excel_confirmar') }}" method="POST">
+            <button type="submit" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">
+                <i class="fas fa-check-circle mr-2"></i>Confirmar y Procesar Carga
             </button>
         </form>
     </div>

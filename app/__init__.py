@@ -8,7 +8,6 @@ from flask import Flask
 
 # Import extensions
 from .extensions import db, login_manager, bcrypt, socketio
-from .routes import fetch_and_update_exchange_rate
 
 # Load environment variables
 load_dotenv()
@@ -35,6 +34,7 @@ def initialize_firebase(app):
 def initial_exchange_rate_fetch(app):
     """Fetch exchange rate once on application startup."""
     with app.app_context():
+        from .routes import fetch_and_update_exchange_rate
         logger.info("Performing initial exchange rate fetch...")
         rate = fetch_and_update_exchange_rate()
         if rate:
@@ -112,6 +112,27 @@ def create_order_sequences(app):
             logger.error(f"Failed to create order ID sequences: {e}")
             logger.error("This feature is only compatible with PostgreSQL. The app may not function correctly.")
 
+def create_initial_warehouses(app):
+    """Creates the default warehouses if they don't exist."""
+    with app.app_context():
+        from .models import Warehouse
+        
+        initial_warehouses = [
+            {'id': 1, 'name': '01 - Tienda', 'is_sellable': True},
+            {'id': 2, 'name': '02 - Recuperacion de Mercancia', 'is_sellable': False},
+            {'id': 3, 'name': '03 - Descarte de Mercancia', 'is_sellable': False}
+        ]
+        
+        warehouses_to_add = []
+        for w_data in initial_warehouses:
+            if not Warehouse.query.get(w_data['id']):
+                logger.info(f"Creating warehouse: {w_data['name']}")
+                warehouses_to_add.append(Warehouse(**w_data))
+        
+        if warehouses_to_add:
+            db.session.add_all(warehouses_to_add)
+            db.session.commit()
+            logger.info(f"Added {len(warehouses_to_add)} new warehouses.")
 
 def create_app():
     """Application Factory Function"""
@@ -146,7 +167,6 @@ def create_app():
 
     # --- Import and Register Blueprints & Models ---
     with app.app_context():
-        from . import routes
         from . import models # Ensures models are registered with SQLAlchemy
         
         # Create database tables if they don't exist.
@@ -154,6 +174,8 @@ def create_app():
         logger.info("Ensuring all database tables exist...")
         db.create_all()
         
+        # Import and register blueprints after db is initialized and tables are created
+        from . import routes
         app.register_blueprint(routes.routes_blueprint)
 
         login_manager.login_view = 'main.login' # Note: 'main.' prefix from blueprint
@@ -232,5 +254,8 @@ def create_app():
 
     # --- Create order sequences if they don't exist (for PostgreSQL) ---
     create_order_sequences(app)
+
+    # --- Create initial warehouses if they don't exist ---
+    create_initial_warehouses(app)
 
     return app

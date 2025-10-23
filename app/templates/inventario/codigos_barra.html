@@ -160,6 +160,17 @@ document.addEventListener('DOMContentLoaded', function () {
     // Generación inicial de códigos de barras
     generateBarcodes();
     updateCheckboxEventListeners();
+
+    // Preseleccionar productos si vienen en la URL
+    const preselectedIds = {{ preselected_ids|tojson|safe }};
+    if (preselectedIds && preselectedIds.length > 0) {
+        preselectedIds.forEach(id => {
+            const checkbox = document.querySelector(`.product-checkbox[value="${id}"]`);
+            if (checkbox) {
+                checkbox.checked = true;
+            }
+        });
+    }
 });
 </script>
 {% endblock %}

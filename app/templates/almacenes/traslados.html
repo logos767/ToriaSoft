@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-6xl">
+    <h1 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-exchange-alt mr-2"></i>Realizar Traslado entre Almacenes</h1>
+
+    <form method="POST" action="{{ url_for('main.warehouse_transfer') }}" id="transfer-form">
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <!-- Selección de Almacenes y Motivo -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div>
+                    <label for="from_warehouse_id" class="block text-gray-700 font-bold mb-2">Desde Almacén (Origen)</label>
+                    <select id="from_warehouse_id" name="from_warehouse_id" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">-- Seleccione Origen --</option>
+                        {% for wh in warehouses %}<option value="{{ wh.id }}">{{ wh.name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="to_warehouse_id" class="block text-gray-700 font-bold mb-2">Hacia Almacén (Destino)</label>
+                    <select id="to_warehouse_id" name="to_warehouse_id" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">-- Seleccione Destino --</option>
+                        {% for wh in warehouses %}<option value="{{ wh.id }}">{{ wh.name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="reason" class="block text-gray-700 font-bold mb-2">Motivo del Traslado</label>
+                    <input type="text" id="reason" name="reason" required placeholder="Ej: Envío a recuperación" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+
+            <!-- Búsqueda por Código de Barras -->
+            <div class="mb-4">
+                <h2 class="text-xl font-semibold text-gray-700 mb-2">2. Añadir Productos</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="barcode-scan-input" class="block text-sm font-medium text-gray-700">Escanear Código de Barras</label>
+                        <input type="text" id="barcode-scan-input" placeholder="Escanear para agregar..." class="mt-1 w-full shadow-sm appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="relative">
+                        <label for="product-keyword-search" class="block text-sm font-medium text-gray-700">Buscar por Nombre</label>
+                        <input type="text" id="product-keyword-search" placeholder="Escribir nombre para buscar..." class="mt-1 w-full shadow-sm appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <div id="product-suggestions" class="absolute bg-white border rounded-b-lg mt-1 w-full z-10 hidden max-h-60 overflow-y-auto"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lista de Productos a Trasladar -->
+            <div id="product-list-container" class="border rounded-lg overflow-hidden mt-6">
+                <table class="min-w-full bg-white">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="py-2 px-4 text-left text-sm font-semibold text-gray-600 w-1/2">Producto</th>
+                            <th class="py-2 px-4 text-center text-sm font-semibold text-gray-600">Stock en Origen</th>
+                            <th class="py-2 px-4 text-center text-sm font-semibold text-gray-600">Cantidad a Trasladar</th>
+                            <th class="py-2 px-4 text-center text-sm font-semibold text-gray-600"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="product-list-body">
+                        <!-- Las filas de productos se agregarán aquí -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Botón de Acción -->
+            <div class="mt-8 flex justify-end">
+                <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
+                    <i class="fas fa-check-circle mr-2"></i>Confirmar Traslado
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Plantilla para la fila de producto -->
+<template id="product-row-template">
+    <tr class="product-item border-b">
+        <td class="p-2">
+            <input type="hidden" name="product_id[]" class="product-id-input">
+            <span class="product-name-display font-medium"></span>
+            <div class="product-barcode-display text-xs text-gray-500"></div>
+        </td>
+        <td class="p-2 text-center">
+            <span class="stock-display font-mono">0</span>
+        </td>
+        <td class="p-2 text-center">
+            <input type="number" name="quantity[]" min="1" required class="quantity-input w-24 shadow-sm border rounded py-1 px-2 text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </td>
+        <td class="p-2 text-center">
+            <button type="button" class="remove-row-btn text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
+        </td>
+    </tr>
+</template>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const fromWarehouseSelect = document.getElementById('from_warehouse_id');
+    const toWarehouseSelect = document.getElementById('to_warehouse_id');
+    const productListBody = document.getElementById('product-list-body');
+    const productRowTemplate = document.getElementById('product-row-template');
+    const transferForm = document.getElementById('transfer-form');
+    const barcodeScanInput = document.getElementById('barcode-scan-input');
+    const keywordSearchInput = document.getElementById('product-keyword-search');
+    const productSuggestions = document.getElementById('product-suggestions');
+
+    let productStocks = {};
+    let searchDebounceTimeout = null;
+
+    function createProductRowElement() {
+        const newRow = productRowTemplate.content.cloneNode(true);
+        const addedRow = productListBody.appendChild(newRow.firstElementChild.cloneNode(true));
+        return addedRow;
+    }
+
+    fromWarehouseSelect.addEventListener('change', function() {
+        const warehouseId = this.value;
+        if (!warehouseId) {
+            productStocks = {};
+            updateAllRows();
+            return;
+        }
+        fetch(`/api/warehouse_stock/${warehouseId}`)
+            .then(res => res.json())
+            .then(data => {
+                productStocks = data.stocks;
+                updateAllRows();
+            });
+    });
+
+    function addProductToTable(product) {
+        // Verificar si el producto ya está en la lista
+        let existingRow = Array.from(productListBody.querySelectorAll('.product-id-input')).find(input => input.value == product.id)?.closest('tr');
+
+        if (existingRow) {
+            // Incrementar cantidad si ya existe
+            const quantityInput = existingRow.querySelector('.quantity-input');
+            const currentQuantity = parseInt(quantityInput.value) || 0;
+            const maxStock = parseInt(quantityInput.max) || 0;
+            if (currentQuantity < maxStock) {
+                quantityInput.value = currentQuantity + 1;
+                quantityInput.focus();
+            } else {
+                toastr.warning('No se puede agregar más, stock máximo alcanzado.', 'Stock Insuficiente');
+            }
+        } else {
+            // Agregar nueva fila si no existe
+            const newRow = createProductRowElement();
+            newRow.querySelector('.product-id-input').value = product.id;
+            newRow.querySelector('.product-name-display').textContent = product.name;
+            newRow.querySelector('.product-barcode-display').textContent = `Código: ${product.barcode}`;
+            
+            const quantityInput = newRow.querySelector('.quantity-input');
+            quantityInput.value = 1;
+            
+            updateRow(newRow); // Actualiza el stock y max
+            quantityInput.focus();
+        }
+
+        keywordSearchInput.value = '';
+        productSuggestions.classList.add('hidden');
+    }
+
+    keywordSearchInput.addEventListener('input', function() {
+        const query = this.value.trim();
+        const fromWarehouseId = fromWarehouseSelect.value;
+
+        if (!fromWarehouseId) {
+            toastr.warning('Por favor, seleccione un almacén de origen primero.', 'Almacén no seleccionado');
+            this.value = '';
+            return;
+        }
+
+        if (query.length < 2) {
+            productSuggestions.classList.add('hidden');
+            return;
+        }
+
+        clearTimeout(searchDebounceTimeout);
+        searchDebounceTimeout = setTimeout(() => {
+            fetch(`/api/search_products_for_transfer?q=${encodeURIComponent(query)}&from_warehouse_id=${fromWarehouseId}`)
+                .then(res => res.json())
+                .then(data => {
+                    productSuggestions.innerHTML = '';
+                    if (data.products && data.products.length > 0) {
+                        data.products.forEach(product => {
+                            const div = document.createElement('div');
+                            div.className = 'p-2 hover:bg-blue-100 cursor-pointer';
+                            div.innerHTML = `
+                                <div class="font-semibold">${product.name}</div>
+                                <div class="text-sm text-gray-600">
+                                    <span>Código: ${product.barcode}</span> | <span class="font-bold">Stock: ${product.stock}</span>
+                                </div>
+                            `;
+                            div.addEventListener('click', () => addProductToTable(product));
+                            productSuggestions.appendChild(div);
+                        });
+                        productSuggestions.classList.remove('hidden');
+                    } else {
+                        productSuggestions.classList.add('hidden');
+                    }
+                });
+        }, 300);
+    });
+
+    // --- Nueva Lógica para Escaneo de Código de Barras ---
+    barcodeScanInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const barcode = this.value.trim();
+            const fromWarehouseId = fromWarehouseSelect.value;
+
+            if (!fromWarehouseId) {
+                toastr.warning('Por favor, seleccione un almacén de origen primero.', 'Almacén no seleccionado');
+                return;
+            }
+            if (!barcode) return;
+
+            fetch(`/api/product_by_barcode_for_transfer/${barcode}?warehouse_id=${fromWarehouseId}`)
+                .then(res => {
+                    if (!res.ok) {
+                        throw new Error('Producto no encontrado o sin stock en este almacén.');
+                    }
+                    return res.json();
+                })
+                .then(productData => {
+                    // La función addProductToTable ya maneja la lógica de agregar o incrementar.
+                    // Le pasamos el objeto de producto que recibimos de la API.
+                    addProductToTable(productData);
+                })
+                .catch(error => {
+                    toastr.error(error.message, 'Error');
+                });
+
+            // Limpiar y enfocar para el siguiente escaneo
+            this.value = '';
+            this.focus();
+        }
+    });
+
+    // Ocultar sugerencias si se hace clic fuera
+    document.addEventListener('click', function(e) {
+        if (!keywordSearchInput.contains(e.target) && !productSuggestions.contains(e.target)) {
+            productSuggestions.classList.add('hidden');
+        }
+    });
+
+    productListBody.addEventListener('click', function(e) {
+        if (e.target.closest('.remove-row-btn')) {
+            e.target.closest('tr').remove();
+        }
+    });
+
+    function updateRow(row) {
+        const productIdInput = row.querySelector('.product-id-input');
+        const stockDisplay = row.querySelector('.stock-display');
+        const quantityInput = row.querySelector('.quantity-input');
+        const productId = productIdInput.value;
+        
+        const stock = productStocks[productId] || 0;
+        stockDisplay.textContent = stock;
+        quantityInput.max = stock;
+        if (parseInt(quantityInput.value) > stock || !quantityInput.value) {
+            quantityInput.value = stock;
+        }
+    }
+
+    function updateAllRows() {
+        productListBody.querySelectorAll('.product-item').forEach(updateRow);
+    }
+
+    transferForm.addEventListener('submit', function(e) {
+        if (fromWarehouseSelect.value === toWarehouseSelect.value) {
+            e.preventDefault();
+            toastr.error('El almacén de origen y destino no pueden ser el mismo.', 'Error de Validación');
+        }
+    });
+});
+</script>
+{% endblock %}

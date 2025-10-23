@@ -9,6 +9,7 @@ def get_current_time_ve():
     return datetime.now(VE_TIMEZONE)
 
 from .extensions import db
+from sqlalchemy import func
 from flask_login import UserMixin
 
 class User(db.Model, UserMixin):
@@ -17,6 +18,21 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(20), unique=True, nullable=False)
     password = db.Column(db.String(60), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='empleado') # 'empleado', 'administrador'
+
+    # --- Campos del Perfil de Usuario ---
+    first_name = db.Column(db.String(50), nullable=True)
+    last_name = db.Column(db.String(50), nullable=True)
+    doc_type = db.Column(db.String(1), nullable=True)
+    doc_number = db.Column(db.String(20), nullable=True)
+    email = db.Column(db.String(120), nullable=True)
+    address = db.Column(db.Text, nullable=True)
+    profile_image_file = db.Column(db.String(20), nullable=False, default='default.png')
+    social_facebook = db.Column(db.String(100), nullable=True)
+    social_instagram = db.Column(db.String(100), nullable=True)
+    social_x = db.Column(db.String(100), nullable=True)
+    bank_name = db.Column(db.String(100), nullable=True)
+    bank_account_number = db.Column(db.String(25), nullable=True)
+    
 
     def __repr__(self):
         return f"User('{self.username}', '{self.role}')"
@@ -38,7 +54,6 @@ class Product(db.Model):
     description = db.Column(db.Text, nullable=True)
     barcode = db.Column(db.String(50), unique=True, nullable=False)
     qr_code = db.Column(db.String(50), unique=True, nullable=True)
-    stock = db.Column(db.Integer, nullable=False, default=0)
     cost_usd = db.Column(db.Float, nullable=False, default=0.0) # Almacenado en USD
     price_usd = db.Column(db.Float, nullable=False, default=0.0) # Almacenado en USD
     image_url = db.Column(db.String(200), nullable=True)
@@ -56,10 +71,28 @@ class Product(db.Model):
     # Relaciones
     order_items = db.relationship('OrderItem', backref='product', lazy=True)
     purchase_items = db.relationship('PurchaseItem', backref='product', lazy=True)
-    movements = db.relationship('Movement', backref='product', lazy=True)
+    movements = db.relationship('Movement', backref='product', lazy='dynamic')
+    stock_levels = db.relationship('ProductStock', backref='product', lazy='joined', cascade="all, delete-orphan")
+
+    @property
+    def stock(self):
+        """Calcula el stock total sumando las existencias de todos los almacenes."""
+        return sum(level.quantity for level in self.stock_levels)
+
+    @property
+    def stock_tienda(self):
+        """Retorna el stock específico del almacén principal (ID=1, '01 - Tienda')."""
+        # Iterar sobre la lista de niveles de stock ya cargada
+        stock_tienda = next((level for level in self.stock_levels if level.warehouse_id == 1), None)
+        return stock_tienda.quantity if stock_tienda else 0
 
     def __repr__(self):
         return f"Product('{self.name}', '{self.barcode}')"
+
+class Warehouse(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    is_sellable = db.Column(db.Boolean, default=False, nullable=False, index=True) # Indica si se puede vender desde este almacén
 
 class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -286,6 +319,7 @@ class Movement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     type = db.Column(db.String(20), nullable=False)  # 'Entrada', 'Salida'
+    warehouse_id = db.Column(db.Integer, db.ForeignKey('warehouse.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
     date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
     document_id = db.Column(db.BigInteger, nullable=True) # ID de la orden, compra, etc.
@@ -293,9 +327,28 @@ class Movement(db.Model):
     description = db.Column(db.String(255), nullable=True) # Para comentarios de ajuste, etc.
     related_party_id = db.Column(db.Integer, nullable=True) # ID del cliente o proveedor
     related_party_type = db.Column(db.String(50), nullable=True) # 'Cliente', 'Proveedor'
+    
+    warehouse = db.relationship('Warehouse', backref='movements')
 
     def __repr__(self):
         return f"Movement('{self.type}', '{self.product_id}', '{self.quantity}')"
+
+class ProductStock(db.Model):
+    __tablename__ = 'product_stock'
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False, index=True)
+    warehouse_id = db.Column(db.Integer, db.ForeignKey('warehouse.id'), nullable=False, index=True)
+    quantity = db.Column(db.Integer, nullable=False, default=0)
+
+    warehouse = db.relationship('Warehouse', backref='stock_levels')
+    __table_args__ = (db.UniqueConstraint('product_id', 'warehouse_id', name='_product_warehouse_uc'),)
+
+class WarehouseTransfer(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
+    reason = db.Column(db.String(255), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user = db.relationship('User', backref='warehouse_transfers')
 
 class InventoryAdjustment(db.Model):
     __tablename__ = 'inventory_adjustments'
@@ -311,6 +364,30 @@ class InventoryAdjustment(db.Model):
     # Relationships
     items = db.relationship('InventoryAdjustmentItem', backref='adjustment', lazy=True, cascade="all, delete-orphan")
     user = db.relationship('User', backref='inventory_adjustments')
+
+class BulkLoadLog(db.Model):
+    __tablename__ = 'bulk_load_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    adjustment_code = db.Column(db.String(50), unique=True, nullable=True) # e.g., INV18070001
+    date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
+    reason = db.Column(db.String(255), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    method = db.Column(db.String(50), nullable=False, default='Excel') # 'Excel', 'API', etc.
+    warehouse_id = db.Column(db.Integer, db.ForeignKey('warehouse.id'), nullable=False)
+
+    user = db.relationship('User', backref='bulk_loads')
+    warehouse = db.relationship('Warehouse', backref='bulk_loads')
+    
+    from sqlalchemy.orm import foreign
+
+    # Relationship to Movement
+    movements = db.relationship(
+        'Movement',
+        primaryjoin="and_(foreign(Movement.document_id) == BulkLoadLog.id, "
+                    "foreign(Movement.document_type).like('Carga Masiva%'))",
+        backref='bulk_load_log',
+        lazy='dynamic'
+    )
 
 class InventoryAdjustmentItem(db.Model):
     __tablename__ = 'inventory_adjustment_items'

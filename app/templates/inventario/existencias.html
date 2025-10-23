@@ -1,54 +1,49 @@
 {% extends "base.html" %}
 
 {% block content %}
-{% if is_contador() %}
-<div class="container mx-auto p-4">
+<div class="container mx-auto p-4 max-w-7xl">
     <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
-        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-box-open mr-2"></i>Existencias de Inventario</h1>
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-boxes mr-2"></i>Existencias por Almacén</h1>
         <div class="flex items-center space-x-2">
             <a href="{{ url_for('main.inventory_stock_report_pdf') }}" target="_blank" class="bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600 transition-colors">
                 <i class="fas fa-file-pdf mr-2"></i>Imprimir Lista
             </a>
+            {% if is_contador() %}
             <a href="{{ url_for('main.inventory_adjustment') }}" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
                 <i class="fas fa-clipboard-check mr-2"></i>Ajuste Digital
             </a>
+            {% endif %}
         </div>
     </div>
-    <div class="bg-white p-1 rounded-lg shadow-md">
+    <div class="bg-white p-1 rounded-lg shadow-md overflow-hidden">
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
+            <table class="min-w-full bg-white text-sm">
+                <thead class="bg-gray-100 sticky top-0">
                     <tr>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código Producto</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Talla</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Color</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Existencias</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                        <th class="py-2 px-3 text-left font-semibold text-gray-600">Producto</th>
+                        {% for wh in warehouses %}
+                        <th class="py-2 px-3 text-center font-semibold text-gray-600">{{ wh.name }}</th>
+                        {% endfor %}
+                        <th class="py-2 px-3 text-center font-semibold text-gray-600 bg-gray-200">Total</th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    {% for product in products %}
-                    <tr class="hover:bg-gray-50 {% if product.stock < 5 %}bg-red-50{% elif product.stock < 20 %}bg-yellow-50{% else %}bg-green-50{% endif %}">
-                        <td class="px-4 py-2 whitespace-nowrap">
-                                <div> <i class="fas fa-barcode w-4 inline-block text-left"></i> {{ product.barcode }}</div>                            
-                                <div class="text-xs text-gray-500">Cód: {{ product.codigo_producto or 'N/A' }}</div>
-                            </td>
-                        <td class="px-6 py-1 whitespace-nowrap text-sm font-medium text-gray-900">{{ product.name }}</td>
-                        <td class="px-4 py-1 whitespace-nowrap text-sm text-gray-500">{{ product.size or 'N/A' }}</td>
-                        <td class="px-4 py-1 whitespace-nowrap text-sm text-gray-500">{{ product.color or 'N/A' }}</td>
-                        <td class="px-6 py-1 whitespace-nowrap text-sm font-bold {% if product.stock < 5 %}text-red-700{% elif product.stock < 20 %}text-yellow-700{% else %}text-green-700{% endif %}">{{ product.stock }}</td>
-                        <td class="px-6 py-1 whitespace-nowrap text-sm text-gray-700">
-                            {% if product.stock == 0 %}
-                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Agotado</span>
-                            {% elif product.stock < 5 %}
-                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Crítico</span>
-                            {% elif product.stock < 20 %}
-                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Bajo</span>
-                            {% else %}
-                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Normal</span>
-                            {% endif %}
-                        </td>
+                <tbody class="text-gray-700 divide-y divide-gray-200">
+                    {% for product_data in products_data %}
+                    {% set product = product_data %}
+                    {% set stock_map = {} %}
+                    {% for stock_level in product.stock_levels %}
+                        {% set _ = stock_map.update({stock_level.warehouse_id: stock_level.quantity}) %}
+                    {% endfor %}
+                    <tr>
+                        <td class="py-2 px-3 font-medium">{{ product.name }}</td>
+                        {% for wh in warehouses %}
+                        <td class="py-2 px-3 text-center font-mono">{{ stock_map.get(wh.id, 0) }}</td>
+                        {% endfor %}
+                        <td class="py-2 px-3 text-center font-bold font-mono bg-gray-50">{{ product.stock }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{{ warehouses|length + 2 }}" class="py-4 px-3 text-center text-gray-500">No hay productos en el inventario.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -56,12 +51,4 @@
         </div>
     </div>
 </div>
-{% else %}
-<div class="container mx-auto p-4">
-    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-        <strong class="font-bold">Acceso Denegado!</strong>
-        <span class="block sm:inline">No tienes permiso para ver esta página. Por favor, contacta a un administrador.</span>
-    </div>
-</div>
-{% endif %}
 {% endblock %}

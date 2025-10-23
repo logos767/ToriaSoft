@@ -1,10 +1,15 @@
 import os
+import secrets
 import requests
 from pywebpush import webpush, WebPushException
 import firebase_admin
 import re
 from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, session, current_app
 from flask_login import login_user, current_user, logout_user, login_required # type: ignore
+from flask_wtf import FlaskForm # type: ignore
+from flask_wtf.file import FileField, FileAllowed # type: ignore
+from wtforms import StringField, SubmitField, SelectField, TextAreaField # type: ignore
+from wtforms.validators import DataRequired, Length, Email # type: ignore
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, extract, or_, select, case, text
 import openpyxl
@@ -26,7 +31,7 @@ from firebase_admin import messaging
 # Import extensions from the new extensions file
 from sqlalchemy.orm import joinedload, subqueryload
 from .extensions import db, bcrypt, socketio
-from .models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, CashBox, Payment, ManualFinancialMovement, InventoryAdjustment, InventoryAdjustmentItem, VE_TIMEZONE, UserDevice
+from .models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, CashBox, Payment, ManualFinancialMovement, InventoryAdjustment, InventoryAdjustmentItem, VE_TIMEZONE, UserDevice, Warehouse, ProductStock, WarehouseTransfer, BulkLoadLog
 
 # ReportLab imports for PDF generation
 from reportlab.lib.pagesizes import A4
@@ -61,6 +66,46 @@ def is_vendedor():
 
 routes_blueprint = Blueprint('main', __name__)
 
+# --- FORMULARIOS ---
+class UpdateProfileForm(FlaskForm):
+    first_name = StringField('Nombres', validators=[DataRequired(), Length(min=2, max=50)])
+    last_name = StringField('Apellidos', validators=[DataRequired(), Length(min=2, max=50)])
+    doc_type = SelectField('Tipo', choices=[('V', 'V'), ('E', 'E'), ('J', 'J'), ('G', 'G'), ('P', 'P')])
+    doc_number = StringField('Nro. Documento', validators=[Length(max=20)])
+    email = StringField('Correo Electrónico', validators=[DataRequired(), Email()])
+    address = TextAreaField('Dirección', validators=[Length(max=255)])
+    picture = FileField('Actualizar Foto de Perfil', validators=[FileAllowed(['jpg', 'png', 'jpeg'])])
+    
+    # Redes Sociales
+    social_facebook = StringField('Facebook', validators=[Length(max=100)])
+    social_instagram = StringField('Instagram', validators=[Length(max=100)])
+    social_x = StringField('X (Twitter)', validators=[Length(max=100)])
+
+    # Información Bancaria
+    bank_name = StringField('Nombre del Banco', validators=[Length(max=100)])
+    bank_account_number = StringField('Número de Cuenta', validators=[Length(max=25)])
+
+    submit = SubmitField('Guardar Cambios')
+
+def save_picture(form_picture):
+    """Guarda la imagen de perfil del usuario y retorna el nombre del archivo."""
+    random_hex = secrets.token_hex(8)
+    _, f_ext = os.path.splitext(form_picture.filename)
+    picture_fn = random_hex + f_ext
+    picture_path = os.path.join(current_app.root_path, 'static/profile_pics', picture_fn)
+
+    # Crear el directorio si no existe
+    os.makedirs(os.path.dirname(picture_path), exist_ok=True)
+
+    # Redimensionar imagen si es necesario (opcional, pero recomendado)
+    # from PIL import Image
+    # output_size = (125, 125)
+    # i = Image.open(form_picture)
+    # i.thumbnail(output_size)
+    # i.save(picture_path)
+    form_picture.save(picture_path)
+
+    return picture_fn
 # --- INICIO DE SECCIÓN DE TASAS DE CAMBIO ---
 
 def obtener_tasas_exchangerate_api():
@@ -412,11 +457,11 @@ def dashboard():
 
     # --- General Metrics ---
     # Excluir el grupo 'Ganchos' (insumos) de los conteos del dashboard.
-    total_products = Product.query.filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).count()
+    total_products = Product.query.filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).count() # type: ignore
     total_stock_query = db.session.query(
-        func.sum(Product.stock),
-        func.sum(Product.stock * Product.price_usd)
-    ).filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).first()
+        func.sum(ProductStock.quantity),
+        func.sum(ProductStock.quantity * Product.price_usd)
+    ).join(Product).filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).first() # type: ignore
     total_stock = total_stock_query[0] or 0
     total_stock_value_usd = total_stock_query[1] or 0.0
 
@@ -623,6 +668,66 @@ def dashboard():
                            recent_products=recent_products,
                            recent_orders=recent_orders)
 
+@routes_blueprint.context_processor
+def inject_user_profile_pic():
+    """Inyecta la URL de la imagen de perfil del usuario en todas las plantillas."""
+    if current_user.is_authenticated:
+        image_file = url_for('static', filename='profile_pics/' + (current_user.profile_image_file or 'default.png'))
+        return dict(profile_image_file=image_file)
+    return dict(profile_image_file=url_for('static', filename='profile_pics/default.png'))
+
+
+# --- Rutas de Perfil de Usuario ---
+@routes_blueprint.route('/perfil', methods=['GET', 'POST'])
+@login_required
+def user_profile():
+    form = UpdateProfileForm()
+    if form.validate_on_submit():
+        if form.picture.data:
+            picture_file = save_picture(form.picture.data)
+            current_user.profile_image_file = picture_file
+
+        current_user.first_name = form.first_name.data
+        current_user.last_name = form.last_name.data
+        current_user.doc_type = form.doc_type.data
+        current_user.doc_number = form.doc_number.data
+        current_user.email = form.email.data
+        current_user.address = form.address.data
+        current_user.social_facebook = form.social_facebook.data
+        current_user.social_instagram = form.social_instagram.data
+        current_user.social_x = form.social_x.data
+        current_user.bank_name = form.bank_name.data
+        current_user.bank_account_number = form.bank_account_number.data
+        
+        db.session.commit()
+        flash('¡Tu perfil ha sido actualizado!', 'success')
+        return redirect(url_for('main.user_profile'))
+    elif request.method == 'GET':
+        form.first_name.data = current_user.first_name
+        form.last_name.data = current_user.last_name
+        form.doc_type.data = current_user.doc_type
+        form.doc_number.data = current_user.doc_number
+        form.email.data = current_user.email
+        form.address.data = current_user.address
+        form.social_facebook.data = current_user.social_facebook
+        form.social_instagram.data = current_user.social_instagram
+        form.social_x.data = current_user.social_x
+        form.bank_name.data = current_user.bank_name
+        form.bank_account_number.data = current_user.bank_account_number
+
+    image_file = url_for('static', filename='profile_pics/' + (current_user.profile_image_file or 'default.png'))
+    return render_template('perfil/perfil.html', title='Mi Perfil',
+                           image_file=image_file, form=form)
+
+@routes_blueprint.route('/perfil/detalles')
+@login_required
+def profile_details():
+    """Muestra la página de solo lectura del perfil del usuario."""
+    image_file = url_for('static', filename='profile_pics/' + (current_user.profile_image_file or 'default.png'))
+    return render_template('perfil/detalles_perfil.html', title='Detalles de Mi Perfil', user=current_user, image_file=image_file)
+
+
+
 # Rutas de productos (Inventario)
 @routes_blueprint.route('/inventario/lista')
 @login_required
@@ -666,10 +771,16 @@ def codigos_barra():
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.new_order'))
 
+    # Obtener IDs de productos preseleccionados desde la URL
+    preselected_ids_str = request.args.get('product_ids', '')
+    preselected_ids = preselected_ids_str.split(',') if preselected_ids_str else []
+
     products = Product.query.all()
     groups = db.session.query(Product.grupo).distinct().order_by(Product.grupo).all()
     product_groups = [g[0] for g in groups if g[0]]
-    return render_template('inventario/codigos_barra.html', title='Imprimir Códigos de Barra', products=products, product_groups=product_groups)
+    return render_template('inventario/codigos_barra.html', title='Imprimir Códigos de Barra', 
+                           products=products, product_groups=product_groups,
+                           preselected_ids=preselected_ids)
 
 @routes_blueprint.route('/inventario/codigos_barra_api', methods=['GET']) # type: ignore
 @login_required
@@ -919,13 +1030,59 @@ def imprimir_codigos_barra():
             # If even error PDF fails, return plain text
             return Response(error_message, mimetype='text/plain')
 
+@routes_blueprint.route('/inventario/carga_masiva/imprimir_codigos/<int:log_id>', methods=['GET'])
+@login_required
+def print_bulk_load_barcodes(log_id):
+    """
+    Generates and serves a PDF with barcodes for all products and quantities
+    from a specific bulk load operation.
+    """
+    if not is_gerente():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    log_entry = BulkLoadLog.query.get_or_404(log_id)
+    movements = log_entry.movements.options(joinedload(Movement.product)).filter(Movement.type == 'Entrada').all()
+
+    if not movements:
+        flash('Esta carga masiva no contiene productos para imprimir.', 'warning')
+        return redirect(url_for('main.bulk_load_detail', log_id=log_id))
+
+    company_info = CompanyInfo.query.first()
+    _, currency_symbol = get_main_calculation_currency_info()
+
+    products_dict = []
+    for movement in movements:
+        product = movement.product
+        price_foreign = product.price_usd if product.price_usd else 0
+        for _ in range(movement.quantity):
+            products_dict.append({
+                'id': product.id,
+                'name': product.name,
+                'barcode': product.barcode,
+                'price_foreign': price_foreign
+            })
+
+    current_app.logger.info(f"Generando PDF con {len(products_dict)} etiquetas para la carga masiva #{log_id}.")
+
+    try:
+        start_time = time.time()
+        pdf_data = generate_barcode_pdf_reportlab(products_dict, company_info, currency_symbol)
+        generation_time = time.time() - start_time
+        current_app.logger.info(f"PDF de carga masiva generado en {generation_time:.2f} segundos.")
+        return Response(pdf_data, mimetype='application/pdf', headers={'Content-Disposition': f'inline; filename=codigos_carga_{log_id}.pdf'})
+    except Exception as e:
+        current_app.logger.error(f"Error generando PDF para carga masiva #{log_id}: {e}")
+        flash(f"Error al generar el PDF: {e}", 'danger')
+        return redirect(url_for('main.bulk_load_detail', log_id=log_id))
 
 @routes_blueprint.route('/inventario/existencias')
 @login_required
 def inventory_stock():
-    # Excluir el grupo 'Ganchos' (insumos) de la lista de existencias
-    products = Product.query.filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).all()
-    return render_template('inventario/existencias.html', title='Existencias', products=products)
+    # Cargar productos con sus niveles de stock por almacén
+    products_with_stock = Product.query.options(joinedload(Product.stock_levels).joinedload(ProductStock.warehouse)).filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).order_by(Product.name).all()
+    warehouses = Warehouse.query.order_by(Warehouse.id).all()
+    return render_template('inventario/existencias.html', title='Existencias por Almacén', products_data=products_with_stock, warehouses=warehouses)
 
 @routes_blueprint.route('/inventario/existencias/reporte_pdf')
 @login_required
@@ -957,14 +1114,22 @@ def inventory_adjustment():
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
+    warehouse_id = request.args.get('warehouse_id', 1, type=int) # Por defecto, ajustar la tienda
+
     if request.method == 'POST':
         try:
             adjustments = request.form.getlist('adjustments')
             reason = request.form.get('reason', 'Ajuste de inventario manual')
+            warehouse_id_form = request.form.get('warehouse_id', type=int)
 
             if not adjustments:
                 flash('No se detectaron cambios para ajustar.', 'warning')
                 return redirect(url_for('main.inventory_adjustment'))
+            
+            if not warehouse_id_form:
+                flash('Debe seleccionar un almacén para realizar el ajuste.', 'danger')
+                return redirect(url_for('main.inventory_adjustment'))
+            warehouse_id = warehouse_id_form
 
             # Generate correlative code for the adjustment based on date.
             # Format: AIVyymmdd-N
@@ -991,13 +1156,18 @@ def inventory_adjustment():
                 product_id = int(data['product_id'])
                 real_stock = int(data['real_stock'])
                 
-                product = Product.query.get(product_id)
-                if product and product.stock != real_stock:
-                    theoretical_stock = product.stock
+                product = Product.query.get(product_id) # type: ignore
+                product_stock_entry = ProductStock.query.filter_by(product_id=product_id, warehouse_id=warehouse_id).first()
+
+                theoretical_stock = product_stock_entry.quantity if product_stock_entry else 0
+
+                if product and theoretical_stock != real_stock:
                     difference = real_stock - theoretical_stock
                     
-                    # Preparar actualización de stock
-                    product.stock = real_stock
+                    if not product_stock_entry:
+                        product_stock_entry = ProductStock(product_id=product_id, warehouse_id=warehouse_id)
+                        db.session.add(product_stock_entry)
+                    product_stock_entry.quantity = real_stock
 
                     # Create adjustment item record
                     adj_item = InventoryAdjustmentItem(
@@ -1017,6 +1187,7 @@ def inventory_adjustment():
                     movement = Movement(
                         product_id=product.id,
                         type='Entrada' if difference > 0 else 'Salida',
+                        warehouse_id=warehouse_id,
                         quantity=abs(difference),
                         document_id=adjustment_record.id,
                         document_type=f"Ajuste de Inventario ({doc_identifier})",
@@ -1039,8 +1210,13 @@ def inventory_adjustment():
             flash(f'Error al procesar el ajuste: {e}', 'danger')
             return redirect(url_for('main.inventory_adjustment'))
 
-    products = Product.query.filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).order_by(Product.name).all()
-    return render_template('inventario/ajuste_inventario.html', title='Ajuste de Inventario', products=products)
+    # Cargar productos con su stock en el almacén seleccionado
+    products_with_stock = db.session.query(Product, ProductStock.quantity).outerjoin(ProductStock, (Product.id == ProductStock.product_id) & (ProductStock.warehouse_id == warehouse_id)).filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).order_by(Product.name).all()
+    
+    warehouses = Warehouse.query.order_by(Warehouse.id).all()
+    selected_warehouse = Warehouse.query.get(warehouse_id)
+
+    return render_template('inventario/ajuste_inventario.html', title='Ajuste de Inventario', products_data=products_with_stock, warehouses=warehouses, selected_warehouse=selected_warehouse)
 
 @routes_blueprint.route('/inventario/ajustes/lista')
 @login_required
@@ -1074,7 +1250,7 @@ def adjustment_result(adjustment_id):
     # KPIs - NEW LOGIC: Calculate total inventory value before and after the adjustment.
     # 1. Calculate the total value of the entire inventory *after* the adjustment (current state).
     # We exclude 'Ganchos' as they are supplies, not for sale.
-    total_inventory_value_after_query = db.session.query(
+    total_inventory_value_after_query = db.session.query( # type: ignore
         func.sum(Product.stock * Product.cost_usd)
     ).filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).first()
     value_after = total_inventory_value_after_query[0] or 0.0
@@ -1124,7 +1300,7 @@ def new_product():
 
             new_prod = Product(
                 name=name, description=description, barcode=barcode, qr_code=qr_code,
-                image_url=image_url, size=size, color=color, cost_usd=cost_usd, price_usd=price_usd, stock=0,
+                image_url=image_url, size=size, color=color, cost_usd=cost_usd, price_usd=price_usd,
                 codigo_producto=codigo_producto, marca=marca, grupo=grupo
             )
             db.session.add(new_prod)
@@ -1437,11 +1613,11 @@ def reception_list():
 @routes_blueprint.route('/api/purchase_details/<int:purchase_id>')
 @login_required
 def api_purchase_details(purchase_id):
-    if not is_gerente(): # Superusuario and Gerente can view purchase details via API
+    if not is_contador(): # Superusuario, Gerente y Contador can view purchase details via API
         return jsonify({'error': 'Acceso denegado'}), 403
     
     purchase = Purchase.query.options(
-        subqueryload(Purchase.items).joinedload(PurchaseItem.product)
+        subqueryload(Purchase.items).joinedload(PurchaseItem.product) # type: ignore
     ).get(purchase_id)
 
     if not purchase:
@@ -1462,18 +1638,21 @@ def api_purchase_details(purchase_id):
 @routes_blueprint.route('/recepciones/nueva', methods=['GET', 'POST'])
 @login_required
 def new_reception():
-    if not is_gerente(): # Superusuario and Gerente can create receptions
+    if not is_contador(): # Superusuario, Gerente y Contador can create receptions
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.new_order'))
 
     if request.method == 'POST':
         try:
             purchase_id = request.form.get('purchase_id')
+            warehouse_id = request.form.get('warehouse_id', type=int)
             product_ids = request.form.getlist('product_id[]')
             quantities_received_str = request.form.getlist('quantity_received[]')
 
             if not purchase_id:
                 raise ValueError("No se ha seleccionado una orden de compra.")
+            if not warehouse_id:
+                raise ValueError("Debe seleccionar un almacén de destino.")
 
             purchase = Purchase.query.get_or_404(purchase_id)
             
@@ -1496,19 +1675,26 @@ def new_reception():
                     raise ValueError(f"Intenta recibir más unidades de '{item.product.name}' de las pendientes ({item.quantity_pending}).")
 
                 product = item.product
-                product.stock += qty_received
+                
+                # Actualizar stock en el almacén de destino
+                stock_entry = ProductStock.query.filter_by(product_id=product.id, warehouse_id=warehouse_id).first()
+                if not stock_entry:
+                    stock_entry = ProductStock(product_id=product.id, warehouse_id=warehouse_id, quantity=0)
+                    db.session.add(stock_entry)
+                stock_entry.quantity += qty_received
+
                 item.quantity_received += qty_received
                 total_items_received_in_this_tx += qty_received
                 
                 movement = Movement(
                     product_id=product.id,
-                    type='Entrada',
+                    type='Entrada', warehouse_id=warehouse_id,
                     quantity=qty_received,
                     document_id=reception.id,
                     document_type='Recepción de Compra',
                     related_party_id=purchase.provider_id, # type: ignore
                     related_party_type='Proveedor',
-                    date=reception_date # Asegurar que el movimiento tenga la misma fecha que la recepción
+                    date=reception.date_received # Asegurar que el movimiento tenga la misma fecha que la recepción
                 )
                 db.session.add(movement)
 
@@ -1544,10 +1730,12 @@ def new_reception():
     pending_purchases = Purchase.query.filter(
         Purchase.status.in_(['Pendiente', 'Recibida Parcialmente'])
     ).order_by(Purchase.id.desc()).all()
+    warehouses = Warehouse.query.order_by(Warehouse.id).all()
 
     return render_template('recepciones/nueva.html', 
                            title='Nueva Recepción', 
-                           purchases=pending_purchases)
+                           purchases=pending_purchases,
+                           warehouses=warehouses)
 
 
 # Rutas de órdenes
@@ -1719,10 +1907,11 @@ def new_order():
             for p_id, q in zip(product_ids, quantities):
                 quantity = int(q)
                 product = product_map.get(p_id) # type: ignore
-                if not product or quantity <= 0:
+                if not product or quantity <= 0: # type: ignore
                     continue
-                if product.stock < quantity:
-                    raise ValueError(f'Stock insuficiente para "{product.name}". Solicitado: {quantity}, Disponible: {product.stock}.')
+                # La venta siempre es desde el almacén principal (ID 1)
+                if product.stock_tienda < quantity: # type: ignore
+                    raise ValueError(f'Stock insuficiente en Tienda para "{product.name}". Solicitado: {quantity}, Disponible: {product.stock_tienda}.')
 
             new_order = Order(
                 id=next_id, client_id=client_id, status='Pendiente', total_amount=0, 
@@ -1746,8 +1935,14 @@ def new_order():
                 item = OrderItem(order_id=new_order.id, product_id=p_id, quantity=quantity, price=price_ves, cost_at_sale_ves=cost_ves)
                 db.session.add(item)
                 
-                product.stock -= quantity
-                movement = Movement(product_id=product.id, type='Salida', quantity=quantity, document_id=new_order.id, document_type='Orden de Venta', description=f"Venta al cliente #{new_order.client_id}", related_party_id=new_order.client_id, related_party_type='Cliente', date=order_date)
+                # Descontar stock del almacén principal (ID 1)
+                main_store_stock = ProductStock.query.filter_by(product_id=product.id, warehouse_id=1).first()
+                if not main_store_stock or main_store_stock.quantity < quantity:
+                     raise ValueError(f"Error de consistencia de stock para {product.name}. Intente de nuevo.")
+                main_store_stock.quantity -= quantity
+
+                # Registrar movimiento de salida desde el almacén principal
+                movement = Movement(product_id=product.id, type='Salida', warehouse_id=1, quantity=quantity, document_id=new_order.id, document_type='Orden de Venta', description=f"Venta al cliente #{new_order.client_id}", related_party_id=new_order.client_id, related_party_type='Cliente', date=order_date)
                 db.session.add(movement)
                 
                 total_amount += price_ves * quantity
@@ -2418,6 +2613,12 @@ def cargar_excel():
             flash('No se ha seleccionado ningún archivo.', 'danger')
             return redirect(request.url)
         
+        warehouse_id = request.form.get('warehouse_id', type=int)
+        if not warehouse_id:
+            flash('Debe seleccionar un almacén de destino.', 'danger')
+            return redirect(request.url)
+
+        
         if not file.filename.endswith(('.xlsx', '.xls')):
             flash('Formato de archivo no válido. Solo se aceptan archivos .xlsx.', 'danger')
             return redirect(request.url)
@@ -2435,8 +2636,9 @@ def cargar_excel():
             
             new_products = []
             updates = []
+            all_barcodes_in_file = {str(row[0]).strip() for row in sheet.iter_rows(min_row=1, values_only=True) if row and row[0]}
             
-            for row in sheet.iter_rows(min_row=2, values_only=True):
+            for row in sheet.iter_rows(min_row=1, values_only=True):
                 if not row[0]:
                     continue
                 
@@ -2445,7 +2647,7 @@ def cargar_excel():
                 name = str(row[2]).strip()
                 cost_usd = row[3] if row[3] is not None else 0
                 price_usd = row[4] if row[4] is not None else 0
-                stock = row[5] if row[5] is not None else 0
+                stock_to_add = int(row[5]) if row[5] is not None else 0
                 image_url = row[6] if row[6] is not None else ''
                 marca = str(row[7]).strip() if len(row) > 7 and row[7] is not None else ''
                 color = str(row[8]).strip() if len(row) > 8 and row[8] is not None else ''
@@ -2453,55 +2655,63 @@ def cargar_excel():
                 grupo = str(row[10]).strip() if len(row) > 10 and row[10] is not None else ''
 
                 product = Product.query.filter_by(barcode=barcode).first()
+                current_stock_in_warehouse = 0
 
                 if product:
+                    stock_entry = ProductStock.query.filter_by(product_id=product.id, warehouse_id=warehouse_id).first()
+                    if stock_entry:
+                        current_stock_in_warehouse = stock_entry.quantity
+
                     updates.append({
                         'id': product.id,
-                        'new_codigo_producto': codigo_producto,
-                        'old_codigo_producto': product.codigo_producto,
                         'name': product.name,
-                        'new_name': name,
-                        'new_cost_usd': float(cost_usd),
-                        'old_cost_usd': product.cost_usd,
-                        'new_price_usd': float(price_usd),
-                        'new_stock': int(stock),
-                        'old_stock': product.stock,
-                        'new_image_url': image_url,
-                        'new_marca': marca,
-                        'old_marca': product.marca,
-                        'new_color': color,
-                        'old_color': product.color,
-                        'new_talla': talla,
-                        'old_talla': product.size,
-                        'new_grupo': grupo,
-                        'old_grupo': product.grupo
+                        'barcode': barcode,
+                        'stock_to_add': stock_to_add,
+                        'old_stock': current_stock_in_warehouse,
+                        'new_total_stock': current_stock_in_warehouse + stock_to_add,
                     })
                 else:
-                    new_products.append(Product(
-                        barcode=barcode,
-                        codigo_producto=codigo_producto,
-                        name=name,
-                        cost_usd=float(cost_usd),
-                        price_usd=float(price_usd),
-                        stock=int(stock),
-                        image_url=image_url,
-                        marca=marca,
-                        color=color,
-                        size=talla,
-                        grupo=grupo,
-                        estimated_monthly_sales=100
-                    ))
-
-            if new_products:
-                db.session.bulk_save_objects(new_products)
-                flash(f'Se han agregado {len(new_products)} productos nuevos.', 'success')
+                    new_products.append({
+                        'barcode': barcode,
+                        'codigo_producto': codigo_producto,
+                        'name': name,
+                        'cost_usd': float(cost_usd),
+                        'price_usd': float(price_usd),
+                        'stock_to_add': stock_to_add,
+                        'image_url': image_url,
+                        'marca': marca,
+                        'color': color,
+                        'size': talla,
+                        'grupo': grupo,
+                    })
 
             if updates:
-                session['pending_updates'] = updates
+                # Guardar en sesión para la página de confirmación
+                session['excel_upload_data'] = {
+                    'warehouse_id': warehouse_id,
+                    'new_products': new_products,
+                    'updates': updates
+                }
                 return redirect(url_for('main.cargar_excel_confirmar'))
             
+            # Si solo hay productos nuevos, los procesamos directamente
+            if new_products:
+                # Crear el log de carga
+                load_log = BulkLoadLog(user_id=current_user.id, method='Excel', warehouse_id=warehouse_id)
+                db.session.add(load_log)
+                db.session.flush()
+
+                for prod_data in new_products:
+                    stock_to_add = prod_data.pop('stock_to_add')
+                    new_prod = Product(**prod_data)
+                    db.session.add(new_prod)
+                    db.session.flush() # Para obtener el ID del nuevo producto
+                    
+                    # Añadir stock y movimiento
+                    add_stock_and_movement(new_prod.id, warehouse_id, stock_to_add, load_log.id, f"Carga Masiva #{load_log.id}")
+
             db.session.commit()
-            flash('Archivo procesado exitosamente.', 'success')
+            flash(f'Se han agregado {len(new_products)} productos nuevos al inventario.', 'success')
             return redirect(url_for('main.inventory_list'))
 
         except Exception as e:
@@ -2512,7 +2722,40 @@ def cargar_excel():
             if os.path.exists(filepath):
                 os.remove(filepath)
     
-    return render_template('inventario/cargar_excel.html', title='Cargar Inventario desde Excel')
+    warehouses = Warehouse.query.order_by(Warehouse.id).all()
+    # Cargar el historial de cargas masivas para mostrarlo en la página
+    load_history = BulkLoadLog.query.options(
+        joinedload(BulkLoadLog.user),
+        joinedload(BulkLoadLog.warehouse)
+    ).order_by(BulkLoadLog.date.desc()).all()
+
+    return render_template('inventario/cargar_excel.html', title='Cargar Inventario desde Excel', 
+                           warehouses=warehouses, load_history=load_history)
+
+def add_stock_and_movement(product_id, warehouse_id, quantity, document_id, document_type):
+    """Función auxiliar para añadir stock y registrar el movimiento."""
+    if quantity <= 0:
+        return
+
+    # Actualizar o crear el registro de stock
+    stock_entry = ProductStock.query.filter_by(product_id=product_id, warehouse_id=warehouse_id).first()
+    if stock_entry:
+        stock_entry.quantity += quantity
+    else:
+        stock_entry = ProductStock(product_id=product_id, warehouse_id=warehouse_id, quantity=quantity)
+        db.session.add(stock_entry)
+
+    # Crear el movimiento de inventario
+    movement = Movement(
+        product_id=product_id,
+        type='Entrada',
+        warehouse_id=warehouse_id,
+        quantity=quantity,
+        document_id=document_id,
+        document_type=document_type,
+        description="Cargado mediante Excel"
+    )
+    db.session.add(movement)
 
 @routes_blueprint.route('/inventario/cargar_excel_confirmar', methods=['GET', 'POST'])
 @login_required
@@ -2521,41 +2764,72 @@ def cargar_excel_confirmar():
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.inventory_list'))
         
-    pending_updates = session.get('pending_updates', [])
+    upload_data = session.get('excel_upload_data', {})
+    if not upload_data:
+        flash('No hay datos de carga para confirmar.', 'warning')
+        return redirect(url_for('main.cargar_excel'))
+
     if request.method == 'POST':
         try:
-            if pending_updates:
-                update_mappings = [
-                    {
-                        'id': update['id'],
-                        'stock': update['new_stock'],
-                        'cost_usd': update['new_cost_usd'],
-                        'name': update['new_name'],
-                        'price_usd': update['new_price_usd'],
-                        'image_url': update['new_image_url'],
-                        'codigo_producto': update['new_codigo_producto'],
-                        'marca': update['new_marca'],
-                        'color': update['new_color'],
-                        'size': update['new_talla'],
-                        'grupo': update['new_grupo']
-                    }
-                    for update in pending_updates
-                ]
-                db.session.bulk_update_mappings(Product, update_mappings)
+            warehouse_id = upload_data['warehouse_id']
+            
+            # Crear el log de carga
+            load_log = BulkLoadLog(user_id=current_user.id, method='Excel', warehouse_id=warehouse_id)
+            db.session.add(load_log)
+            db.session.flush()
+
+            # Procesar productos nuevos
+            for prod_data in upload_data.get('new_products', []):
+                stock_to_add = prod_data.pop('stock_to_add')
+                new_prod = Product(**prod_data)
+                db.session.add(new_prod)
+                db.session.flush()
+                add_stock_and_movement(new_prod.id, warehouse_id, stock_to_add, load_log.id, f"Carga Masiva #{load_log.id}")
+
+            # Procesar actualizaciones de stock para productos existentes
+            for update_data in upload_data.get('updates', []):
+                add_stock_and_movement(update_data['id'], warehouse_id, update_data['stock_to_add'], load_log.id, "Carga Masiva Excel")
 
             db.session.commit()
-            flash(f'Se han actualizado {len(pending_updates)} productos exitosamente.', 'success')
+            flash(f'Carga de inventario procesada exitosamente. Se crearon {len(upload_data.get("new_products", []))} productos y se actualizó el stock de {len(upload_data.get("updates", []))} productos.', 'success')
         except Exception as e:
             db.session.rollback()
             flash(f'Ocurrió un error al confirmar la actualización: {str(e)}', 'danger')
         finally:
-            session.pop('pending_updates', None)
+            session.pop('excel_upload_data', None)
         
         return redirect(url_for('main.inventory_list'))
 
     return render_template('inventario/cargar_excel_confirmar.html', 
                            title='Confirmar Actualización de Inventario',
-                           updates=pending_updates)
+                           updates=upload_data.get('updates', []),
+                           new_products=upload_data.get('new_products', []))
+
+@routes_blueprint.route('/inventario/carga_masiva/detalle/<int:log_id>')
+@login_required
+def bulk_load_detail(log_id):
+    """Muestra los detalles de una carga masiva específica."""
+    if not is_gerente():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.inventory_list'))
+
+    log_entry = BulkLoadLog.query.options(
+        joinedload(BulkLoadLog.user),
+        joinedload(BulkLoadLog.warehouse)
+    ).get_or_404(log_id)
+
+    # Usamos la relación 'movements' que añadimos al modelo para obtener los productos afectados
+    movements = log_entry.movements.options(
+        joinedload(Movement.product)
+    ).all()
+
+    # Preparar una lista de IDs de productos para el botón de imprimir
+    product_ids_to_print = [str(m.product.id) for m in movements]
+
+    return render_template('inventario/detalle_carga_masiva.html',
+                           title=f'Detalle de Carga #{log_entry.id}',
+                           log_entry=log_entry, movements=movements,
+                           product_ids_to_print=product_ids_to_print)
 
 # Rutas de configuración de empresa
 @routes_blueprint.route('/configuracion/empresa', methods=['GET', 'POST'])
@@ -3012,7 +3286,7 @@ def api_product_by_barcode(barcode):
             'codigo_producto': product.codigo_producto,
             'price_usd': product.price_usd,
             'cost_usd': product.cost_usd,
-            'stock': product.stock
+            'stock': product.stock_tienda # Devolver solo el stock de la tienda para la venta
         })
     else:
         return jsonify({'error': 'Producto no encontrado'}), 404
@@ -3045,15 +3319,16 @@ def api_check_stock():
 
     try:
         # Fetch all products in one query
-        products_in_db = Product.query.filter(Product.id.in_(product_ids)).all()
-        product_stock_map = {p.id: p.stock for p in products_in_db}
+        # Comprobar stock solo en el almacén de tienda (ID 1)
+        products_in_db = Product.query.filter(Product.id.in_(product_ids)).options(joinedload(Product.stock_levels)).all()
+        product_stock_map = {p.id: p.stock_tienda for p in products_in_db}
 
         errors = []
         for req in product_requests:
             req_id = req.get('id')
             req_qty = req.get('quantity')
             
-            if not req_id or not isinstance(req_qty, int) or req_qty <= 0:
+            if not req_id or not isinstance(req_qty, int) or req_qty <= 0: # type: ignore
                 continue
 
             current_stock = product_stock_map.get(int(req_id), 0)
@@ -4000,3 +4275,250 @@ def print_daily_closing_report_pdf():
     response.headers['Content-Disposition'] = f'inline; filename=cierre_diario_{report_date.strftime("%Y_%m_%d")}.pdf'
     
     return response
+
+# --- Rutas de Almacenes ---
+
+@routes_blueprint.route('/almacenes/lista', methods=['GET', 'POST'])
+@login_required
+def warehouse_list():
+    """Muestra la lista de almacenes y permite crear nuevos."""
+    if not is_gerente():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    if request.method == 'POST':
+        try:
+            name = request.form.get('name')
+            is_sellable = 'is_sellable' in request.form
+
+            if not name:
+                raise ValueError("El nombre del almacén es obligatorio.")
+
+            new_warehouse = Warehouse(name=name, is_sellable=is_sellable)
+            db.session.add(new_warehouse)
+            db.session.commit()
+            flash(f'Almacén "{name}" creado exitosamente.', 'success')
+        except (ValueError, IntegrityError) as e:
+            db.session.rollback()
+            flash(f'Error al crear el almacén: {e}', 'danger')
+        return redirect(url_for('main.warehouse_list'))
+
+    warehouses = Warehouse.query.order_by(Warehouse.id).all()
+    return render_template('almacenes/lista.html', title='Gestión de Almacenes', warehouses=warehouses)
+
+@routes_blueprint.route('/almacenes/traslados', methods=['GET', 'POST'])
+@login_required
+def warehouse_transfer():
+    """Permite realizar traslados de stock entre almacenes."""
+    if not is_gerente():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    if request.method == 'POST':
+        try:
+            from_warehouse_id = request.form.get('from_warehouse_id', type=int)
+            to_warehouse_id = request.form.get('to_warehouse_id', type=int)
+            reason = request.form.get('reason')
+            product_ids = request.form.getlist('product_id[]')
+            quantities = request.form.getlist('quantity[]')
+
+            if not all([from_warehouse_id, to_warehouse_id, reason, product_ids, quantities]):
+                raise ValueError("Todos los campos son obligatorios.")
+            if from_warehouse_id == to_warehouse_id:
+                raise ValueError("El almacén de origen y destino no pueden ser el mismo.")
+
+            # Crear el registro principal del traslado
+            transfer = WarehouseTransfer(
+                reason=reason,
+                user_id=current_user.id
+            )
+            db.session.add(transfer)
+            db.session.flush() # Para obtener el ID del traslado
+
+            for p_id, qty_str in zip(product_ids, quantities):
+                product_id = int(p_id)
+                quantity = int(qty_str)
+
+                if quantity <= 0: continue
+
+                # Descontar del almacén de origen
+                origin_stock = ProductStock.query.filter_by(product_id=product_id, warehouse_id=from_warehouse_id).first()
+                if not origin_stock or origin_stock.quantity < quantity:
+                    product_name = Product.query.get(product_id).name
+                    raise ValueError(f"Stock insuficiente para '{product_name}' en el almacén de origen.")
+                origin_stock.quantity -= quantity
+
+                # Añadir al almacén de destino
+                destination_stock = ProductStock.query.filter_by(product_id=product_id, warehouse_id=to_warehouse_id).first()
+                if not destination_stock:
+                    destination_stock = ProductStock(product_id=product_id, warehouse_id=to_warehouse_id, quantity=0)
+                    db.session.add(destination_stock)
+                destination_stock.quantity += quantity
+
+                # Registrar movimientos
+                movement_out = Movement(product_id=product_id, type='Salida', warehouse_id=from_warehouse_id, quantity=quantity, document_id=transfer.id, document_type='Traslado de Almacén', description=f"Hacia almacén ID {to_warehouse_id}")
+                movement_in = Movement(product_id=product_id, type='Entrada', warehouse_id=to_warehouse_id, quantity=quantity, document_id=transfer.id, document_type='Traslado de Almacén', description=f"Desde almacén ID {from_warehouse_id}")
+                db.session.add_all([movement_out, movement_in])
+
+            db.session.commit()
+            flash('Traslado realizado exitosamente. Puede imprimir el reporte si lo necesita.', 'success')
+            return redirect(url_for('main.transfer_detail', transfer_id=transfer.id))
+
+        except (ValueError, IntegrityError) as e:
+            db.session.rollback()
+            flash(f'Error al procesar el traslado: {e}', 'danger')
+        return redirect(url_for('main.warehouse_transfer'))
+
+    warehouses = Warehouse.query.order_by(Warehouse.id).all()
+    products = Product.query.order_by(Product.name).all()
+    return render_template('almacenes/traslados.html', title='Traslado entre Almacenes', warehouses=warehouses, products=products)
+
+@routes_blueprint.route('/almacenes/traslados/<int:transfer_id>')
+@login_required
+def transfer_detail(transfer_id):
+    """Muestra los detalles de un traslado específico."""
+    if not is_gerente():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    transfer = WarehouseTransfer.query.options(
+        joinedload(WarehouseTransfer.user)
+    ).get_or_404(transfer_id)
+
+    # Agrupar movimientos para obtener la lista de productos y cantidades
+    movements = Movement.query.filter_by(document_id=transfer.id, document_type='Traslado de Almacén', type='Salida').options(
+        joinedload(Movement.product),
+        joinedload(Movement.warehouse)
+    ).all()
+
+    if not movements:
+        flash('No se encontraron detalles para este traslado.', 'warning')
+        return redirect(url_for('main.warehouse_transfer'))
+
+    from_warehouse = movements[0].warehouse
+    # Asumimos que el movimiento de entrada tiene el mismo product_id y cantidad
+    to_warehouse_id = int(movements[0].description.split()[-1])
+    to_warehouse = Warehouse.query.get(to_warehouse_id)
+
+    return render_template('almacenes/detalle_traslado.html',
+                           title=f'Detalle de Traslado #{transfer.id}',
+                           transfer=transfer,
+                           movements=movements,
+                           from_warehouse=from_warehouse,
+                           to_warehouse=to_warehouse)
+
+@routes_blueprint.route('/almacenes/traslados/imprimir/<int:transfer_id>')
+@login_required
+def print_transfer_report(transfer_id):
+    """Genera un PDF con los detalles de un traslado."""
+    if not is_gerente(): # Superusuario and Gerente can print reports
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    transfer = WarehouseTransfer.query.options(
+        joinedload(WarehouseTransfer.user)
+    ).get_or_404(transfer_id)
+
+    movements = Movement.query.filter_by(document_id=transfer.id, document_type='Traslado de Almacén', type='Salida').options(
+        joinedload(Movement.product),
+        joinedload(Movement.warehouse)
+    ).all()
+
+    if not movements:
+        flash('No se encontraron detalles para este traslado.', 'warning')
+        return redirect(url_for('main.transfer_detail', transfer_id=transfer.id))
+
+    from_warehouse = movements[0].warehouse
+    to_warehouse_id = int(movements[0].description.split()[-1])
+    to_warehouse = Warehouse.query.get(to_warehouse_id)
+    generation_date = get_current_time_ve().strftime('%d/%m/%Y %H:%M:%S')
+    company_info = CompanyInfo.query.first()
+
+    # Calcular el costo total del traslado
+    total_cost_usd = sum(m.quantity * (m.product.cost_usd or 0) for m in movements)
+
+    html_string = render_template('pdf/transfer_report.html',
+                                  transfer=transfer, movements=movements,
+                                  from_warehouse=from_warehouse, to_warehouse=to_warehouse,
+                                  generation_date=generation_date,
+                                  company_info=company_info,
+                                  total_cost_usd=total_cost_usd)
+    
+    pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
+    return Response(pdf_file, mimetype='application/pdf', headers={'Content-Disposition': f'inline; filename=reporte_traslado_{transfer.id}.pdf'})
+
+@routes_blueprint.route('/almacenes/traslados/historial')
+@login_required
+def transfer_history():
+    """Muestra una lista de todos los traslados de almacén realizados."""
+    if not is_gerente():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    transfers = WarehouseTransfer.query.options(
+        joinedload(WarehouseTransfer.user)
+    ).order_by(WarehouseTransfer.date.desc()).all()
+
+    return render_template('almacenes/historial_traslados.html',
+                           title='Historial de Traslados de Almacén',
+                           transfers=transfers)
+
+@routes_blueprint.route('/api/warehouse_stock/<int:warehouse_id>')
+@login_required
+def api_warehouse_stock(warehouse_id):
+    """API para obtener el stock de todos los productos en un almacén específico."""
+    if not is_gerente():
+        return jsonify({'error': 'Acceso denegado'}), 403
+    
+    stocks = ProductStock.query.filter_by(warehouse_id=warehouse_id).all()
+    stock_map = {stock.product_id: stock.quantity for stock in stocks}
+    return jsonify(stocks=stock_map)
+
+@routes_blueprint.route('/api/product_by_barcode_for_transfer/<barcode>')
+@login_required
+def api_product_by_barcode_for_transfer(barcode):
+    """API para obtener un producto por código de barras y su stock en un almacén específico."""
+    if not is_gerente():
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    warehouse_id = request.args.get('warehouse_id', type=int)
+    if not warehouse_id:
+        return jsonify({'error': 'ID de almacén no proporcionado'}), 400
+
+    product = Product.query.filter_by(barcode=barcode).first()
+    if not product:
+        return jsonify({'error': 'Producto no encontrado'}), 404
+
+    stock_entry = ProductStock.query.filter_by(product_id=product.id, warehouse_id=warehouse_id).first()
+    stock_quantity = stock_entry.quantity if stock_entry else 0
+
+    # Devolvemos el mismo formato que la búsqueda por nombre para reutilizar addProductToTable
+    product_data = {'id': product.id, 'name': product.name, 'barcode': product.barcode, 'stock': stock_quantity}
+    
+    return jsonify(product_data)
+
+@routes_blueprint.route('/api/search_products_for_transfer')
+@login_required
+def api_search_products_for_transfer():
+    """API para buscar productos por nombre o código de barras para traslados."""
+    if not is_gerente():
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    query_str = request.args.get('q', '').strip().lower()
+    from_warehouse_id = request.args.get('from_warehouse_id', type=int)
+
+    if len(query_str) < 2 or not from_warehouse_id:
+        return jsonify(products=[])
+
+    search_pattern = f'%{query_str}%'
+    
+    # Subconsulta para obtener el stock del almacén de origen
+    stock_subquery = db.session.query(ProductStock.quantity).filter(ProductStock.product_id == Product.id, ProductStock.warehouse_id == from_warehouse_id).as_scalar()
+
+    products = db.session.query(Product, func.coalesce(stock_subquery, 0).label('stock_in_warehouse')).filter(
+        or_(Product.name.ilike(search_pattern), Product.barcode.ilike(search_pattern))
+    ).limit(10).all()
+
+    results = [{'id': p.id, 'name': p.name, 'barcode': p.barcode, 'stock': stock} for p, stock in products]
+    
+    return jsonify(products=results)
