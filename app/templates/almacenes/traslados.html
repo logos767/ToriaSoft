@@ -49,9 +49,10 @@
                 <table class="min-w-full bg-white">
                     <thead class="bg-gray-100">
                         <tr>
-                            <th class="py-2 px-4 text-left text-sm font-semibold text-gray-600 w-1/2">Producto</th>
+                            <th class="py-2 px-4 text-left text-sm font-semibold text-gray-600 w-2/5">Producto</th>
                             <th class="py-2 px-4 text-center text-sm font-semibold text-gray-600">Stock en Origen</th>
                             <th class="py-2 px-4 text-center text-sm font-semibold text-gray-600">Cantidad a Trasladar</th>
+                            <th class="py-2 px-4 text-left text-sm font-semibold text-gray-600 w-1/4">Comentario (Opcional)</th>
                             <th class="py-2 px-4 text-center text-sm font-semibold text-gray-600"></th>
                         </tr>
                     </thead>
@@ -77,13 +78,17 @@
         <td class="p-2">
             <input type="hidden" name="product_id[]" class="product-id-input">
             <span class="product-name-display font-medium"></span>
-            <div class="product-barcode-display text-xs text-gray-500"></div>
+            <div class="text-xs text-gray-500">Cód. Barras: <span class="product-barcode-display"></span></div>
+            <div class="text-xs text-gray-500">Cód. Interno: <span class="product-code-display"></span></div>
         </td>
         <td class="p-2 text-center">
             <span class="stock-display font-mono">0</span>
         </td>
         <td class="p-2 text-center">
             <input type="number" name="quantity[]" min="1" required class="quantity-input w-24 shadow-sm border rounded py-1 px-2 text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </td>
+        <td class="p-2">
+            <input type="text" name="comment[]" placeholder="Ej: Producto para revisión..." class="comment-input w-full shadow-sm border rounded py-1 px-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
         </td>
         <td class="p-2 text-center">
             <button type="button" class="remove-row-btn text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
@@ -146,7 +151,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const newRow = createProductRowElement();
             newRow.querySelector('.product-id-input').value = product.id;
             newRow.querySelector('.product-name-display').textContent = product.name;
-            newRow.querySelector('.product-barcode-display').textContent = `Código: ${product.barcode}`;
+            newRow.querySelector('.product-barcode-display').textContent = product.barcode;
+            newRow.querySelector('.product-code-display').textContent = product.codigo_producto || 'N/A';
+
             
             const quantityInput = newRow.querySelector('.quantity-input');
             quantityInput.value = 1;
@@ -187,7 +194,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             div.innerHTML = `
                                 <div class="font-semibold">${product.name}</div>
                                 <div class="text-sm text-gray-600">
-                                    <span>Código: ${product.barcode}</span> | <span class="font-bold">Stock: ${product.stock}</span>
+                                    <span>Cód. Interno: ${product.codigo_producto || 'N/A'}</span> | <span>Cód. Barras: ${product.barcode}</span> | <span class="font-bold">Stock: ${product.stock}</span>
                                 </div>
                             `;
                             div.addEventListener('click', () => addProductToTable(product));

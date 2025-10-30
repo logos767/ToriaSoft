@@ -50,12 +50,19 @@
                     <!-- Barcode Scanner & Add Product -->
                     <div class="mb-2">
                         <h2 class="text-lg font-semibold text-gray-700 mb-2">2. Añadir Productos</h2>
-                        <div class="flex items-center space-x-2 mb-2">
-                            <input type="text" id="barcode-input" placeholder="Escanear o escribir código..." class="flex-1 shadow-sm appearance-none border rounded py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-                            <button type="button" id="scan-barcode-btn" class="bg-blue-500 text-white py-1 px-3 rounded hover:bg-blue-600 transition-colors text-sm whitespace-nowrap">
-                                <i class="fas fa-barcode mr-1"></i>Agregar
-                            </button>
-                            <button type="button" id="add-product-btn" class="bg-green-500 text-white py-1 px-3 rounded hover:bg-green-600 transition-colors text-sm whitespace-nowrap">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
+                            <div>
+                                <label for="barcode-input" class="block text-sm font-medium text-gray-700">Escanear Código de Barras</label>
+                                <input type="text" id="barcode-input" placeholder="Escanear para agregar..." class="mt-1 w-full shadow-sm appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            <div class="relative">
+                                <label for="product-keyword-search" class="block text-sm font-medium text-gray-700">Buscar por Nombre / Código</label>
+                                <input type="text" id="product-keyword-search" placeholder="Escribir para buscar..." class="mt-1 w-full shadow-sm appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <div id="product-suggestions-sale" class="absolute bg-white border rounded-b-lg mt-1 w-full z-20 hidden max-h-60 overflow-y-auto"></div>
+                            </div>
+                        </div>
+                        <div class="flex justify-end">
+                             <button type="button" id="add-product-btn" class="bg-gray-500 text-white py-1 px-3 rounded hover:bg-gray-600 transition-colors text-sm whitespace-nowrap">
                                 <i class="fas fa-plus mr-1"></i>Agregar Manual
                             </button>
                         </div>
@@ -434,6 +441,10 @@
         const clientEmailSpan = document.getElementById('client_email');
         const clientPhoneSpan = document.getElementById('client_phone');
         const clientAddressSpan = document.getElementById('client_address');
+
+        const keywordSearchInput = document.getElementById('product-keyword-search');
+        const productSuggestionsSale = document.getElementById('product-suggestions-sale');
+        let searchDebounceTimeout = null;
 
         const newClientModal = document.getElementById('new-client-modal');
         const closeNewClientModalBtn = document.getElementById('close-new-client-modal-btn');
@@ -958,11 +969,118 @@
         // Inicializar resumen de la orden
         updateOrderSummary();
 
+        // --- Nueva Lógica para Búsqueda por Palabra Clave ---
+
+        function addProductToTable(product) {
+            // Verificar si el producto ya está en la lista
+            let existingRow = null;
+            document.querySelectorAll('tr.product-item').forEach(item => {
+                const selectElement = item.querySelector('.product-select');
+                if (selectElement.value == product.id) {
+                    existingRow = item;
+                }
+            });
+
+            if (existingRow) {
+                // Incrementar cantidad si ya existe
+                const quantityInput = existingRow.querySelector('.quantity-input');
+                const currentQuantity = parseInt(quantityInput.value) || 0;
+                const maxStock = parseInt(quantityInput.max) || 0;
+                if (currentQuantity < maxStock) {
+                    quantityInput.value = currentQuantity + 1;
+                    validateQuantityInput(quantityInput);
+                    updateOrderSummary();
+                    quantityInput.focus();
+                } else {
+                    toastr.warning('No se puede agregar más, stock máximo alcanzado.', 'Stock Insuficiente');
+                }
+            } else {
+                // Agregar nueva fila si no existe
+                const newProductItem = productTemplate.cloneNode(true);
+
+                // Seleccionar el producto en el dropdown
+                const selectElement = newProductItem.querySelector('.product-select');
+                for (let i = 0; i < selectElement.options.length; i++) {
+                    if (selectElement.options[i].value == product.id) {
+                        selectElement.selectedIndex = i;
+                        break;
+                    }
+                }
+
+                // Habilitar botón de eliminar
+                const removeBtn = newProductItem.querySelector('.remove-product-btn');
+                removeBtn.disabled = false;
+                removeBtn.style.display = 'inline-block';
+
+                // Inicializar el nuevo producto
+                initializeProductItem(newProductItem);
+                updateProductCodeDisplay(newProductItem);
+
+                // Establecer cantidad predeterminada a 1
+                const quantityInput = newProductItem.querySelector('.quantity-input');
+                quantityInput.value = '1';
+
+                // Agregar a la lista
+                productList.appendChild(newProductItem);
+
+                // Actualizar resumen y validar
+                validateQuantityInput(quantityInput);
+                updateOrderSummary();
+                quantityInput.focus();
+            }
+
+            keywordSearchInput.value = '';
+            productSuggestionsSale.classList.add('hidden');
+        }
+
+        keywordSearchInput.addEventListener('input', function() {
+            const query = this.value.trim();
+
+            if (query.length < 2) {
+                productSuggestionsSale.classList.add('hidden');
+                return;
+            }
+
+            clearTimeout(searchDebounceTimeout);
+            searchDebounceTimeout = setTimeout(() => {
+                fetch(`/api/search_products_for_sale?q=${encodeURIComponent(query)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        productSuggestionsSale.innerHTML = '';
+                        if (data.products && data.products.length > 0) {
+                            data.products.forEach(product => {
+                                const div = document.createElement('div');
+                                div.className = 'p-2 hover:bg-blue-100 cursor-pointer';
+                                div.innerHTML = `
+                                    <div class="font-semibold">${product.name}</div>
+                                    <div class="text-sm text-gray-600">
+                                        <span>Cód. Interno: ${product.codigo_producto || 'N/A'}</span> | <span>Cód. Barras: ${product.barcode}</span> | <span class="font-bold">Stock: ${product.stock}</span>
+                                    </div>
+                                `;
+                                div.addEventListener('click', () => addProductToTable(product));
+                                productSuggestionsSale.appendChild(div);
+                            });
+                            productSuggestionsSale.classList.remove('hidden');
+                        } else {
+                            productSuggestionsSale.classList.add('hidden');
+                        }
+                    });
+            }, 300);
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!keywordSearchInput.contains(e.target) && !productSuggestionsSale.contains(e.target)) {
+                productSuggestionsSale.classList.add('hidden');
+            }
+        });
+
         // Función para agregar producto por código de barras
-        document.getElementById('scan-barcode-btn').addEventListener('click', function() {
-            const barcode = document.getElementById('barcode-input').value.trim();
+        document.getElementById('barcode-input').addEventListener('keypress', function(e) {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+
+            const barcode = this.value.trim();
             if (!barcode) {
-                alert('Por favor ingrese un código de barras');
                 return;
             }
 
@@ -974,88 +1092,17 @@
                     return response.json();
                 })
                 .then(product => {
-                    // Verificar si el producto tiene stock disponible
-                    if (product.stock <= 0) {
-                        alert(`⚠️ Producto "${product.name}" agotado. Stock disponible: ${product.stock}`);
-                        document.getElementById('barcode-input').focus();
-                        return;
-                    }
-
-                    // Verificar si el producto ya existe en la lista
-                    let existingProductItem = null;
-                    document.querySelectorAll('tr.product-item').forEach(item => {
-                        const selectElement = item.querySelector('.product-select');
-                        if (selectElement.value == product.id) {
-                            existingProductItem = item;
-                        }
-                    });
-
-                    if (existingProductItem) {
-                        // Si el producto ya existe, incrementar la cantidad
-                        const quantityInput = existingProductItem.querySelector('.quantity-input');
-                        const currentQuantity = parseInt(quantityInput.value) || 0;
-                        const newQuantity = currentQuantity + 1;
-
-                        // Verificar que no exceda el stock disponible
-                        if (newQuantity > product.stock) {
-                            alert(`⚠️ No se puede agregar más unidades. Stock disponible: ${product.stock}, Cantidad actual: ${currentQuantity}`);
-                            document.getElementById('barcode-input').focus();
-                            return;
-                        }
-
-                        quantityInput.value = newQuantity;
-
-                        // Validar la cantidad y actualizar resumen
-                        validateQuantityInput(quantityInput);
-                        updateOrderSummary();
-                    } else {
-                        // Si no existe, crear nueva fila de producto
-                        const newProductItem = productTemplate.cloneNode(true);
-
-                        // Seleccionar el producto en el dropdown
-                        const selectElement = newProductItem.querySelector('.product-select');
-                        for (let i = 0; i < selectElement.options.length; i++) {
-                            if (selectElement.options[i].value == product.id) {
-                                selectElement.selectedIndex = i;
-                                break;
-                            }
-                        }
-
-                        // Habilitar botón de eliminar
-                        const removeBtn = newProductItem.querySelector('.remove-product-btn');
-                        removeBtn.disabled = false;
-                        removeBtn.style.display = 'inline-block';
-
-                        // Inicializar el nuevo producto
-                        initializeProductItem(newProductItem);
-                        updateProductCodeDisplay(newProductItem);
-
-                        // Establecer cantidad predeterminada a 1
-                        newProductItem.querySelector('.quantity-input').value = '1';
-
-                        // Agregar a la lista
-                        productList.appendChild(newProductItem);
-
-                        // Actualizar resumen
-                        updateOrderSummary();
-                    }
+                    // Reutilizamos la función addProductToTable que ya maneja la lógica de agregar o incrementar.
+                    addProductToTable(product);
 
                     // Limpiar input de código de barras y devolver el cursor
-                    document.getElementById('barcode-input').value = '';
-                    document.getElementById('barcode-input').focus();
+                    this.value = '';
+                    this.focus();
                 })
                 .catch(error => {
-                    alert('Error: ' + error.message);
-                    document.getElementById('barcode-input').focus();
+                    toastr.error(error.message, 'Error');
+                    this.focus();
                 });
-        });
-
-        // Permitir agregar producto con Enter en el input de código de barras
-        document.getElementById('barcode-input').addEventListener('keypress', function(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                document.getElementById('scan-barcode-btn').click();
-            }
         });
 
         // --- Lógica del Modal de Pago ---

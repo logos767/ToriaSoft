@@ -6,7 +6,7 @@
     <style>
         @page {
             size: A4;
-            margin: 1.5cm;
+            margin: 0.5cm;
         }
         body {
             font-family: 'Helvetica', 'Arial', sans-serif;
@@ -38,10 +38,10 @@
             color: #555;
         }
         .info-section {
-            margin-bottom: 20px;
+            margin-bottom: 10px;
             border: 1px solid #ddd;
             border-radius: 8px;
-            padding: 15px;
+            padding: 10px;
         }
         .info-section h2 {
             margin-top: 0;
@@ -54,7 +54,7 @@
         .info-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 15px;
+            gap: 10px;
         }
         .info-item p {
             margin: 0 0 5px;
@@ -67,11 +67,11 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
+            margin-top: 10px;
         }
         th, td {
             border: 1px solid #ddd;
-            padding: 8px;
+            padding: 4px;
             text-align: left;
         }
         thead {
@@ -87,7 +87,7 @@
 
         .footer {
             position: fixed;
-            bottom: -1cm;
+            bottom: 0;
             left: 0;
             right: 0;
             text-align: center;
@@ -99,24 +99,24 @@
 <body>
     <div class="header">
         <div>
-            {% if company_info and company_info.logo_filename %}
-                <img src="{{ url_for('static', filename=company_info.logo_filename, _external=True) }}" alt="Logo">
+            {% if logo_path %}
+                <img src="{{ logo_path }}" alt="Logo de la empresa">
             {% endif %}
         </div>
         <div class="header-text">
             <h1>Reporte de Traslado</h1>
-            <p>ID de Traslado: #{{ transfer.id }}</p>
+            <p>Código de Traslado: <strong>{{ transfer.transfer_code or ('#' ~ transfer.id) }}</strong></p>
         </div>
     </div>
 
     <div class="info-section">
         <h2>Detalles del Traslado</h2>
-        <div class="info-grid">
+        <div class="info-grid" style="grid-column: 2;">
             <div class="info-item"><strong>Desde Almacén (Origen):</strong> {{ from_warehouse.name }}</div>
             <div class="info-item"><strong>Hacia Almacén (Destino):</strong> {{ to_warehouse.name }}</div>
             <div class="info-item"><strong>Fecha y Hora:</strong> {{ transfer.date | ve_datetime('%d/%m/%Y %H:%M') }}</div>
             <div class="info-item"><strong>Realizado por:</strong> {{ transfer.user.username }}</div>
-            <div class="info-item" style="grid-column: 1 / -1;"><strong>Motivo:</strong> {{ transfer.reason }}</div>
+            <div class="info-item"><strong>Motivo:</strong> {{ transfer.reason }}</div>
         </div>
     </div>
 
@@ -124,20 +124,18 @@
     <table>
         <thead>
             <tr>
-                <th style="width: 40%;">Producto</th>
-                <th>Código</th>
                 <th>Cód. Barras</th>
+                <th style="width: 50%;">Producto</th>
                 <th class="text-center">Cantidad</th>
-                <th class="text-right">Costo Unit. ($)</th>
-                <th class="text-right">Costo Total ($)</th>
+                <th class="text-right">Costo/U.($)</th>
+                <th class="text-right">Total ($)</th>
             </tr>
         </thead>
         <tbody>
             {% for movement in movements %}
             <tr>
-                <td>{{ movement.product.name }}</td>
-                <td class="mono">{{ movement.product.codigo_producto or 'N/A' }}</td>
                 <td class="mono">{{ movement.product.barcode }}</td>
+                <td style="font-size: 9pt;">{{ movement.product.codigo_producto or 'N/A' }} - {{ movement.product.name }}</td>
                 <td class="text-center">{{ movement.quantity }}</td>
                 <td class="text-right mono">{{ "%.2f"|format(movement.product.cost_usd or 0) }}</td>
                 <td class="text-right mono">{{ "%.2f"|format(movement.quantity * (movement.product.cost_usd or 0)) }}</td>
@@ -146,7 +144,7 @@
         </tbody>
         <tfoot>
             <tr>
-                <td colspan="5" class="text-right"><strong>Costo Total del Traslado (USD)</strong></td>
+                <td colspan="4" class="text-right"><strong>Costo Total del Traslado (USD)</strong></td>
                 <td class="text-right mono"><strong>{{ "%.2f"|format(total_cost_usd) }}</strong></td>
             </tr>
         </tfoot>

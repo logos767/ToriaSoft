@@ -63,11 +63,34 @@
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre / Marca</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Códigos</th>
+                            {% set next_order_name = 'desc' if sort_by == 'name' and sort_order == 'asc' else 'asc' %}
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <a href="{{ url_for('main.inventory_list', search=filters.search, group=filters.group, sort_by='name', sort_order=next_order_name) }}" class="hover:text-blue-600">
+                                    Nombre / Marca
+                                    {% if sort_by == 'name' %}
+                                        <i class="fas fa-arrow-{{ 'up' if sort_order == 'asc' else 'down' }} ml-1"></i>
+                                    {% endif %}
+                                </a>
+                            </th>
+                            {% set next_order_barcode = 'desc' if sort_by == 'barcode' and sort_order == 'asc' else 'asc' %}
+                            {% set next_order_codigo = 'desc' if sort_by == 'codigo_producto' and sort_order == 'asc' else 'asc' %}
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Códigos
+                                <a href="{{ url_for('main.inventory_list', search=filters.search, group=filters.group, sort_by='barcode', sort_order=next_order_barcode) }}" class="hover:text-blue-600 ml-2" title="Ordenar por Cód. Barra">
+                                    <i class="fas fa-barcode"></i>
+                                    {% if sort_by == 'barcode' %}
+                                        <i class="fas fa-arrow-{{ 'up' if sort_order == 'asc' else 'down' }} ml-1"></i>
+                                    {% endif %}
+                                </a>
+                                <a href="{{ url_for('main.inventory_list', search=filters.search, group=filters.group, sort_by='codigo_producto', sort_order=next_order_codigo) }}" class="hover:text-blue-600 ml-2" title="Ordenar por Cód. Producto">
+                                    <i class="fas fa-tag"></i>
+                                    {% if sort_by == 'codigo_producto' %}
+                                        <i class="fas fa-arrow-{{ 'up' if sort_order == 'asc' else 'down' }} ml-1"></i>
+                                    {% endif %}
+                                </a>
+                            </th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grupo</th>
-                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Existencia</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Costo ({{ currency_symbol }})</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Exist.</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Precio ({{ currency_symbol }})</th>
                             <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                         </tr>
@@ -86,13 +109,6 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.grupo or '' }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-bold {% if product.stock <= 0 %}text-red-500{% elif product.stock < 10 %}text-yellow-500{% else %}text-green-500{% endif %}">
                                 {{ product.stock }}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-500">
-                                {% if user_role == 'administrador' %}
-                                    {{ currency_symbol }}{{ "%.2f"|format(product.cost_usd) }}
-                                {% else %}
-                                    <span class="text-gray-400">***</span>
-                                {% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900 font-semibold">{{ currency_symbol }}{{ "%.2f"|format(product.price_usd) }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">

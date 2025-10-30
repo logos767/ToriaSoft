@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-2xl">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-pencil-alt mr-2"></i>{{ title }}</h1>
+        <a href="{{ url_for('main.product_detail', product_id=product.id) }}" class="text-blue-500 hover:underline">
+            <i class="fas fa-arrow-left mr-1"></i> Volver a Detalles
+        </a>
+    </div>
+
+    <div class="bg-white p-8 rounded-lg shadow-md">
+        <form method="POST" action="{{ url_for('main.edit_product', product_id=product.id) }}" enctype="multipart/form-data">
+            
+            <!-- Campos no editables -->
+            <div class="bg-gray-100 p-4 rounded-lg mb-6 border border-gray-200">
+                <h3 class="font-bold text-gray-700 mb-2">Códigos</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <p class="font-semibold text-gray-600">Código de Barras:</p>
+                        <p class="font-mono text-gray-800">{{ product.barcode }}</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-gray-600">Código de Producto:</p>
+                        <p class="font-mono text-gray-800">{{ product.codigo_producto or 'N/A' }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Campos editables -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="md:col-span-2">
+                    <label for="name" class="block text-gray-700 font-bold mb-2">Nombre del Producto</label>
+                    <input type="text" id="name" name="name" value="{{ product.name }}" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="md:col-span-2">
+                    <label for="description" class="block text-gray-700 font-bold mb-2">Descripción</label>
+                    <textarea id="description" name="description" rows="3" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">{{ product.description or '' }}</textarea>
+                </div>
+                <div class="md:col-span-2">
+                    <label for="image_file" class="block text-gray-700 font-bold mb-2">Cambiar Imagen del Producto</label>
+                    {% if product.image_url %}
+                    <div class="mb-2">
+                        <img src="{{ product.image_url }}" alt="Imagen actual" class="h-24 w-auto rounded-lg shadow">
+                        <p class="text-xs text-gray-500 mt-1">Imagen actual</p>
+                    </div>
+                    {% endif %}
+                    <input type="file" id="image_file" name="image_file" accept="image/png, image/jpeg, image/jpg" class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none">
+                </div>
+                <div>
+                    <label for="marca" class="block text-gray-700 font-bold mb-2">Marca</label>
+                    <input type="text" id="marca" name="marca" value="{{ product.marca or '' }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label for="grupo" class="block text-gray-700 font-bold mb-2">Grupo</label>
+                    <input type="text" id="grupo" name="grupo" value="{{ product.grupo or '' }}" list="product-groups-list" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <datalist id="product-groups-list">
+                        {% for group in product_groups %}<option value="{{ group }}">{% endfor %}
+                    </datalist>
+                </div>
+                <div>
+                    <label for="size" class="block text-gray-700 font-bold mb-2">Talla</label>
+                    <input type="text" id="size" name="size" value="{{ product.size or '' }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label for="color" class="block text-gray-700 font-bold mb-2">Color</label>
+                    <input type="text" id="color" name="color" value="{{ product.color or '' }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end mt-8">
+                <a href="{{ url_for('main.product_detail', product_id=product.id) }}" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors mr-4">Cancelar</a>
+                <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline"><i class="fas fa-save mr-2"></i>Guardar Cambios</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

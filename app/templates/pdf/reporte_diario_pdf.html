@@ -188,10 +188,8 @@
                 </tr>
             </thead>
             <tbody>
-                <tr><td>Saldo Inicial del Día</td><td class="text-right">Bs. {{ "{:,.2f}".format(account.initial_balance_ves) }}</td></tr>
                 <tr><td style="padding-left: 25px;">(+) Entradas</td><td class="text-right positive">Bs. {{ "{:,.2f}".format(account.inflows_ves) }}</td></tr>
                 <tr><td style="padding-left: 25px;">(-) Salidas</td><td class="text-right negative">(Bs. {{ "{:,.2f}".format(account.outflows_ves) }})</td></tr>
-                <tr style="font-weight: bold; background-color: #f2f2f2;"><td>Saldo Final del Día</td><td class="text-right">Bs. {{ "{:,.2f}".format(account.final_balance_ves) }}</td></tr>
             </tbody>
         </table>
         {% endfor %}

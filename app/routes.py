@@ -1,5 +1,6 @@
 import os
 import secrets
+from pathlib import Path
 import requests
 from pywebpush import webpush, WebPushException
 import firebase_admin
@@ -106,6 +107,27 @@ def save_picture(form_picture):
     form_picture.save(picture_path)
 
     return picture_fn
+
+def save_product_image(form_picture):
+    """Guarda la imagen de un producto y retorna la ruta relativa para la URL."""
+    random_hex = secrets.token_hex(8)
+    _, f_ext = os.path.splitext(form_picture.filename)
+    picture_fn = random_hex + f_ext
+    
+    # La ruta donde se guardará el archivo
+    picture_path = os.path.join(current_app.root_path, 'static/product_images', picture_fn)
+
+    # Crear el directorio si no existe
+    os.makedirs(os.path.dirname(picture_path), exist_ok=True)
+
+    # Guardar la imagen
+    form_picture.save(picture_path)
+
+    # Retornar la ruta que se usará en la URL
+    # ej: 'product_images/abcdef12.png'
+    return f'product_images/{picture_fn}'
+
+
 # --- INICIO DE SECCIÓN DE TASAS DE CAMBIO ---
 
 def obtener_tasas_exchangerate_api():
@@ -734,6 +756,8 @@ def profile_details():
 def inventory_list():
     search_term = request.args.get('search', '').strip()
     group_filter = request.args.get('group', '').strip()
+    sort_by = request.args.get('sort_by', 'name')
+    sort_order = request.args.get('sort_order', 'asc')
 
     query = Product.query
 
@@ -750,7 +774,17 @@ def inventory_list():
             Product.size.ilike(search_pattern)
         ))
 
-    products = query.order_by(Product.name).all()
+    # Lógica de ordenación
+    valid_sort_columns = {
+        'name': Product.name,
+        'barcode': Product.barcode,
+        'codigo_producto': Product.codigo_producto
+    }
+    sort_column = valid_sort_columns.get(sort_by, Product.name)
+
+    products = query.order_by(
+        sort_column.desc() if sort_order == 'desc' else sort_column.asc()
+    ).all()
     
     # Obtener todos los grupos únicos para el menú desplegable de filtro
     groups = db.session.query(Product.grupo).distinct().order_by(Product.grupo).all()
@@ -762,7 +796,9 @@ def inventory_list():
                            products=products,
                            user_role=user_role,
                            product_groups=product_groups,
-                           filters={'search': search_term, 'group': group_filter})
+                           filters={'search': search_term, 'group': group_filter},
+                           sort_by=sort_by,
+                           sort_order=sort_order)
 
 @routes_blueprint.route('/inventario/codigos_barra', methods=['GET'])
 @login_required
@@ -1273,8 +1309,12 @@ def adjustment_result(adjustment_id):
 @routes_blueprint.route('/inventario/producto/<int:product_id>')
 @login_required
 def product_detail(product_id):
-    product = Product.query.get_or_404(product_id)
+    product = Product.query.options(
+        joinedload(Product.stock_levels).joinedload(ProductStock.warehouse)
+    ).get_or_404(product_id)
     return render_template('inventario/detalle_producto.html', title=product.name, product=product)
+
+
 
 @routes_blueprint.route('/inventario/nuevo', methods=['GET', 'POST'])
 @login_required
@@ -1311,6 +1351,48 @@ def new_product():
             db.session.rollback()
             flash(f'Error al crear el producto: {str(e)}', 'danger')
     return render_template('inventario/nuevo.html', title='Nuevo Producto')
+
+@routes_blueprint.route('/inventario/editar/<int:product_id>', methods=['GET', 'POST'])
+@login_required
+def edit_product(product_id):
+    if not is_gerente(): # Solo Superusuario y Gerente pueden editar
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.inventory_list'))
+
+    product = Product.query.get_or_404(product_id)
+
+    if request.method == 'POST':
+        try:
+            # Manejar la subida de la imagen
+            if 'image_file' in request.files:
+                image_file = request.files['image_file']
+                if image_file.filename != '':
+                    image_path = save_product_image(image_file)
+                    product.image_url = url_for('static', filename=image_path)
+
+            # Actualizar campos desde el formulario
+            product.name = request.form.get('name')
+            product.description = request.form.get('description')
+            product.size = request.form.get('size')
+            product.color = request.form.get('color')
+            product.marca = request.form.get('marca')
+            product.grupo = request.form.get('grupo')
+
+            db.session.commit()
+            flash(f'Producto "{product.name}" actualizado exitosamente.', 'success')
+            return redirect(url_for('main.product_detail', product_id=product.id))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error al actualizar el producto: {e}', 'danger')
+
+    # Obtener todos los grupos para el dropdown
+    groups = db.session.query(Product.grupo).distinct().order_by(Product.grupo).all()
+    product_groups = [g[0] for g in groups if g[0]]
+
+    return render_template('inventario/editar_producto.html', 
+                           title=f'Editar {product.name}', 
+                           product=product,
+                           product_groups=product_groups)
 
 # Rutas de clientes
 @routes_blueprint.route('/clientes/lista')
@@ -4321,23 +4403,32 @@ def warehouse_transfer():
             reason = request.form.get('reason')
             product_ids = request.form.getlist('product_id[]')
             quantities = request.form.getlist('quantity[]')
+            comments = request.form.getlist('comment[]') # Capturar los comentarios
 
-            if not all([from_warehouse_id, to_warehouse_id, reason, product_ids, quantities]):
+            if not all([from_warehouse_id, to_warehouse_id, reason, product_ids, quantities, comments]):
                 raise ValueError("Todos los campos son obligatorios.")
             if from_warehouse_id == to_warehouse_id:
                 raise ValueError("El almacén de origen y destino no pueden ser el mismo.")
+            
+            # Generar el código de traslado usando la nueva secuencia
+            # La secuencia 'warehouse_transfer_code_seq' debe ser creada en la BD
+            # y configurada para que inicie en 1807001.
+            next_val = db.session.execute(text("SELECT nextval('warehouse_transfer_code_seq')")).scalar()
+            transfer_code = f"TR{next_val}"
 
             # Crear el registro principal del traslado
             transfer = WarehouseTransfer(
                 reason=reason,
-                user_id=current_user.id
+                user_id=current_user.id,
+                transfer_code=transfer_code
             )
             db.session.add(transfer)
             db.session.flush() # Para obtener el ID del traslado
 
-            for p_id, qty_str in zip(product_ids, quantities):
+            for i, (p_id, qty_str) in enumerate(zip(product_ids, quantities)):
                 product_id = int(p_id)
                 quantity = int(qty_str)
+                comment = comments[i]
 
                 if quantity <= 0: continue
 
@@ -4356,8 +4447,8 @@ def warehouse_transfer():
                 destination_stock.quantity += quantity
 
                 # Registrar movimientos
-                movement_out = Movement(product_id=product_id, type='Salida', warehouse_id=from_warehouse_id, quantity=quantity, document_id=transfer.id, document_type='Traslado de Almacén', description=f"Hacia almacén ID {to_warehouse_id}")
-                movement_in = Movement(product_id=product_id, type='Entrada', warehouse_id=to_warehouse_id, quantity=quantity, document_id=transfer.id, document_type='Traslado de Almacén', description=f"Desde almacén ID {from_warehouse_id}")
+                movement_out = Movement(product_id=product_id, type='Salida', warehouse_id=from_warehouse_id, quantity=quantity, document_id=transfer.id, document_type='Traslado de Almacén', description=f"Hacia almacén ID {to_warehouse_id}", comment=comment)
+                movement_in = Movement(product_id=product_id, type='Entrada', warehouse_id=to_warehouse_id, quantity=quantity, document_id=transfer.id, document_type='Traslado de Almacén', description=f"Desde almacén ID {from_warehouse_id}", comment=comment)
                 db.session.add_all([movement_out, movement_in])
 
             db.session.commit()
@@ -4433,6 +4524,11 @@ def print_transfer_report(transfer_id):
     to_warehouse = Warehouse.query.get(to_warehouse_id)
     generation_date = get_current_time_ve().strftime('%d/%m/%Y %H:%M:%S')
     company_info = CompanyInfo.query.first()
+    logo_path = None
+    if company_info and company_info.logo_filename:
+        # Construir la ruta absoluta y convertirla a una URI de archivo compatible
+        absolute_path = Path(current_app.root_path) / 'static' / company_info.logo_filename
+        logo_path = absolute_path.as_uri()
 
     # Calcular el costo total del traslado
     total_cost_usd = sum(m.quantity * (m.product.cost_usd or 0) for m in movements)
@@ -4442,7 +4538,8 @@ def print_transfer_report(transfer_id):
                                   from_warehouse=from_warehouse, to_warehouse=to_warehouse,
                                   generation_date=generation_date,
                                   company_info=company_info,
-                                  total_cost_usd=total_cost_usd)
+                                  total_cost_usd=total_cost_usd,
+                                  logo_path=logo_path)
     
     pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
     return Response(pdf_file, mimetype='application/pdf', headers={'Content-Disposition': f'inline; filename=reporte_traslado_{transfer.id}.pdf'})
@@ -4516,9 +4613,43 @@ def api_search_products_for_transfer():
     stock_subquery = db.session.query(ProductStock.quantity).filter(ProductStock.product_id == Product.id, ProductStock.warehouse_id == from_warehouse_id).as_scalar()
 
     products = db.session.query(Product, func.coalesce(stock_subquery, 0).label('stock_in_warehouse')).filter(
-        or_(Product.name.ilike(search_pattern), Product.barcode.ilike(search_pattern))
+        or_(
+            Product.name.ilike(search_pattern), 
+            Product.barcode.ilike(search_pattern),
+            Product.codigo_producto.ilike(search_pattern) # Añadido: buscar por código de producto
+        )
     ).limit(10).all()
 
-    results = [{'id': p.id, 'name': p.name, 'barcode': p.barcode, 'stock': stock} for p, stock in products]
+    results = [{'id': p.id, 'name': p.name, 'barcode': p.barcode, 'codigo_producto': p.codigo_producto, 'stock': stock} for p, stock in products]
+    
+    return jsonify(products=results)
+
+@routes_blueprint.route('/api/search_products_for_sale')
+@login_required
+def api_search_products_for_sale():
+    """
+    API para buscar productos por nombre, código de barras o código de producto para la venta.
+    Solo devuelve productos con stock en el almacén principal (Tienda, ID=1).
+    """
+    query_str = request.args.get('q', '').strip()
+
+    if len(query_str) < 2:
+        return jsonify(products=[])
+
+    search_pattern = f'%{query_str}%'
+    
+    # Subconsulta para obtener el stock del almacén de tienda (ID=1)
+    stock_subquery = db.session.query(ProductStock.quantity).filter(ProductStock.product_id == Product.id, ProductStock.warehouse_id == 1).as_scalar()
+
+    products_with_stock = db.session.query(Product, func.coalesce(stock_subquery, 0).label('stock_in_warehouse')).filter(
+        or_(
+            Product.name.ilike(search_pattern), 
+            Product.barcode.ilike(search_pattern),
+            Product.codigo_producto.ilike(search_pattern)
+        ),
+        func.coalesce(stock_subquery, 0) > 0  # Solo productos con stock en tienda
+    ).limit(10).all()
+
+    results = [{'id': p.id, 'name': p.name, 'barcode': p.barcode, 'codigo_producto': p.codigo_producto, 'price_usd': p.price_usd, 'stock': stock} for p, stock in products_with_stock]
     
     return jsonify(products=results)

@@ -325,6 +325,7 @@ class Movement(db.Model):
     document_id = db.Column(db.BigInteger, nullable=True) # ID de la orden, compra, etc.
     document_type = db.Column(db.String(50), nullable=True) # 'Orden de Venta', 'Orden de Compra', 'Ajuste'
     description = db.Column(db.String(255), nullable=True) # Para comentarios de ajuste, etc.
+    comment = db.Column(db.String(255), nullable=True) # Comentario específico del item en el movimiento
     related_party_id = db.Column(db.Integer, nullable=True) # ID del cliente o proveedor
     related_party_type = db.Column(db.String(50), nullable=True) # 'Cliente', 'Proveedor'
     
@@ -345,6 +346,7 @@ class ProductStock(db.Model):
 
 class WarehouseTransfer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    transfer_code = db.Column(db.String(50), unique=True, nullable=True)
     date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
     reason = db.Column(db.String(255), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
