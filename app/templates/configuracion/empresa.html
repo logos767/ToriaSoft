@@ -1,38 +1,62 @@
 {% extends "base.html" %}
+{% from "_form_helpers.html" import render_field %}
 
 {% block content %}
-<div class="container mx-auto p-4 max-w-2xl">
-    <h1 class="text-3xl font-bold text-gray-800 mb-6"><i class="fas fa-cogs mr-2"></i>Configuración de Empresa</h1>
-    <div class="bg-white p-6 rounded-lg shadow-md">
+<div class="container mx-auto p-4 max-w-4xl">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-building mr-2"></i>Configuración de la Empresa</h1>
+    </div>
+
+    <div class="bg-white p-8 rounded-lg shadow-md">
         <form method="POST" action="{{ url_for('main.company_settings') }}" enctype="multipart/form-data">
-            <div class="mb-4">
-                <label for="name" class="block text-gray-700 font-bold mb-2">Nombre de la Empresa</label>
-                <input type="text" id="name" name="name" value="{{ company_info.name if company_info }}" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+            {{ form.hidden_tag() }}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Columna Izquierda -->
+                <div class="space-y-4">
+                    <div>
+                        <label for="name" class="block text-gray-700 font-bold mb-2">Nombre de la Empresa</label>
+                        {{ form.name(class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500", id="name") }}
+                    </div>
+                    <div>
+                        <label for="rif" class="block text-gray-700 font-bold mb-2">RIF</label>
+                        {{ form.rif(class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500", id="rif") }}
+                    </div>
+                    <div>
+                        <label for="phone_numbers" class="block text-gray-700 font-bold mb-2">Teléfonos</label>
+                        {{ form.phone_numbers(class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500", id="phone_numbers") }}
+                    </div>
+                    <div>
+                        <label for="calculation_currency" class="block text-gray-700 font-bold mb-2">Moneda de Cálculo Principal</label>
+                        {{ form.calculation_currency(class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500", id="calculation_currency") }}
+                        <p class="text-sm text-gray-500 mt-1">Esta moneda se usará para los reportes y cálculos de rentabilidad.</p>
+                    </div>
+                </div>
+
+                <!-- Columna Derecha -->
+                <div class="space-y-4">
+                    <div>
+                        <label for="address" class="block text-gray-700 font-bold mb-2">Dirección</label>
+                        {{ form.address(rows=4, class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500", id="address") }}
+                    </div>
+                    <div>
+                        <label for="logo_file" class="block text-gray-700 font-bold mb-2">Logo de la Empresa</label>
+                        <div class="flex items-center space-x-4">
+                            {% if company_info and company_info.logo_filename %}
+                                <img src="{{ url_for('static', filename=company_info.logo_filename) }}" alt="Logo Actual" class="h-16 w-16 object-contain border p-1 rounded">
+                            {% else %}
+                                <div class="h-16 w-16 bg-gray-100 flex items-center justify-center rounded border text-gray-400 text-xs">Sin Logo</div>
+                            {% endif %}
+                            {{ form.logo_file(class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100", id="logo_file") }}
+                        </div>
+                        <p class="text-sm text-gray-500 mt-1">Suba un nuevo archivo para reemplazar el logo actual.</p>
+                    </div>
+                </div>
             </div>
-            <div class="mb-4">
-                <label for="rif" class="block text-gray-700 font-bold mb-2">RIF</label>
-                <input type="text" id="rif" name="rif" value="{{ company_info.rif if company_info }}" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-            </div>
-            <div class="mb-4">
-                <label for="address" class="block text-gray-700 font-bold mb-2">Dirección (opcional)</label>
-                <textarea id="address" name="address" rows="3" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">{{ company_info.address if company_info }}</textarea>
-            </div>
-            <div class="mb-4">
-                <label for="phone_numbers" class="block text-gray-700 font-bold mb-2">Números de Teléfono (separados por comas)</label>
-                <input type="text" id="phone_numbers" name="phone_numbers" value="{{ company_info.phone_numbers if company_info }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-            </div>
-            <div class="mb-6">
-                <label for="logo_file" class="block text-gray-700 font-bold mb-2">Logo de la Empresa (opcional)</label>
-                <input type="file" id="logo_file" name="logo_file" accept="image/*" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                {% if company_info and company_info.logo_filename %}
-                <p class="text-sm text-gray-600 mt-2">Logo actual: 
-                    <img src="{{ url_for('static', filename=company_info.logo_filename) }}" alt="Logo actual" class="h-8 inline-block ml-2">
-                </p>
-                {% endif %}
-            </div>
-            <div class="flex items-center justify-end">
+
+            <div class="flex items-center justify-end mt-8 border-t pt-6">
                 <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
-                    <i class="fas fa-save mr-2"></i>Guardar Configuración
+                    <i class="fas fa-save mr-2"></i>Guardar Cambios
                 </button>
             </div>
         </form>

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual de Usuario - ToriaSoft</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Estilos para la barra de desplazamiento */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        html {
+            scroll-behavior: smooth;
+        }
+        .screenshot-placeholder {
+            border: 2px dashed #cbd5e1;
+            background-color: #f8fafc;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+            text-align: center;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 0.5rem;
+        }
+        .role-badge {
+            display: inline-block;
+            padding: 0.2em 0.6em;
+            font-size: 0.75em;
+            font-weight: 700;
+            line-height: 1;
+            text-align: center;
+            white-space: nowrap;
+            vertical-align: baseline;
+            border-radius: 0.25rem;
+            margin: 0 0.1rem;
+        }
+        .role-superusuario { background-color: #7c3aed; color: white; }
+        .role-gerente { background-color: #db2777; color: white; }
+        .role-administrador { background-color: #2563eb; color: white; }
+        .role-vendedor { background-color: #16a34a; color: white; }
+        .role-todos { background-color: #475569; color: white; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+<div class="flex min-h-screen">
+    <!-- Barra lateral de navegación -->
+    <aside class="w-64 bg-gray-800 text-white p-4 fixed h-full overflow-y-auto">
+        <h2 class="text-xl font-bold mb-4">ToriaSoft Manual</h2>
+        <nav>
+            <ul class="space-y-2">
+                <li><a href="#introduccion" class="block hover:bg-gray-700 p-2 rounded">Introducción</a></li>
+                <li><a href="#roles" class="block hover:bg-gray-700 p-2 rounded">Roles de Usuario</a></li>
+                <li><a href="#autenticacion" class="block hover:bg-gray-700 p-2 rounded">Autenticación</a></li>
+                <li><a href="#dashboard" class="block hover:bg-gray-700 p-2 rounded">Dashboard</a></li>
+                <li><a href="#ventas" class="block hover:bg-gray-700 p-2 rounded">Módulo de Ventas</a></li>
+                <li><a href="#inventario" class="block hover:bg-gray-700 p-2 rounded">Módulo de Inventario</a></li>
+                <li><a href="#compras" class="block hover:bg-gray-700 p-2 rounded">Módulo de Compras</a></li>
+                <li><a href="#finanzas" class="block hover:bg-gray-700 p-2 rounded">Módulo de Finanzas</a></li>
+                <li><a href="#clientes" class="block hover:bg-gray-700 p-2 rounded">Módulo de Clientes</a></li>
+                <li><a href="#proveedores" class="block hover:bg-gray-700 p-2 rounded">Módulo de Proveedores</a></li>
+                <li><a href="#reportes" class="block hover:bg-gray-700 p-2 rounded">Reportes y Estadísticas</a></li>
+                <li><a href="#configuracion" class="block hover:bg-gray-700 p-2 rounded">Configuración</a></li>
+                <li><a href="#perfil" class="block hover:bg-gray-700 p-2 rounded">Perfil de Usuario</a></li>
+            </ul>
+        </nav>
+        <div class="mt-8 pt-4 border-t border-gray-600">
+            <a href="{{ url_for('main.login') }}" class="block text-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                <i class="fas fa-sign-in-alt mr-2"></i>Volver al Inicio
+            </a>
+        </div>
+    </aside>
+
+    <!-- Contenido principal -->
+    <main class="ml-64 p-8 w-full">
+        <div class="max-w-4xl mx-auto">
+
+            <section id="introduccion" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h1 class="text-3xl font-bold text-gray-800 mb-4 border-b pb-2">Bienvenido al Manual de ToriaSoft</h1>
+                <p class="text-gray-600">
+                    Este manual proporciona una guía completa para utilizar todas las funcionalidades del sistema de gestión ToriaSoft. Desde la creación de una venta hasta la generación de reportes financieros complejos, aquí encontrará toda la información necesaria para operar el sistema de manera eficiente.
+                </p>
+                <p class="mt-2 text-gray-600">
+                    Utilice el menú de navegación a la izquierda para saltar a la sección de su interés.
+                </p>
+            </section>
+
+            <section id="roles" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-users-cog mr-2"></i>Roles de Usuario</h2>
+                <p class="text-gray-600 mb-4">El sistema cuenta con diferentes roles, cada uno con permisos específicos para acceder a distintas funcionalidades:</p>
+                <ul class="space-y-3">
+                    <li><span class="role-badge role-superusuario">Superusuario</span>: Acceso total a todas las funcionalidades del sistema, incluyendo la configuración crítica de la empresa.</li>
+                    <li><span class="role-badge role-gerente">Gerente</span>: Acceso a la mayoría de las funcionalidades operativas y de reporte, como gestión de inventario, costos, finanzas y creación de usuarios.</li>
+                    <li><span class="role-badge role-administrador">administrador</span>: Acceso a módulos financieros, de compras, recepciones y ajustes de inventario. No tiene acceso a la configuración de costos.</li>
+                    <li><span class="role-badge role-vendedor">Vendedor</span>: Acceso limitado principalmente al módulo de creación de órdenes de venta y gestión de clientes.</li>
+                </ul>
+                <p class="mt-4 text-sm text-gray-500">A lo largo de este manual, se indicará qué roles tienen acceso a cada función.</p>
+            </section>
+
+            <section id="autenticacion" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-key mr-2"></i>Autenticación</h2>
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Inicio de Sesión</h3>
+                <p class="text-gray-600">Para acceder al sistema, debe ingresar su nombre de usuario y contraseña en la pantalla de inicio. Si los datos son correctos, será redirigido a su página principal (Dashboard para administradores, Nueva Orden para vendedores).</p>
+                <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
+                    <img src="{{ url_for('static', filename='img/manual_usuario/login.png') }}" alt="Captura de pantalla de la página de inicio de sesión" class="w-full">
+                </div>
+                <h3 class="text-xl font-semibold text-gray-700 mt-4 mb-2">Cierre de Sesión</h3>
+                <p class="text-gray-600">Para salir del sistema de forma segura, haga clic en su imagen de perfil en la esquina superior derecha y seleccione "Cerrar Sesión".</p>
+            </section>
+
+            <section id="dashboard" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-tachometer-alt mr-2"></i>Dashboard</h2>
+                <p class="mb-4"><span class="role-badge role-administrador">administrador</span> <span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">El Dashboard es la página principal para los roles administrativos. Ofrece una vista general y en tiempo real del estado del negocio, incluyendo:</p>
+                <ul class="list-disc list-inside text-gray-600 space-y-2 mt-4">
+                    <li><strong>Métricas Generales:</strong> Total de productos, existencias totales, valor del inventario y número de clientes.</li>
+                    <li><strong>Cuentas por Cobrar:</strong> Total de clientes con deudas y el monto total adeudado en USD.</li>
+                    <li><strong>Estadísticas de Órdenes:</strong> Resumen de ventas (cantidad y monto) para el día actual, el mes en curso y el histórico total.</li>
+                    <li><strong>Movimientos del Día:</strong> Un resumen de los ingresos y egresos por cada cuenta bancaria y caja de efectivo.</li>
+                    <li><strong>Gráficos Financieros:</strong> Gráficos de dona que muestran la composición de ventas y gastos para el día y el mes actual.</li>
+                    <li><strong>Actividad Reciente:</strong> Listas de los últimos productos agregados y las últimas órdenes creadas.</li>
+                </ul>
+                <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
+                    <img src="{{ url_for('static', filename='img/manual_usuario/dashboard.png') }}" alt="Captura de pantalla del Dashboard" class="w-full">
+                </div>
+            </section>
+
+            <section id="ventas" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-shopping-cart mr-2"></i>Módulo de Ventas</h2>
+                
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Crear Nueva Orden de Venta</h3>
+                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
+                <p class="text-gray-600">Esta es la pantalla principal para registrar ventas. El proceso es el siguiente:</p>
+                <ol class="list-decimal list-inside text-gray-600 space-y-2 mt-4">
+                    <li><strong>Seleccionar Cliente:</strong> Busque un cliente existente por nombre, cédula o RIF. Si el cliente no existe, el sistema le permitirá crearlo directamente desde esta pantalla.</li>
+                    <li><strong>Añadir Productos:</strong> Puede añadir productos de tres maneras:
+                        <ul class="list-disc list-inside ml-6 mt-2">
+                            <li>Escaneando el código de barras del producto.</li>
+                            <li>Buscando el producto por nombre o código.</li>
+                            <li>Seleccionándolo manualmente de una lista desplegable.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Ajustar Cantidades y Precios:</strong> Modifique la cantidad de cada producto. Los gerentes y superusuarios también pueden editar el precio de venta en USD directamente en la orden.</li>
+                    <li><strong>Aplicar Descuento:</strong> Si es necesario, active la casilla de descuento e ingrese el monto en USD a descontar del total.</li>
+                    <li><strong>Seleccionar Tipo de Venta:</strong> Elija entre Venta Regular, Venta a Crédito o Apartado.</li>
+                    <li><strong>Procesar Pago:</strong> Haga clic en "Procesar Pago". Se abrirá un modal donde podrá registrar uno o varios métodos de pago (efectivo, transferencia, punto de venta, etc.) hasta cubrir el total de la orden. Para créditos y apartados, puede registrar un abono inicial o ninguno.</li>
+                    <li><strong>Finalizar Orden:</strong> Una vez verificados los pagos, haga clic en "Finalizar y Crear Orden". El sistema validará el stock en tiempo real y, si todo es correcto, creará la orden y le redirigirá a la página de impresión.</li>
+                </ol>
+                <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
+                    <img src="{{ url_for('static', filename='img/manual_usuario/nueva_orden.png') }}" alt="Captura de pantalla de la página de Nueva Orden" class="w-full">
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Lista de Órdenes</h3>
+                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
+                <p class="text-gray-600">Muestra un historial de todas las órdenes de venta. Puede filtrar por cliente, número de orden, estado y rango de fechas. Desde aquí puede acceder al detalle de cada orden.</p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Detalle de Orden e Impresión</h3>
+                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
+                <p class="text-gray-600">Muestra toda la información de una orden específica, incluyendo productos, montos, pagos realizados y saldo pendiente. Desde aquí se puede reimprimir la nota de entrega o el recibo.</p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Créditos y Apartados</h3>
+                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
+                <p class="text-gray-600">Las secciones de "Créditos" y "Apartados" en el menú principal le permiten ver y gestionar estas órdenes especiales. Puede acceder a sus detalles para registrar abonos adicionales.</p>
+            </section>
+
+            <section id="inventario" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-boxes mr-2"></i>Módulo de Inventario</h2>
+
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Lista de Inventario</h3>
+                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
+                <p class="text-gray-600">Muestra todos los productos registrados en el sistema. Permite buscar, filtrar por grupo y ordenar. Los roles con permisos pueden crear, editar y ver el detalle de cada producto desde aquí.</p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Crear y Editar Producto</h3>
+                <p class="mb-4"><span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">Formularios para añadir nuevos productos al sistema o modificar la información de uno existente (nombre, descripción, imagen, marca, grupo, etc.). El costo y precio se gestionan en la sección de Costos.</p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Existencias por Almacén</h3>
+                <p class="mb-4"><span class="role-badge role-administrador">administrador</span> <span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">Presenta una tabla con todos los productos y su cantidad de stock en cada uno de los almacenes definidos en el sistema. Permite generar un reporte en PDF para el conteo físico de inventario.</p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Ajuste de Inventario</h3>
+                <p class="mb-4"><span class="role-badge role-administrador">administrador</span> <span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">Herramienta para corregir las cantidades de stock del sistema y hacer que coincidan con el conteo físico real. Seleccione un almacén, y el sistema mostrará el stock teórico. Ingrese el stock real en las casillas correspondientes para los productos que necesiten ajuste y añada un motivo. El sistema generará un registro de ajuste y los movimientos de entrada o salida correspondientes.</p>
+                <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
+                    <img src="{{ url_for('static', filename='img/manual_usuario/ajuste_inventario.png') }}" alt="Captura de pantalla de la página de Ajuste de Inventario" class="w-full">
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Cargar Inventario desde Excel</h3>
+                <p class="mb-4"><span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">Permite crear o actualizar productos de forma masiva utilizando un archivo de Excel. Siga las instrucciones en pantalla sobre el formato de las columnas. Si el código de barras de un producto ya existe, el sistema le pedirá confirmar si desea sumar la nueva cantidad al stock existente.</p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Imprimir Códigos de Barra</h3>
+                <p class="mb-4"><span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">Genere etiquetas con códigos de barra para sus productos. Puede buscar y seleccionar múltiples productos. El sistema generará un PDF con una etiqueta por cada unidad en existencia del producto seleccionado, lista para imprimir.</p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Gestión de Almacenes y Traslados</h3>
+                <p class="mb-4"><span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">Desde "Gestión de Almacenes" puede crear y editar los almacenes de su empresa. La función "Traslado entre Almacenes" le permite mover stock de un almacén a otro, generando los registros de movimiento correspondientes y un reporte imprimible de la operación.</p>
+            </section>
+
+            <section id="compras" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-truck-loading mr-2"></i>Módulo de Compras</h2>
+                <p class="mb-4"><span class="role-badge role-administrador">administrador</span> <span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Órdenes de Compra</h3>
+                <p class="text-gray-600">Permite crear órdenes de compra a proveedores, especificando los productos, cantidades y costos. También puede registrar los pagos realizados por dicha compra, los cuales se reflejarán como egresos en las cuentas financieras.</p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Recepciones de Mercancía</h3>
+                <p class="text-gray-600">Cuando llega la mercancía de una orden de compra, utilice esta función para registrar su ingreso. Seleccione la orden de compra pendiente y especifique la cantidad recibida de cada producto y el almacén de destino. El sistema actualizará automáticamente el stock y el estado de la orden de compra (Recibida Parcialmente o Recibida).</p>
+                <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
+                    <img src="{{ url_for('static', filename='img/manual_usuario/nueva_recepcion.png') }}" alt="Captura de pantalla de la página de Nueva Recepción" class="w-full">
+                </div>
+            </section>
+
+            <section id="finanzas" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-university mr-2"></i>Módulo de Finanzas</h2>
+                <p class="mb-4"><span class="role-badge role-administrador">administrador</span> <span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Gestión de Cuentas</h3>
+                <p class="text-gray-600">En las secciones "Bancos", "Puntos de Venta" y "Cajas", puede crear y gestionar las cuentas financieras de la empresa. Para cada banco y caja, puede ver un historial detallado de todos los movimientos (ingresos y egresos).</p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Movimientos Manuales</h3>
+                <p class="text-gray-600">Permite registrar ingresos o egresos que no están directamente ligados a una venta o compra, como el pago de servicios, sueldos, etc. Estos movimientos afectarán los saldos de las cuentas correspondientes.</p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Retiros de Efectivo</h3>
+                <p class="text-gray-600">
+                    Cualquier usuario puede solicitar un retiro de efectivo desde una de las cajas. La solicitud quedará en estado "Pendiente".
+                    Los <span class="role-badge role-administrador">administrador</span>, <span class="role-badge role-gerente">Gerente</span> y <span class="role-badge role-superusuario">Superusuario</span> pueden ver y aprobar o rechazar estas solicitudes desde la sección "Retiros Pendientes".
+                    Al aprobar un retiro, el saldo de la caja se descuenta automáticamente y se puede imprimir un recibo de la operación.
+                </p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Cierre Diario</h3>
+                <p class="text-gray-600">
+                    Esta herramienta genera un reporte consolidado de la actividad financiera de un día específico. El reporte incluye:
+                    <ul class="list-disc list-inside text-gray-600 space-y-2 mt-2">
+                        <li>Resumen de ventas y costo de mercancía vendida.</li>
+                        <li>Desglose de pagos recibidos por método.</li>
+                        <li>Flujo de caja para cada cuenta (saldo inicial, ingresos, egresos, saldo final).</li>
+                        <li>Lista de retiros de efectivo aprobados en el día.</li>
+                    </ul>
+                    Puede visualizarlo en pantalla o generar un PDF completo.
+                </p>
+                <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
+                    <img src="{{ url_for('static', filename='img/manual_usuario/cierre_diario.png') }}" alt="Captura de pantalla del reporte de Cierre Diario" class="w-full">
+                </div>
+            </section>
+
+            <section id="clientes" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-user-friends mr-2"></i>Módulo de Clientes</h2>
+                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
+                <p class="text-gray-600">Permite gestionar la base de datos de clientes. Puede crear nuevos clientes, editar su información y ver el detalle de cada uno, incluyendo su historial de compras y su estado de cuenta (deudas pendientes). Desde el detalle del cliente, también puede registrar abonos a sus deudas.</p>
+            </section>
+
+            <section id="proveedores" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-dolly-flatbed mr-2"></i>Módulo de Proveedores</h2>
+                <p class="mb-4"><span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">Permite gestionar la base de datos de proveedores. Puede crear, editar y consultar la información de contacto de sus proveedores.</p>
+            </section>
+
+            <section id="reportes" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-chart-pie mr-2"></i>Reportes y Estadísticas</h2>
+                
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Estadísticas de Ventas</h3>
+                <p class="mb-4"><span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">Ofrece un análisis profundo de la rentabilidad del negocio. Puede filtrar por día, mes o un rango de fechas personalizado. Muestra gráficos y tablas con:</p>
+                <ul class="list-disc list-inside text-gray-600 space-y-2 mt-2">
+                    <li>Ventas, Costos y Utilidad Neta a lo largo del tiempo.</li>
+                    <li>Un resumen financiero (P&L) con utilidad bruta y neta.</li>
+                    <li>Ranking de los productos más vendidos y los clientes más frecuentes.</li>
+                </ul>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Reporte Mensual (PDF)</h3>
+                <p class="mb-4"><span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">Genera un completo reporte financiero en formato PDF para un mes y año específicos. Este reporte es ideal para cierres contables e incluye:</p>
+                <ul class="list-disc list-inside text-gray-600 space-y-2 mt-2">
+                    <li>Estado de Resultados (P&L) del mes.</li>
+                    <li>Gráfico de resumen de resultados.</li>
+                    <li>Ranking de productos más vendidos.</li>
+                    <li>Resumen de ventas por tipo (contado, crédito, apartado).</li>
+                    <li>Reporte de Cuentas por Cobrar pendientes al final del mes.</li>
+                    <li>Reporte de Cobros realizados durante el mes.</li>
+                    <li>Estado de Flujo de Fondos para cada cuenta bancaria y caja.</li>
+                </ul>
+            </section>
+
+            <section id="configuracion" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-cogs mr-2"></i>Configuración</h2>
+
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Información de la Empresa</h3>
+                <p class="mb-4"><span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">Aquí puede configurar los datos de su empresa (nombre, RIF, dirección, logo) que aparecerán en los reportes y notas de entrega impresas. También puede definir la moneda de cálculo principal del sistema (ej. USD).</p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Estructura de Costos</h3>
+                <p class="mb-4"><span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">
+                    Esta sección es fundamental para el cálculo de la rentabilidad. Aquí se definen los costos y gastos generales de la empresa:
+                    <ul class="list-disc list-inside text-gray-600 space-y-2 mt-2">
+                        <li><strong>Costos Fijos Mensuales:</strong> Alquiler, servicios, impuestos fijos.</li>
+                        <li><strong>Gastos Variables por Defecto:</strong> Porcentajes de comisión por venta y de marketing que se aplicarán a todos los productos, a menos que un producto tenga un valor específico.</li>
+                    </ul>
+                </p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Editar Costos de Producto</h3>
+                <p class="mb-4"><span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">
+                    Desde la "Lista de Costos", puede editar los parámetros financieros de cada producto individualmente:
+                    <ul class="list-disc list-inside text-gray-600 space-y-2 mt-2">
+                        <li><strong>Precio de Venta (USD):</strong> El precio final al público.</li>
+                        <li><strong>Costo de Flete por Unidad:</strong> Si un producto tiene un costo de transporte específico.</li>
+                        <li><strong>Ventas Mensuales Estimadas:</strong> Crucial para distribuir los costos fijos de la empresa entre los productos.</li>
+                        <li><strong>Gastos Variables Específicos:</strong> Puede definir porcentajes de venta o marketing específicos para este producto, que anularán los valores por defecto.</li>
+                    </ul>
+                    En esta pantalla también se muestra un análisis de <strong>Punto de Equilibrio</strong> para el producto, indicando cuántas unidades necesita vender para cubrir todos sus costos asociados.
+                </p>
+                <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
+                    <img src="{{ url_for('static', filename='img/manual_usuario/editar_costos_producto.png') }}" alt="Captura de pantalla de la edición de costos de un producto" class="w-full">
+                </div>
+            </section>
+
+            <section id="perfil" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-user-circle mr-2"></i>Perfil de Usuario</h2>
+                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
+                <p class="text-gray-600">Haciendo clic en su nombre en el menú lateral, puede acceder a su perfil para ver y editar su información personal, como nombre, datos de contacto, redes sociales, información bancaria y foto de perfil.</p>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+</body>
+</html>
