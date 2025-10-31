@@ -28,10 +28,10 @@
                     <input type="date" id="end_date" name="end_date" value="{{ filters.end_date or '' }}" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
                 </div>
                 <div class="flex space-x-2">
-                    <button type="submit" class="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <button type="submit" class="w-full inline-flex justify-center py-2 px-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                         <i class="fas fa-filter mr-2"></i>Filtrar
                     </button>
-                    <a href="{{ url_for('main.movement_list') }}" class="w-full inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <a href="{{ url_for('main.movement_list') }}" class="w-full inline-flex justify-center py-2 px-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                         Limpiar
                     </a>
                 </div>
@@ -44,19 +44,25 @@
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Documento</th>
+                        <th class="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                        <th class="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
+                        <th class="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                        <th class="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
+                        <th class="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Documento</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for movement in movements %}
                     <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ movement.date.strftime('%d/%m/%Y %H:%M') }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ movement.product.name }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <td class="px-2 py-1 whitespace-nowrap text-sm text-gray-500">{{ movement.date.strftime('%d/%m/%Y %H:%M') }}</td>
+                        <td class="px-2 py-1 whitespace-nowrap">
+                            <div class="text-sm font-medium text-gray-900">{{ movement.product.name }}</div>
+                            <div style="display: flex; align-items: center;">
+                                <div class="text-xs text-gray-500 mr-2"> COD: {{ movement.product.codigo_producto or 'N/A' }} </div>
+                                <p class="text-xs text-gray-800"><i class="fas fa-barcode w-4 inline-block text-left"></i> {{ movement.product.barcode }}</p>
+                            </div>
+                        </td>
+                        <td class="px-2 py-1 whitespace-nowrap text-sm">
                             {% if movement.type == 'Entrada' %}
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
                                     {{ movement.type }}
@@ -67,14 +73,35 @@
                                 </span>
                             {% endif %}
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ movement.quantity }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {{ movement.document_type }} #{{ movement.document_id }}
+                        <td class="px-2 py-1 whitespace-nowrap text-center text-sm text-gray-500">{{ movement.quantity }}</td>
+                        <td class="px-2 py-1 whitespace-nowrap text-sm text-gray-500">
+                            {% set doc_type = movement.document_type %}
+                            {% set doc_id = movement.document_id %}
+                            {% set url = None %}
+
+                            {% if 'Orden de Venta' in doc_type %}
+                                {% set url = url_for('main.order_detail', order_id=doc_id) %}
+                            {% elif 'Ajuste de Inventario' in doc_type %}
+                                {% set url = url_for('main.adjustment_result', adjustment_id=doc_id) %}
+                            {% elif 'Recepción de Compra' in doc_type %}
+                                {# Para recepciones, enlazamos al detalle de la compra asociada #}
+                                {% if movement.reception and movement.reception.purchase_id %}
+                                    {% set url = url_for('main.purchase_detail', purchase_id=movement.reception.purchase_id) %}
+                                {% endif %}
+                            {% elif 'Traslado de Almacén' in doc_type %}
+                                {% set url = url_for('main.transfer_detail', transfer_id=doc_id) %}
+                            {% elif 'Carga Masiva' in doc_type %}
+                                {% set url = url_for('main.bulk_load_detail', log_id=doc_id) %}
+                            {% endif %}
+
+                            {% if url %}<a href="{{ url }}" class="text-blue-600 hover:text-blue-800 hover:underline">{% endif %}
+                                {{ doc_type }} #{{ doc_id }}
+                            {% if url %}</a>{% endif %}
                         </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="5" class="px-6 py-4 text-center text-gray-500">No se encontraron movimientos con los filtros aplicados.</td>
+                        <td colspan="5" class="px-2 py-1 text-center text-gray-500">No se encontraron movimientos con los filtros aplicados.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-4xl">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-truck mr-2"></i>Detalles del Proveedor</h1>
+        <a href="{{ url_for('main.provider_list') }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver a la lista</a>
+    </div>
+
+    <div class="bg-white p-8 rounded-lg shadow-md space-y-8">
+
+        <!-- Sección de Información Básica -->
+        <div class="border-b pb-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Información Básica</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                <div><strong class="text-gray-500">Nombre:</strong><p class="text-gray-800">{{ provider.name }}</p></div>
+                <div><strong class="text-gray-500">RIF:</strong><p class="text-gray-800">{{ provider.tax_id or 'N/A' }}</p></div>
+                <div><strong class="text-gray-500">Teléfono:</strong><p class="text-gray-800">{{ provider.phone or 'N/A' }}</p></div>
+                <div><strong class="text-gray-500">Email:</strong><p class="text-gray-800">{{ provider.email or 'N/A' }}</p></div>
+                <div class="md:col-span-2"><strong class="text-gray-500">Dirección:</strong><p class="text-gray-800">{{ provider.address or 'N/A' }}</p></div>
+            </div>
+        </div>
+
+        <!-- Sección de Contacto Principal -->
+        <div class="border-b pb-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Contacto Principal</h2>
+            {% if provider.contact_person_name %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                <div><strong class="text-gray-500">Nombre:</strong><p class="text-gray-800">{{ provider.contact_person_name }}</p></div>
+                <div><strong class="text-gray-500">Teléfono:</strong><p class="text-gray-800">{{ provider.contact_person_phone or 'N/A' }}</p></div>
+                <div class="md:col-span-2"><strong class="text-gray-500">Email:</strong><p class="text-gray-800">{{ provider.contact_person_email or 'N/A' }}</p></div>
+            </div>
+            {% else %}
+            <p class="text-sm text-gray-500">No se ha registrado un contacto principal.</p>
+            {% endif %}
+        </div>
+
+        <!-- Sección de Información Bancaria -->
+        <div class="border-b pb-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Información Bancaria</h2>
+            {% if provider.bank_name %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                <div><strong class="text-gray-500">Banco:</strong><p class="text-gray-800">{{ provider.bank_name }}</p></div>
+                <div><strong class="text-gray-500">Nro. de Cuenta:</strong><p class="text-gray-800">{{ provider.bank_account_number or 'N/A' }}</p></div>
+                <div><strong class="text-gray-500">SWIFT/BIC:</strong><p class="text-gray-800">{{ provider.bank_swift_bic or 'N/A' }}</p></div>
+                <div><strong class="text-gray-500">IBAN:</strong><p class="text-gray-800">{{ provider.bank_iban or 'N/A' }}</p></div>
+            </div>
+            {% else %}
+            <p class="text-sm text-gray-500">No se ha registrado información bancaria.</p>
+            {% endif %}
+        </div>
+
+        <!-- Sección de Detalles del Negocio -->
+        <div>
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Detalles Adicionales</h2>
+            <div class="space-y-4 text-sm">
+                <div>
+                    <strong class="text-gray-500">Descripción del Negocio:</strong>
+                    <p class="text-gray-800 mt-1">{{ provider.business_description or 'N/A' }}</p>
+                </div>
+                <div>
+                    <strong class="text-gray-500">Términos de Pago:</strong>
+                    <p class="text-gray-800 mt-1">{{ provider.payment_terms or 'N/A' }}</p>
+                </div>
+                <div>
+                    <strong class="text-gray-500">Términos de Envío:</strong>
+                    <p class="text-gray-800 mt-1">{{ provider.shipping_terms or 'N/A' }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-end mt-8 border-t pt-6">
+            <a href="#" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
+                <i class="fas fa-edit mr-2"></i>Editar Proveedor
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

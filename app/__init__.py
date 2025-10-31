@@ -65,15 +65,15 @@ def create_initial_users(app):
 
         # Additional admin user
         if not User.query.filter_by(username='emarquez').first():
-            logger.info("Creating Contador emarquez...")
+            logger.info("Creating administrador emarquez...")
             hashed_password = bcrypt.generate_password_hash('admin1208').decode('utf-8')
-            users_to_add.append(User(username='emarquez', password=hashed_password, role='Contador'))
+            users_to_add.append(User(username='emarquez', password=hashed_password, role='Administrador'))
 
         # Additional admin user
         if not User.query.filter_by(username='mcastellanos').first():
-            logger.info("Creating Contador mcastellanos...")
+            logger.info("Creating administrador mcastellanos...")
             hashed_password = bcrypt.generate_password_hash('mg251807').decode('utf-8')
-            users_to_add.append(User(username='mcastellanos', password=hashed_password, role='Contador'))
+            users_to_add.append(User(username='mcastellanos', password=hashed_password, role='Administrador'))
 
 
         # Salesperson users
@@ -217,11 +217,11 @@ def create_app():
         # Inject role helper functions into all templates
         @app.context_processor
         def inject_role_helpers():
-            from .routes import is_superuser, is_gerente, is_contador, is_vendedor
+            from .routes import is_superuser, is_gerente, is_administrador, is_vendedor
             return dict(
                 is_superuser=is_superuser,
                 is_gerente=is_gerente,
-                is_contador=is_contador,
+                is_administrador=is_administrador,
                 is_vendedor=is_vendedor
             )
 

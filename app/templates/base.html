@@ -56,16 +56,16 @@
 
             <!-- Navegación -->
             <nav class="mt-6 flex-grow overflow-y-auto space-y-2">
-                {% if is_contador() %}
+                {% if is_administrador() %}
                 <a href="{{ url_for('main.dashboard') }}" class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
                     <i class="fas fa-tachometer-alt mr-2"></i><span class="sidebar-text">Dashboard</span>
                 </a>
                 {% endif %}
                 
-                {% if is_contador() %}
+                {% if is_administrador() %}
                 <details class="group">
                     <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
-                        <i class="fas fa-shopping-basket mr-2"></i><span class="sidebar-text">Compras</span> {# Superusuario, Gerente, Contador #}
+                        <i class="fas fa-shopping-basket mr-2"></i><span class="sidebar-text">Compras</span> {# Superusuario, Gerente, administrador #}
                     </summary> {# Superusuario and Gerente can access Purchases #}
                     <div class="ml-4 mt-2 space-y-1">
                         <a href="{{ url_for('main.new_purchase') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
@@ -123,10 +123,10 @@
                         <i class="fas fa-boxes mr-2"></i><span class="sidebar-text">Inventario</span>
                     </summary>
                     <div class="ml-4 mt-2 space-y-1">
-                        <a href="{{ url_for('main.inventory_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm"> {# is_contador() check is inside the route #}
+                        <a href="{{ url_for('main.inventory_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm"> {# is_administrador() check is inside the route #}
                             <i class="fas fa-exchange-alt mr-2"></i><span class="sidebar-text">Productos</span>
                         </a>
-                        {% if is_contador() %}
+                        {% if is_administrador() %}
                         <a href="{{ url_for('main.inventory_stock') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-list mr-2"></i><span class="sidebar-text">Existencias</span>
                         </a>
@@ -134,7 +134,7 @@
                             <i class="fas fa-history mr-2"></i><span class="sidebar-text">Ajuste de Inventario</span>
                         </a>
                         {% endif %}
-                        <a href="{{ url_for('main.movement_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm"> {# is_contador() check is inside the route #}
+                        <a href="{{ url_for('main.movement_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm"> {# is_administrador() check is inside the route #}
                             <i class="fas fa-exchange-alt mr-2"></i><span class="sidebar-text">Movimientos</span>
                         </a>
                         {% if is_gerente() %} {# Solo Gerente y Superusuario pueden crear productos y códigos #}
@@ -171,7 +171,7 @@
                         <a href="{{ url_for('main.bank_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-university mr-2"></i><span class="sidebar-text">Bancos</span>
                         </a>                        
-                        {% if is_contador() %}
+                        {% if is_administrador() %}
                         <a href="{{ url_for('main.bank_movements') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-exchange-alt mr-2"></i><span class="sidebar-text">Movimientos Bancarios</span>
                         </a>
@@ -191,7 +191,7 @@
                         <a href="{{ url_for('main.daily_closing') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-calendar-check mr-2"></i><span class="sidebar-text">Cierre Diario</span>
                         </a>
-                        {% if is_contador() %} {# Superusuario, Gerente, Contador can view pending withdrawals and cashbox movements #}
+                        {% if is_administrador() %} {# Superusuario, Gerente, administrador can view pending withdrawals and cashbox movements #}
                         <a href="{{ url_for('main.pending_withdrawals') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm relative">
                             <i class="fas fa-hourglass-half mr-2"></i><span class="sidebar-text">Retiros Pendientes</span>
                             {% if pending_withdrawals_count > 0 %}
@@ -284,6 +284,11 @@
                                     <a href="{{ url_for('main.user_profile') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                                         <i class="fas fa-edit w-6 text-center mr-2"></i>Actualizar Datos
                                     </a>
+                                    <li>
+                                        <a href="{{ url_for('main.user_manual') }}" target="_blank" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                            <i class="fas fa-book w-4 mr-2"></i>Manual de Usuario
+                                        </a>
+                                    </li>
                                     <a href="{{ url_for('main.logout') }}" class="block px-4 py-2 text-sm text-red-500 hover:bg-gray-100 border-t mt-1">
                                         <i class="fas fa-sign-out-alt w-6 text-center mr-2"></i>Cerrar Sesión
                                     </a>
@@ -569,7 +574,7 @@
                     }
                 });
 
-                // 2. Actualizar el contador de la campana
+                // 2. Actualizar el administrador de la campana
                 let desktopBadge = $('#notification-badge');
                 let mobileBadge = $('#mobile-notification-badge');
                 if (desktopBadge.length) {
@@ -577,7 +582,7 @@
                 } else if ($('#notifications-bell-button').length) {
                     $('#notifications-bell-button').append('<span id="notification-badge" class="absolute -top-1 -right-1 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">1</span>');
                 } else {
-                    // Si no hay contador, lo crea y lo añade al botón móvil
+                    // Si no hay administrador, lo crea y lo añade al botón móvil
                     $('#mobile-notifications-button').append('<span id="mobile-notification-badge" class="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">1</span>');
                 }
 

@@ -1,4 +1,9 @@
 import os
+import time
+import io
+import json
+import base64
+import calendar
 import secrets
 from pathlib import Path
 import requests
@@ -6,35 +11,28 @@ from pywebpush import webpush, WebPushException
 import firebase_admin
 import re
 from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, session, current_app
-from flask_login import login_user, current_user, logout_user, login_required # type: ignore
-from flask_wtf import FlaskForm # type: ignore
-from flask_wtf.file import FileField, FileAllowed # type: ignore
-from wtforms import StringField, SubmitField, SelectField, TextAreaField # type: ignore
-from wtforms.validators import DataRequired, Length, Email # type: ignore
+from flask_login import login_user, current_user, logout_user, login_required
+from flask_wtf import FlaskForm
+from flask_wtf.file import FileField, FileAllowed
+from wtforms import StringField, SubmitField, SelectField, TextAreaField
+from wtforms.validators import DataRequired, Length, Email, Optional
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, extract, or_, select, case, text
 import openpyxl
 from datetime import datetime, timedelta, date
 from flask import Response
-import time
-import io
-import json
-import base64
-import calendar
 from weasyprint import HTML
 import matplotlib
-matplotlib.use('Agg') # Importante: para que Matplotlib no intente mostrar una GUI
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from babel.dates import get_month_names
-
-# Firebase Admin SDK
 from firebase_admin import messaging
-# Import extensions from the new extensions file
 from sqlalchemy.orm import joinedload, subqueryload
 from .extensions import db, bcrypt, socketio
-from .models import User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, CashBox, Payment, ManualFinancialMovement, InventoryAdjustment, InventoryAdjustmentItem, VE_TIMEZONE, UserDevice, Warehouse, ProductStock, WarehouseTransfer, BulkLoadLog
-
-# ReportLab imports for PDF generation
+from .models import (User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, 
+                    CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, 
+                    CashBox, Payment, ManualFinancialMovement, InventoryAdjustment, InventoryAdjustmentItem, VE_TIMEZONE, 
+                    UserDevice, Warehouse, ProductStock, WarehouseTransfer, BulkLoadLog)
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
@@ -56,16 +54,27 @@ def is_superuser():
 def is_gerente():
     return current_user.is_authenticated and current_user.role in ['Superusuario', 'Gerente']
 
-def is_contador():
-    return current_user.is_authenticated and current_user.role in ['Superusuario', 'Gerente', 'Contador']
+def is_administrador():
+    return current_user.is_authenticated and current_user.role in ['Superusuario', 'Gerente', 'Administrador']
 
 def is_vendedor():
-    return current_user.is_authenticated and current_user.role in ['Superusuario', 'Gerente', 'Contador', 'Vendedor']
+    return current_user.is_authenticated and current_user.role in ['Superusuario', 'Gerente', 'Administrador', 'Vendedor']
 
 # --- End Helper functions for role-based access control ---
 
 
 routes_blueprint = Blueprint('main', __name__)
+
+# --- FORMULARIOS ---
+class CompanyInfoForm(FlaskForm):
+    name = StringField('Nombre de la Empresa', validators=[DataRequired()])
+    rif = StringField('RIF', validators=[DataRequired()])
+    address = TextAreaField('Dirección', validators=[Optional()]) # type: ignore
+    phone_numbers = StringField('Teléfonos', validators=[Optional()])
+    logo_file = FileField('Logo de la Empresa', validators=[FileAllowed(['jpg', 'png', 'jpeg', 'gif'], 'Solo se permiten imágenes.')])
+    calculation_currency = SelectField('Moneda de Cálculo Principal', choices=[('USD', 'USD ($)'), ('EUR', 'EUR (€)')], validators=[DataRequired()])
+    submit = SubmitField('Guardar Cambios')
+
 
 # --- FORMULARIOS ---
 class UpdateProfileForm(FlaskForm):
@@ -1124,7 +1133,7 @@ def inventory_stock():
 @login_required
 def inventory_stock_report_pdf():
     """Genera un reporte PDF para el conteo físico del inventario. Accesible por Gerente y Superusuario."""
-    if not is_gerente():
+    if not is_administrador():
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.inventory_stock'))
 
@@ -1146,7 +1155,7 @@ def inventory_stock_report_pdf():
 @login_required
 def inventory_adjustment():
     """Página para el ajuste digital del inventario. Accesible por Gerente y Superusuario."""
-    if not is_contador():
+    if not is_administrador():
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1258,7 +1267,7 @@ def inventory_adjustment():
 @login_required
 def adjustment_list():
     """Displays a list of all inventory adjustments made."""
-    if not is_contador():
+    if not is_administrador():
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1274,7 +1283,7 @@ def adjustment_list():
 @login_required
 def adjustment_result(adjustment_id):
     """Muestra la página de resultados de un ajuste de inventario específico."""
-    if not is_contador():
+    if not is_administrador():
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1319,7 +1328,7 @@ def product_detail(product_id):
 @routes_blueprint.route('/inventario/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_product():
-    if not is_gerente(): # Superusuario and Gerente can create products
+    if not is_administrador(): # Superusuario and Gerente can create products
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1520,7 +1529,7 @@ def client_detail(client_id):
 @routes_blueprint.route('/proveedores/lista')
 @login_required
 def provider_list():
-    if not is_gerente(): # Superusuario and Gerente can view providers
+    if not is_administrador(): # Superusuario and Gerente can view providers
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1530,30 +1539,65 @@ def provider_list():
 @routes_blueprint.route('/proveedores/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_provider():
-    if not is_gerente(): # Superusuario and Gerente can create providers
+    if not is_administrador(): # Superusuario and Gerente can create providers
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.new_order'))
 
     if request.method == 'POST':
         try:
-            name = request.form.get('name')
-            contact = request.form.get('contact')
-            phone = request.form.get('phone')
-            new_prov = Provider(name=name, contact=contact, phone=phone)
+            new_prov = Provider(
+                # Información básica
+                name=request.form.get('name'),
+                tax_id=request.form.get('tax_id'),
+                address=request.form.get('address'),
+                phone=request.form.get('phone'),
+                fax=request.form.get('fax'),
+                email=request.form.get('email'),
+                # Contacto principal
+                contact_person_name=request.form.get('contact_person_name'),
+                contact_person_phone=request.form.get('contact_person_phone'),
+                contact_person_email=request.form.get('contact_person_email'),
+                # Información bancaria
+                bank_name=request.form.get('bank_name'),
+                bank_branch=request.form.get('bank_branch'),
+                bank_account_number=request.form.get('bank_account_number'),
+                bank_account_currency=request.form.get('bank_account_currency'),
+                bank_swift_bic=request.form.get('bank_swift_bic'),
+                bank_iban=request.form.get('bank_iban'),
+                # Detalles del negocio y términos
+                business_description=request.form.get('business_description'),
+                payment_terms=request.form.get('payment_terms'),
+                shipping_terms=request.form.get('shipping_terms')
+            )
             db.session.add(new_prov)
             db.session.commit()
             flash('Proveedor creado exitosamente!', 'success')
             return redirect(url_for('main.provider_list'))
-        except IntegrityError:
+        except IntegrityError as e:
             db.session.rollback()
-            flash('Error: Hubo un problema al crear el proveedor.', 'danger')
+            current_app.logger.error(f"Error de integridad al crear proveedor: {e}")
+            flash('Error: Ya existe un proveedor con ese nombre o RIF.', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error inesperado al crear proveedor: {e}")
+            flash(f'Ocurrió un error inesperado: {e}', 'danger')
+
     return render_template('proveedores/nuevo.html', title='Nuevo Proveedor')
+
+@routes_blueprint.route('/proveedores/detalle/<int:provider_id>')
+@login_required
+def provider_detail(provider_id):
+    if not is_administrador():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.new_order'))
+    provider = Provider.query.get_or_404(provider_id)
+    return render_template('proveedores/detalle_proveedor.html', title=f'Detalle de {provider.name}', provider=provider)
 
 # Rutas de compras
 @routes_blueprint.route('/compras/lista')
 @login_required
 def purchase_list():
-    if not is_gerente(): # Superusuario and Gerente can view purchases
+    if not is_administrador(): # Superusuario and Gerente can view purchases
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1563,7 +1607,7 @@ def purchase_list():
 @routes_blueprint.route('/compras/detalle/<int:purchase_id>')
 @login_required
 def purchase_detail(purchase_id):
-    if not is_gerente(): # Superusuario and Gerente can view purchase details
+    if not is_administrador(): # Superusuario and Gerente can view purchase details
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1573,12 +1617,31 @@ def purchase_detail(purchase_id):
 @routes_blueprint.route('/compras/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_purchase():
-    if not is_gerente(): # Superusuario and Gerente can create purchases
+    if not is_administrador(): # Superusuario and Gerente can create purchases
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.new_order'))
 
-    providers = Provider.query.order_by(Provider.name).all()
-    products = Product.query.order_by(Product.name).all()
+    # Convertir proveedores a una lista de diccionarios para que sea serializable a JSON y usable en JS
+    providers_query = Provider.query.order_by(Provider.name).all()
+    providers = [
+        {
+            'id': p.id, 'name': p.name, 'tax_id': p.tax_id,
+            'phone': p.phone, 'email': p.email, 'address': p.address
+        }
+        for p in providers_query
+    ]
+
+    
+    # Convertir productos a una lista de diccionarios para que sea serializable a JSON
+    products_query = Product.query.order_by(Product.name).all()
+    products = [
+        {
+            'id': p.id, 'name': p.name, 'barcode': p.barcode, 
+            'cost_usd': p.cost_usd, 'stock': p.stock
+        } 
+        for p in products_query
+    ]
+
     banks = Bank.query.order_by(Bank.name).all()
     cash_boxes = CashBox.query.order_by(CashBox.name).all()
 
@@ -1685,7 +1748,7 @@ def new_purchase():
 @routes_blueprint.route('/recepciones/lista')
 @login_required
 def reception_list():
-    if not is_gerente(): # Superusuario and Gerente can view receptions
+    if not is_administrador(): # Superusuario and Gerente can view receptions
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -1695,7 +1758,7 @@ def reception_list():
 @routes_blueprint.route('/api/purchase_details/<int:purchase_id>')
 @login_required
 def api_purchase_details(purchase_id):
-    if not is_contador(): # Superusuario, Gerente y Contador can view purchase details via API
+    if not is_administrador(): # Superusuario, Gerente y administrador can view purchase details via API
         return jsonify({'error': 'Acceso denegado'}), 403
     
     purchase = Purchase.query.options(
@@ -1720,7 +1783,7 @@ def api_purchase_details(purchase_id):
 @routes_blueprint.route('/recepciones/nueva', methods=['GET', 'POST'])
 @login_required
 def new_reception():
-    if not is_contador(): # Superusuario, Gerente y Contador can create receptions
+    if not is_administrador(): # Superusuario, Gerente y administrador can create receptions
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -2273,7 +2336,7 @@ def reservation_detail(order_id):
 @routes_blueprint.route('/movimientos/lista')
 @login_required
 def movement_list():
-    if not is_contador(): # Superusuario, Gerente, Contador can view movements
+    if not is_administrador(): # Superusuario, Gerente, administrador can view movements
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
     product_id = request.args.get('product_id', default=None, type=int) # type: ignore
@@ -2507,9 +2570,6 @@ def generar_reporte_mensual_pdf():
     """
     Recopila toda la información financiera de un mes específico y genera un reporte en PDF.
     """
-    if current_user.role != 'administrador':
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.dashboard')) # type: ignore
 
     try:
         month = int(request.args.get('month'))
@@ -2918,90 +2978,45 @@ def bulk_load_detail(log_id):
 @login_required
 def company_settings():
     if not is_superuser(): # Only Superuser can access company settings
-        flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
+        flash('Acceso denegado. Solo el administrador del sistema puede realizar esta acción.', 'danger')
         return redirect(url_for('main.dashboard'))
 
     company_info = CompanyInfo.query.first()
+    form = CompanyInfoForm(obj=company_info)
 
-    if request.method == 'POST':
-        name = request.form.get('name')
-        rif = request.form.get('rif')
-        address = request.form.get('address')
-        phone_numbers = request.form.get('phone_numbers')
-        logo_file = request.files.get('logo_file')
-        calculation_currency = request.form.get('calculation_currency')
-        
-        # Validar que el RIF no esté duplicado, excepto para el registro actual
-        existing_company_with_rif = CompanyInfo.query.filter(CompanyInfo.rif == rif).first()
-        if existing_company_with_rif and (not company_info or existing_company_with_rif.id != company_info.id):
-            flash('Error: El RIF ya se encuentra registrado.', 'danger')
-            return redirect(url_for('main.company_settings'))
-
+    if form.validate_on_submit():
         try:
+            # Si no existe información de la empresa, se crea una nueva.
             if company_info:
-                company_info.name = name
-                company_info.rif = rif
-                company_info.address = address
-                company_info.phone_numbers = phone_numbers
-                company_info.calculation_currency = calculation_currency
-                
-                # Handle logo file upload
-                if logo_file and logo_file.filename:
-                    # Create uploads directory if it doesn't exist
-                    upload_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'logos')
-                    os.makedirs(upload_dir, exist_ok=True)
-                    
-                    # Generate unique filename
-                    filename = f"logo_{company_info.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{os.path.splitext(logo_file.filename)[1]}"
-                    filepath = os.path.join(upload_dir, filename)
-                    
-                    # Save the file
-                    logo_file.save(filepath)
-                    
-                    # Update logo filename in database
-                    company_info.logo_filename = f"uploads/logos/{filename}"
-                
-                db.session.commit()
-                flash('Información de la empresa actualizada exitosamente!', 'success')
+                # Actualizar la empresa existente
+                form.populate_obj(company_info)
             else:
-                new_info = CompanyInfo(
-                    name=name, 
-                    rif=rif, 
-                    address=address, 
-                    phone_numbers=phone_numbers,
-                    calculation_currency=calculation_currency
-                )
-                db.session.add(new_info)
-                db.session.flush()  # Get the ID for the new company info
+                # Crear una nueva si no hay ninguna
+                company_info = CompanyInfo()
+                form.populate_obj(company_info)
+                db.session.add(company_info)
+                db.session.flush() # Para obtener el ID para el nombre del logo
+
+            # Manejar la subida del logo
+            logo_file = form.logo_file.data
+            if logo_file:
+                upload_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'logos')
+                os.makedirs(upload_dir, exist_ok=True)
                 
-                # Handle logo file upload for new company
-                if logo_file and logo_file.filename:
-                    # Create uploads directory if it doesn't exist
-                    upload_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'logos')
-                    os.makedirs(upload_dir, exist_ok=True)
-                    
-                    # Generate unique filename
-                    filename = f"logo_{new_info.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{os.path.splitext(logo_file.filename)[1]}"
-                    filepath = os.path.join(upload_dir, filename)
-                    
-                    # Save the file
-                    logo_file.save(filepath)
-                    
-                    # Update logo filename in database
-                    new_info.logo_filename = f"uploads/logos/{filename}"
+                filename = f"logo_{company_info.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{os.path.splitext(logo_file.filename)[1]}"
+                filepath = os.path.join(upload_dir, filename)
                 
-                db.session.commit()
-                flash('Información de la empresa guardada exitosamente!', 'success')
+                logo_file.save(filepath)
+                company_info.logo_filename = f"uploads/logos/{filename}"
             
+            db.session.commit()
+            flash('Información de la empresa guardada exitosamente.', 'success')
             return redirect(url_for('main.company_settings'))
-        except IntegrityError:
-            db.session.rollback()
-            flash('Error: El RIF ya se encuentra registrado.', 'danger')
         except Exception as e:
             db.session.rollback()
             flash(f'Ocurrió un error al guardar la información: {str(e)}', 'danger')
 
-    return render_template('configuracion/empresa.html', title='Configuración de Empresa', company_info=company_info)
+    return render_template('configuracion/empresa.html', title='Configuración de Empresa', form=form, company_info=company_info)
 
 # Rutas de Estructura de Costos
 @routes_blueprint.route('/costos/lista')
@@ -3506,6 +3521,98 @@ def api_new_client():
         current_app.logger.error(f"Error creando nuevo cliente vía API: {e}")
         return jsonify({'error': 'Ocurrió un error interno en el servidor.'}), 500
 
+@routes_blueprint.route('/api/proveedores/nuevo', methods=['POST'])
+@login_required
+def api_new_provider():
+    """API endpoint to create a new provider from a modal and return its data."""
+    if not is_administrador():
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No se proporcionaron datos'}), 400
+
+    name = data.get('name')
+    tax_id = data.get('tax_id')
+
+    if not name:
+        return jsonify({'error': 'El nombre es requerido.'}), 400
+
+    try:
+        # Check for duplicates
+        if Provider.query.filter_by(name=name).first():
+            return jsonify({'error': f'El proveedor con el nombre "{name}" ya está registrado.'}), 409
+        if tax_id and Provider.query.filter_by(tax_id=tax_id).first():
+            return jsonify({'error': f'El RIF "{tax_id}" ya está registrado.'}), 409
+
+        new_provider = Provider(
+            name=name,
+            tax_id=tax_id,
+            phone=data.get('phone'),
+            email=data.get('email'),
+            address=data.get('address')
+        )
+        db.session.add(new_provider)
+        db.session.commit()
+
+        provider_data = {
+            'id': new_provider.id,
+            'name': new_provider.name,
+            'tax_id': new_provider.tax_id,
+            'phone': new_provider.phone,
+            'email': new_provider.email,
+            'address': new_provider.address
+        }
+        return jsonify(provider_data), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error creando nuevo proveedor vía API: {e}")
+        return jsonify({'error': 'Ocurrió un error interno en el servidor.'}), 500
+
+@routes_blueprint.route('/api/productos/nuevo', methods=['POST'])
+@login_required
+def api_new_product():
+    """API endpoint to create a new product from a modal and return its data."""
+    if not is_administrador():
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No se proporcionaron datos'}), 400
+
+    # Validar campos requeridos
+    required_fields = ['name', 'barcode', 'cost_usd', 'price_usd']
+    for field in required_fields:
+        if not data.get(field):
+            return jsonify({'error': f'El campo "{field}" es requerido.'}), 400
+
+    try:
+        # Verificar si el código de barras ya existe
+        if Product.query.filter_by(barcode=data['barcode']).first():
+            return jsonify({'error': f'El código de barras "{data["barcode"]}" ya está registrado.'}), 409
+
+        new_prod = Product(
+            name=data['name'],
+            barcode=data['barcode'],
+            cost_usd=float(data['cost_usd']),
+            price_usd=float(data['price_usd']),
+            codigo_producto=data.get('codigo_producto'),
+            description=data.get('description'),
+            image_url=data.get('image_url'),
+            size=data.get('size'),
+            color=data.get('color'),
+            marca=data.get('marca'),
+            grupo=data.get('grupo')
+        )
+        db.session.add(new_prod)
+        db.session.commit()
+
+        return jsonify(id=new_prod.id, name=new_prod.name, barcode=new_prod.barcode, cost_usd=new_prod.cost_usd, stock=0), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error creando nuevo producto vía API: {e}")
+        return jsonify({'error': 'Ocurrió un error interno en el servidor.'}), 500
+
 @routes_blueprint.route('/api/subscribe_web_push', methods=['POST'])
 @login_required
 def subscribe_web_push():
@@ -3602,7 +3709,7 @@ def new_bank():
 @routes_blueprint.route('/finanzas/bancos/movimientos')
 @login_required
 def bank_movements():
-    if not is_contador(): # Superusuario, Gerente, Contador can view bank movements
+    if not is_administrador(): # Superusuario, Gerente, administrador can view bank movements
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -3616,7 +3723,7 @@ def bank_movements():
 @routes_blueprint.route('/finanzas/bancos/movimientos/<int:bank_id>')
 @login_required
 def bank_movement_detail(bank_id):
-    if not is_contador(): # Superusuario, Gerente, Contador can view bank movement details
+    if not is_administrador(): # Superusuario, Gerente, administrador can view bank movement details
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -3738,7 +3845,7 @@ def new_cashbox():
 @routes_blueprint.route('/finanzas/caja/movimientos')
 @login_required
 def cashbox_movements():
-    if not is_contador(): # Superusuario, Gerente, Contador can view cashbox movements
+    if not is_administrador(): # Superusuario, Gerente, administrador can view cashbox movements
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -3752,7 +3859,7 @@ def cashbox_movements():
 @routes_blueprint.route('/finanzas/caja/movimientos/<int:cash_box_id>')
 @login_required
 def cashbox_movement_detail(cash_box_id):
-    if not is_contador(): # Superusuario, Gerente, Contador can view cashbox movement details
+    if not is_administrador(): # Superusuario, Gerente, administrador can view cashbox movement details
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -3807,7 +3914,7 @@ def cashbox_movement_detail(cash_box_id):
 @routes_blueprint.route('/finanzas/movimiento/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_financial_movement():
-    if not is_contador(): # Superusuario, Gerente, Contador can create manual financial movements
+    if not is_administrador(): # Superusuario, Gerente, administrador can create manual financial movements
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
 
@@ -3983,7 +4090,7 @@ def print_withdrawal_receipt(movement_id):
     # New check for approval
     if movement.status != 'Aprobado':
         flash('Este retiro aún no ha sido aprobado. No se puede imprimir el recibo.', 'warning')
-        if current_user.role == 'administrador':
+        if current_user.role == 'Administrador':
             return redirect(url_for('main.pending_withdrawals'))
         else:
             return redirect(url_for('main.new_order'))
@@ -4004,7 +4111,7 @@ def my_withdrawals():
 @routes_blueprint.route('/finanzas/retiros-pendientes')
 @login_required
 def pending_withdrawals():
-    if not is_contador(): # Superusuario, Gerente, Contador can view pending withdrawals
+    if not is_administrador(): # Superusuario, Gerente, administrador can view pending withdrawals
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.new_order'))
     
@@ -4015,7 +4122,7 @@ def pending_withdrawals():
 @routes_blueprint.route('/finanzas/retiro/procesar/<int:movement_id>/<string:action>', methods=['POST'])
 @login_required
 def process_withdrawal(movement_id, action):
-    if not is_contador(): # Superusuario, Gerente, Contador can process withdrawals
+    if not is_administrador(): # Superusuario, Gerente, administrador can process withdrawals
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.pending_withdrawals'))
 
@@ -4071,7 +4178,7 @@ def process_withdrawal(movement_id, action):
 @routes_blueprint.route('/finanzas/cierre-diario', methods=['GET'])
 @login_required
 def daily_closing():
-    """Shows the page for generating the daily closing report. Accessible by Contador, Gerente, Superusuario."""
+    """Shows the page for generating the daily closing report. Accessible by administrador, Gerente, Superusuario."""
     if not is_vendedor():
         flash('No tienes permiso para acceder a esta página.', 'danger')
         return redirect(url_for('main.new_order'))
@@ -4624,6 +4731,41 @@ def api_search_products_for_transfer():
     
     return jsonify(products=results)
 
+@routes_blueprint.route('/api/search_products_for_purchase')
+@login_required
+def api_search_products_for_purchase():
+    """
+    API para buscar productos por nombre, código de barras o código de producto para compras.
+    Devuelve todos los productos que coincidan, sin importar el stock.
+    """
+    if not is_administrador():
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    query_str = request.args.get('q', '').strip()
+
+    if len(query_str) < 2:
+        return jsonify(products=[])
+
+    search_pattern = f'%{query_str}%'
+    
+    products = Product.query.filter(
+        or_(
+            Product.name.ilike(search_pattern), 
+            Product.barcode.ilike(search_pattern),
+            Product.codigo_producto.ilike(search_pattern)
+        )
+    ).limit(10).all()
+
+    results = [{
+        'id': p.id, 
+        'name': p.name, 
+        'barcode': p.barcode, 
+        'codigo_producto': p.codigo_producto, 
+        'cost_usd': p.cost_usd
+    } for p in products]
+    
+    return jsonify(products=results)
+
 @routes_blueprint.route('/api/search_products_for_sale')
 @login_required
 def api_search_products_for_sale():
@@ -4653,3 +4795,8 @@ def api_search_products_for_sale():
     results = [{'id': p.id, 'name': p.name, 'barcode': p.barcode, 'codigo_producto': p.codigo_producto, 'price_usd': p.price_usd, 'stock': stock} for p, stock in products_with_stock]
     
     return jsonify(products=results)
+
+@routes_blueprint.route('/manual_usuario')
+def user_manual():
+    """Muestra la página del manual de usuario."""
+    return render_template('manual_usuario.html')

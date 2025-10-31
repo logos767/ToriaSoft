@@ -1,29 +1,50 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto p-2 max-w-7xl">
-    <h1 class="text-xl font-bold text-gray-800 mb-2"><i class="fas fa-shopping-basket mr-2"></i>Crear Nueva Orden de Compra</h1>
-    <div class="bg-white p-4 rounded-lg shadow-md">
+<div class="container mx-auto p-4 max-w-7xl">
+    <div class="bg-white p-6 rounded-lg shadow-md">
         <form method="POST" action="{{ url_for('main.new_purchase') }}" id="purchase-form">
+            <h1 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-shopping-basket mr-2"></i>Crear Nueva Orden de Compra</h1>
             <!-- Main two-column layout -->
             <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-4">
-                <!-- LEFT COLUMN: Provider Info -->
+                <!-- LEFT COLUMN: Provider and Actions -->
                 <div class="space-y-4 lg:col-span-1">
                     <div>
                         <h2 class="text-lg font-semibold text-gray-700 mb-2">1. Información del Proveedor</h2>
-                        <label for="provider_id" class="block text-gray-700 font-bold mb-2">Proveedor:</label>
-                        <select id="provider_id" name="provider_id" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            {% for provider in providers %}
-                                <option value="{{ provider.id }}">{{ provider.name }}</option>
-                            {% endfor %}
-                        </select>
+                        <div class="flex items-center space-x-2">
+                            <select id="provider_id" name="provider_id" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500
+                            </select>
+                            <button type="button" id="open-new-provider-modal-btn" title="Crear Nuevo Proveedor" class="bg-green-500 text-white p-2 rounded hover:bg-green-600 transition-colors flex-shrink-0">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        <div id="provider_info" class="mt-2 p-2 border border-gray-200 rounded bg-gray-50 hidden text-sm">
+                            <div class="font-semibold mb-1">Proveedor Seleccionado:</div>
+                            <div><strong>RIF:</strong> <span id="provider_tax_id"></span></div>
+                            <div><strong>Teléfono:</strong> <span id="provider_phone"></span></div>
+                            <div><strong>Email:</strong> <span id="provider_email"></span></div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- RIGHT COLUMN: Product List -->
                 <div class="lg:col-span-3">
-                    <h2 class="text-lg font-semibold text-gray-700 mb-2">2. Añadir Productos</h2>
-                    <div id="product-list" class="max-h-[55vh] overflow-y-auto border rounded-lg">
+                    <!-- Barcode Scanner & Add Product -->
+                    <div class="mb-4">
+                        <h2 class="text-lg font-semibold text-gray-700 mb-2">2. Añadir Productos</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="barcode-input" class="block text-sm font-medium text-gray-700">Escanear Código de Barras</label>
+                                <input type="text" id="barcode-input" placeholder="Escanear para agregar..." class="mt-1 w-full shadow-sm appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            <div class="relative">
+                                <label for="product-keyword-search" class="block text-sm font-medium text-gray-700">Buscar por Nombre / Código</label>
+                                <input type="text" id="product-keyword-search" placeholder="Escribir para buscar..." class="mt-1 w-full shadow-sm appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <div id="product-suggestions" class="absolute bg-white border rounded-b-lg mt-1 w-full z-20 hidden max-h-60 overflow-y-auto"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="product-list" class="max-h-[50vh] overflow-y-auto border rounded-lg">
                         <table class="table-auto w-full text-sm">
                             <thead class="bg-gray-100 sticky top-0 z-10">
                                 <tr>
@@ -43,7 +64,7 @@
                                 <tr class="product-item bg-gray-50">
                                     <td class="px-1 py-1 align-top">
                                         <select name="product_id[]" required class="w-full shadow-sm appearance-none border rounded py-0.5 px-1 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 product-select text-xs">
-                                            {% for product in products %}
+                                            {% for product in products %}{# This will be populated by JS #}
                                             <option value="{{ product.id }}" data-cost-usd="{{ product.cost_usd }}">{{ product.name }} (Stock: {{ product.stock }})</option>
                                             {% endfor %}
                                         </select>
@@ -63,7 +84,7 @@
                             </tbody>
                         </table>
                     </div>
-                    <div class="mt-2">
+                    <div class="flex justify-end mt-2">
                         <button type="button" id="add-product-btn" class="bg-blue-500 text-white py-1 px-3 rounded hover:bg-blue-600 transition-colors text-sm">
                             <i class="fas fa-plus mr-1"></i>Agregar Producto
                         </button>
@@ -87,6 +108,106 @@
                 </div>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- New Product Modal -->
+<div id="new-product-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-5 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl leading-6 font-medium text-gray-900">Crear Nuevo Producto</h3>
+                <button type="button" id="close-new-product-modal-btn" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div id="new-product-modal-error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 hidden" role="alert">
+                <strong class="font-bold">Error:</strong>
+                <span class="block sm:inline" id="new-product-modal-error-message"></span>
+            </div>
+            <form id="new-product-form">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto p-2">
+                    <div>
+                        <label for="new-product-name" class="block text-sm font-medium text-gray-700">Nombre</label>
+                        <input type="text" id="new-product-name" name="name" required class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="new-product-barcode" class="block text-sm font-medium text-gray-700">Código de Barras</label>
+                        <input type="text" id="new-product-barcode" name="barcode" required class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="new-product-cost-usd" class="block text-sm font-medium text-gray-700">Costo (USD)</label>
+                        <input type="number" step="0.01" min="0" id="new-product-cost-usd" name="cost_usd" required class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="new-product-price-usd" class="block text-sm font-medium text-gray-700">Precio Venta (USD)</label>
+                        <input type="number" step="0.01" min="0" id="new-product-price-usd" name="price_usd" required class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="new-product-codigo-producto" class="block text-sm font-medium text-gray-700">Código Interno (Opcional)</label>
+                        <input type="text" id="new-product-codigo-producto" name="codigo_producto" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="new-product-marca" class="block text-sm font-medium text-gray-700">Marca (Opcional)</label>
+                        <input type="text" id="new-product-marca" name="marca" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="new-product-grupo" class="block text-sm font-medium text-gray-700">Grupo (Opcional)</label>
+                        <input type="text" id="new-product-grupo" name="grupo" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end">
+                    <button type="button" id="cancel-new-product-btn" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 mr-4">Cancelar</button>
+                    <button type="button" id="save-new-product-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700"><i class="fas fa-save mr-2"></i>Guardar Producto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- New Provider Modal -->
+<div id="new-provider-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl leading-6 font-medium text-gray-900">Crear Nuevo Proveedor</h3>
+                <button type="button" id="close-new-provider-modal-btn" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div id="new-provider-modal-error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 hidden" role="alert">
+                <strong class="font-bold">Error:</strong>
+                <span class="block sm:inline" id="new-provider-modal-error-message"></span>
+            </div>
+            <form id="new-provider-form">
+                <div class="space-y-4">
+                    <div>
+                        <label for="new-provider-name" class="block text-sm font-medium text-gray-700">Nombre o Razón Social</label>
+                        <input type="text" id="new-provider-name" name="name" required class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="new-provider-tax-id" class="block text-sm font-medium text-gray-700">RIF (Opcional)</label>
+                        <input type="text" id="new-provider-tax-id" name="tax_id" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="new-provider-phone" class="block text-sm font-medium text-gray-700">Teléfono (Opcional)</label>
+                        <input type="tel" id="new-provider-phone" name="phone" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="new-provider-email" class="block text-sm font-medium text-gray-700">Email (Opcional)</label>
+                        <input type="email" id="new-provider-email" name="email" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div class="col-span-1 md:col-span-2">
+                        <label for="new-provider-address" class="block text-sm font-medium text-gray-700">Dirección (Opcional)</label>
+                        <textarea id="new-provider-address" name="address" rows="2" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm"></textarea>
+                    </div>
+                </div>
+                <div class="mt-8 flex justify-end">
+                    <button type="button" id="cancel-new-provider-btn" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 mr-4">Cancelar</button>
+                    <button type="button" id="save-new-provider-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700"><i class="fas fa-save mr-2"></i>Guardar Proveedor</button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -193,10 +314,36 @@
         const productListBody = document.querySelector('#product-list tbody');
         const addProductBtn = document.getElementById('add-product-btn');
         const activeRate = {{ current_rate }};
+        let allProviders = {{ providers|tojson }};
+        const allProducts = {{ products|tojson }};
+
+        const keywordSearchInput = document.getElementById('product-keyword-search');
+        const productSuggestions = document.getElementById('product-suggestions');
+        const barcodeInput = document.getElementById('barcode-input');
+        let searchDebounceTimeout = null;
+
+        const newProductModal = document.getElementById('new-product-modal');
+        const closeNewProductModalBtn = document.getElementById('close-new-product-modal-btn');
+        const cancelNewProductBtn = document.getElementById('cancel-new-product-btn');
+        const saveNewProductBtn = document.getElementById('save-new-product-btn');
+        const newProductForm = document.getElementById('new-product-form');
+        const newProductModalError = document.getElementById('new-product-modal-error');
+        const newProductModalErrorMessage = document.getElementById('new-product-modal-error-message');
+
+        const providerSelect = document.getElementById('provider_id');
+        const newProviderModal = document.getElementById('new-provider-modal');
+        const openNewProviderModalBtn = document.getElementById('open-new-provider-modal-btn');
+        const closeNewProviderModalBtn = document.getElementById('close-new-provider-modal-btn');
+        const cancelNewProviderBtn = document.getElementById('cancel-new-provider-btn');
+        const saveNewProviderBtn = document.getElementById('save-new-provider-btn');
+        const newProviderModalError = document.getElementById('new-provider-modal-error');
+        const newProviderModalErrorMessage = document.getElementById('new-provider-modal-error-message');
 
         const defaultRow = productListBody.querySelector('tr.product-item');
         let productTemplate = null;
         if (defaultRow) {
+            // Populate the template select with all products
+            populateProductSelect(defaultRow.querySelector('.product-select'));
             productTemplate = defaultRow.cloneNode(true);
             defaultRow.remove();
         }
@@ -208,12 +355,21 @@
             costVesDisplay.textContent = costVes;
         }
 
+        function populateProductSelect(selectElement) {
+            selectElement.innerHTML = ''; // Clear existing options
+            allProducts.forEach(product => {
+                const option = new Option(`${product.name} (Stock: ${product.stock})`, product.id);
+                option.dataset.costUsd = product.cost_usd;
+                selectElement.appendChild(option);
+            });
+        }
+
         function initializeProductItem(productItem) {
             const selectElement = productItem.querySelector('.product-select');
             const selectedOption = selectElement.options[selectElement.selectedIndex];
             const costUsdInput = productItem.querySelector('.cost-usd-input');
             
-            costUsdInput.value = selectedOption.dataset.costUsd;
+            costUsdInput.value = selectedOption ? selectedOption.dataset.costUsd : '0.00';
             updateCostVes(costUsdInput);
             updatePurchaseSummary();
         }
@@ -254,6 +410,11 @@
         addProductBtn.addEventListener('click', function() {
             if (!productTemplate) return;
             const newRow = productTemplate.cloneNode(true);
+            // Ensure the select is populated
+            const select = newRow.querySelector('.product-select');
+            if (select.options.length === 0) {
+                populateProductSelect(select);
+            }
             initializeProductItem(newRow);
             productListBody.appendChild(newRow);
         });
@@ -275,6 +436,216 @@
             initializeProductItem(firstRow);
             productListBody.appendChild(firstRow);
         }
+
+        // --- Provider Details Logic ---
+        function showProviderInfo(provider) {
+            const providerInfoDiv = document.getElementById('provider_info');
+            if (provider) {
+                document.getElementById('provider_tax_id').textContent = provider.tax_id || 'N/A';
+                document.getElementById('provider_phone').textContent = provider.phone || 'N/A';
+                document.getElementById('provider_email').textContent = provider.email || 'N/A';
+                providerInfoDiv.classList.remove('hidden');
+            } else {
+                providerInfoDiv.classList.add('hidden');
+            }
+        }
+
+        providerSelect.addEventListener('change', function() {
+            const selectedProviderId = this.value;
+            const selectedProvider = allProviders.find(p => p.id == selectedProviderId);
+            showProviderInfo(selectedProvider);
+        });
+
+        // Show details for the initially selected provider on page load
+        if (providerSelect.value) {
+            const initialProvider = allProviders.find(p => p.id == providerSelect.value);
+            showProviderInfo(initialProvider);
+        }
+
+
+        // --- New Provider Modal Logic ---
+        function openNewProviderModal() {
+            document.getElementById('new-provider-form').reset();
+            newProviderModalError.classList.add('hidden');
+            newProviderModal.classList.remove('hidden');
+            document.getElementById('new-provider-name').focus();
+        }
+
+        function closeNewProviderModal() {
+            newProviderModal.classList.add('hidden');
+        }
+
+        openNewProviderModalBtn.addEventListener('click', openNewProviderModal);
+        closeNewProviderModalBtn.addEventListener('click', closeNewProviderModal);
+        cancelNewProviderBtn.addEventListener('click', closeNewProviderModal);
+
+        saveNewProviderBtn.addEventListener('click', () => {
+            const providerData = {
+                name: document.getElementById('new-provider-name').value.trim(),
+                tax_id: document.getElementById('new-provider-tax-id').value.trim(),
+                phone: document.getElementById('new-provider-phone').value.trim(),
+                email: document.getElementById('new-provider-email').value.trim(),
+                address: document.getElementById('new-provider-address').value.trim(),
+            };
+
+            if (!providerData.name) {
+                newProviderModalErrorMessage.textContent = 'El nombre del proveedor es obligatorio.';
+                newProviderModalError.classList.remove('hidden');
+                return;
+            }
+
+            fetch('/api/proveedores/nuevo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(providerData)
+            })
+            .then(response => {
+                if (!response.ok) { return response.json().then(err => { throw new Error(err.error || 'Error desconocido'); }); }
+                return response.json();
+            })
+            .then(newProvider => {
+                closeNewProviderModal();
+                allProviders.push(newPd, true, true);
+                providerSelect.appendCr change to show details
+                toastr.success(`Provee
+            .catch(error => {
+                newProviderModalErrorMessage.textContent = error.message;
+                newProviderModalError.classList.remove('hidden');
+            });
+        });
+
+        // --- New Product Modal Logic ---
+        function openNewProductModal() {
+            const searchText = keywordSearchInput.value.trim();
+            newProductForm.reset();
+            newProductModalError.classList.add('hidden');
+
+            if (!isNaN(searchText) && !isNaN(parseFloat(searchText))) {
+                document.getElementById('new-product-barcode').value = searchText;
+            } else {
+                document.getElementById('new-product-name').value = searchText;
+            }
+            newProductModal.classList.remove('hidden');
+            document.getElementById('new-product-name').focus();
+        }
+
+        function closeNewProductModal() {
+            newProductModal.classList.add('hidden');
+        }
+
+        closeNewProductModalBtn.addEventListener('click', closeNewProductModal);
+        cancelNewProductBtn.addEventListener('click', closeNewProductModal);
+
+        saveNewProductBtn.addEventListener('click', () => {
+            const productData = {
+                name: document.getElementById('new-product-name').value.trim(),
+                barcode: document.getElementById('new-product-barcode').value.trim(),
+                cost_usd: document.getElementById('new-product-cost-usd').value,
+                price_usd: document.getElementById('new-product-price-usd').value,
+                codigo_producto: document.getElementById('new-product-codigo-producto').value.trim(),
+                marca: document.getElementById('new-product-marca').value.trim(),
+                grupo: document.getElementById('new-product-grupo').value.trim(),
+            };
+
+            if (!productData.name || !productData.barcode || !productData.cost_usd || !productData.price_usd) {
+                newProductModalErrorMessage.textContent = 'Nombre, Cód. Barras, Costo y Precio son obligatorios.';
+                newProductModalError.classList.remove('hidden');
+                return;
+            }
+
+            fetch('/api/productos/nuevo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(productData)
+            })
+            .then(response => {
+                if (!response.ok) { return response.json().then(err => { throw new Error(err.error || 'Error desconocido'); }); }
+                return response.json();
+            })
+            .then(newProduct => {
+                closeNewProductModal();
+                // Add new product to global list and all select dropdowns
+                allProducts.push(newProduct);
+                document.querySelectorAll('.product-select').forEach(populateProductSelect);
+                // Add to table and select it
+                addProductToTable(newProduct, true);
+            })
+            .catch(error => {
+                newProductModalErrorMessage.textContent = error.message;
+                newProductModalError.classList.remove('hidden');
+            });
+        });
+
+        // --- Product Search Logic ---
+        function addProductToTable(product, isNew = false) {
+            let existingRow = Array.from(productListBody.querySelectorAll('.product-id-input')).find(input => input.value == product.id)?.closest('tr');
+
+            if (existingRow) {
+                const quantityInput = existingRow.querySelector('.quantity-input');
+                quantityInput.value = (parseInt(quantityInput.value) || 0) + 1;
+                quantityInput.focus();
+            } else {
+                const newRow = productTemplate.cloneNode(true);
+                const select = newRow.querySelector('.product-select');
+                populateProductSelect(select);
+                select.value = product.id;
+                initializeProductItem(newRow);
+                newRow.querySelector('.quantity-input').value = 1;
+                productListBody.appendChild(newRow);
+                newRow.querySelector('.quantity-input').focus();
+            }
+            updatePurchaseSummary();
+            keywordSearchInput.value = '';
+            productSuggestions.classList.add('hidden');
+        }
+
+        keywordSearchInput.addEventListener('input', function() {
+            const query = this.value.trim();
+            if (query.length < 2) {
+                productSuggestions.classList.add('hidden');
+                return;
+            }
+
+            clearTimeout(searchDebounceTimeout);
+            searchDebounceTimeout = setTimeout(() => {
+                fetch(`/api/search_products_for_purchase?q=${encodeURIComponent(query)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        productSuggestions.innerHTML = '';
+                        if (data.products && data.products.length > 0) {
+                            data.products.forEach(product => {
+                                const div = document.createElement('div');
+                                div.className = 'p-2 hover:bg-blue-100 cursor-pointer';
+                                div.innerHTML = `<div class="font-semibold">${product.name}</div><div class="text-sm text-gray-600">Cód: ${product.codigo_producto || 'N/A'} | Barras: ${product.barcode}</div>`;
+                                div.addEventListener('click', () => addProductToTable(product));
+                                productSuggestions.appendChild(div);
+                            });
+                        } else {
+                            const div = document.createElement('div');
+                            div.className = 'p-2 text-center text-red-600 font-semibold cursor-pointer hover:bg-red-100';
+                            div.textContent = 'Producto no encontrado. ¿Crear nuevo?';
+                            div.addEventListener('click', openNewProductModal);
+                            productSuggestions.appendChild(div);
+                        }
+                        productSuggestions.classList.remove('hidden');
+                    });
+            }, 300);
+        });
+
+        barcodeInput.addEventListener('keypress', function(e) {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            const barcode = this.value.trim();
+            if (!barcode) return;
+
+            const product = allProducts.find(p => p.barcode === barcode);
+            if (product) {
+                addProductToTable(product);
+                this.value = '';
+            } else {
+                toastr.error('Producto no encontrado. Puede crearlo manualmente.', 'Error');
+            }
+        });
 
         // --- Payment Modal Logic ---
         const paymentModal = document.getElementById('payment-modal');

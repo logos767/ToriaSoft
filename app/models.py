@@ -110,10 +110,29 @@ class Client(db.Model):
 
 class Provider(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    contact = db.Column(db.String(100), nullable=True)
-    phone = db.Column(db.String(20), nullable=True)
-    address = db.Column(db.String(200), nullable=True)
+    # Información básica
+    name = db.Column(db.String(150), nullable=False, unique=True)
+    tax_id = db.Column(db.String(20), unique=True, nullable=True) # Cédula fiscal / RIF
+    address = db.Column(db.Text, nullable=True)
+    phone = db.Column(db.String(50), nullable=True)
+    fax = db.Column(db.String(50), nullable=True)
+    email = db.Column(db.String(120), nullable=True)
+    # Contacto principal
+    contact_person_name = db.Column(db.String(100), nullable=True)
+    contact_person_phone = db.Column(db.String(50), nullable=True)
+    contact_person_email = db.Column(db.String(120), nullable=True)
+    # Información bancaria
+    bank_name = db.Column(db.String(100), nullable=True)
+    bank_branch = db.Column(db.String(100), nullable=True)
+    bank_account_number = db.Column(db.String(30), nullable=True)
+    bank_account_currency = db.Column(db.String(10), nullable=True)
+    bank_swift_bic = db.Column(db.String(20), nullable=True)
+    bank_iban = db.Column(db.String(34), nullable=True)
+    # Detalles del negocio y términos
+    business_description = db.Column(db.Text, nullable=True)
+    payment_terms = db.Column(db.Text, nullable=True)
+    shipping_terms = db.Column(db.Text, nullable=True)
+
     
     # Relaciones
     purchases = db.relationship('Purchase', backref='provider', lazy=True)

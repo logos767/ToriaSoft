@@ -58,23 +58,14 @@
 
     <!-- Vista de Lista (Tabla) -->
     <div id="list-view-container">
-        <div class="bg-white p-6 rounded-lg shadow-md">
+        <div class="bg-white p-2 rounded-lg shadow-md">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            {% set next_order_name = 'desc' if sort_by == 'name' and sort_order == 'asc' else 'asc' %}
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                <a href="{{ url_for('main.inventory_list', search=filters.search, group=filters.group, sort_by='name', sort_order=next_order_name) }}" class="hover:text-blue-600">
-                                    Nombre / Marca
-                                    {% if sort_by == 'name' %}
-                                        <i class="fas fa-arrow-{{ 'up' if sort_order == 'asc' else 'down' }} ml-1"></i>
-                                    {% endif %}
-                                </a>
-                            </th>
                             {% set next_order_barcode = 'desc' if sort_by == 'barcode' and sort_order == 'asc' else 'asc' %}
                             {% set next_order_codigo = 'desc' if sort_by == 'codigo_producto' and sort_order == 'asc' else 'asc' %}
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th class="px-3 px-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Códigos
                                 <a href="{{ url_for('main.inventory_list', search=filters.search, group=filters.group, sort_by='barcode', sort_order=next_order_barcode) }}" class="hover:text-blue-600 ml-2" title="Ordenar por Cód. Barra">
                                     <i class="fas fa-barcode"></i>
@@ -89,38 +80,53 @@
                                     {% endif %}
                                 </a>
                             </th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grupo</th>
-                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Exist.</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Precio ({{ currency_symbol }})</th>
-                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                            {% set next_order_name = 'desc' if sort_by == 'name' and sort_order == 'asc' else 'asc' %}
+                            <th class="px-3 px-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <a href="{{ url_for('main.inventory_list', search=filters.search, group=filters.group, sort_by='name', sort_order=next_order_name) }}" class="hover:text-blue-600">
+                                    Nombre / Marca
+                                    {% if sort_by == 'name' %}
+                                        <i class="fas fa-arrow-{{ 'up' if sort_order == 'asc' else 'down' }} ml-1"></i>
+                                    {% endif %}
+                                </a>
+                            </th>
+                            
+                            <th class="px-3 px-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grupo</th>
+                            <th class="px-3 px-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Exist.</th>
+                            <th class="px-3 px-1 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Precio ({{ currency_symbol }})</th>
+                            <th class="px-3 px-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         {% for product in products %}
                         <tr>
-                            <td class="px-6 py-4 whitespace-nowrap">
+                             <td class="px-3 px-1 whitespace-nowrap">
+                                <p class="text-xs text-gray-800"><i class="fas fa-barcode w-4 inline-block text-left"></i> {{ product.barcode }}</p>
+                                <div class="text-xs text-gray-500"><strong>COD:</strong> {{ product.codigo_producto or 'N/A' }}</div>
+                            </td>
+                            <td class="px-3 px-1 whitespace-nowrap">
                                 <div class="text-sm font-medium text-gray-900">{{ product.name }}</div>
                                 <div class="text-sm text-gray-500">{{ product.marca or '' }}</div>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm text-gray-900"><strong>Barra:</strong> {{ product.barcode }}</div>
-                                <div class="text-sm text-gray-500"><strong>Prod:</strong> {{ product.codigo_producto or 'N/A' }}</div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.grupo or '' }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-bold {% if product.stock <= 0 %}text-red-500{% elif product.stock < 10 %}text-yellow-500{% else %}text-green-500{% endif %}">
+                           
+                            <td class="px-3 px-1 whitespace-nowrap text-sm text-gray-500">{{ product.grupo or '' }}</td>
+                            <td class="px-3 px-1 whitespace-nowrap text-center text-sm font-bold {% if product.stock <= 0 %}text-red-500{% elif product.stock < 10 %}text-yellow-500{% else %}text-green-500{% endif %}">
                                 {{ product.stock }}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900 font-semibold">{{ currency_symbol }}{{ "%.2f"|format(product.price_usd) }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                                <a href="{{ url_for('main.product_detail', product_id=product.id) }}" title="Ver Detalle" class="text-indigo-600 hover:text-indigo-900 mr-3"><i class="fas fa-eye"></i></a>
-                                {% if user_role == 'administrador' %}
-                                    <a href="{{ url_for('main.edit_product_cost', product_id=product.id) }}" title="Editar Costos" class="text-blue-600 hover:text-blue-900 mr-3"><i class="fas fa-edit"></i></a>
+                            <td class="px-3 px-1 whitespace-nowrap text-right text-sm text-gray-900 font-semibold">{{ currency_symbol }}{{ "%.2f"|format(product.price_usd) }}</td>
+                            <td class="px-3 px-1 whitespace-nowrap text-center text-sm font-medium">
+                                <a href="{{ url_for('main.product_detail', product_id=product.id) }}" title="Ver Detalle" class="text-indigo-600 hover:text-indigo-900 mx-1"><i class="fas fa-eye"></i></a>
+                                {% if user_role in ['Superusuario', 'Gerente'] %}
+                                    <a href="{{ url_for('main.edit_product', product_id=product.id) }}" title="Editar Producto" class="text-yellow-600 hover:text-yellow-900 mx-1"><i class="fas fa-pencil-alt"></i></a>
+                                    <a href="{{ url_for('main.edit_product_cost', product_id=product.id) }}" title="Editar Costos" class="text-blue-600 hover:text-blue-900 mx-1"><i class="fas fa-calculator"></i></a>
+                                {% endif %}
+                                {% if user_role in ['Superusuario', 'Gerente', 'Administrador'] %}
+                                    <a href="{{ url_for('main.movement_list', product_id=product.id) }}" title="Ver Movimientos" class="text-green-600 hover:text-green-900 mx-1"><i class="fas fa-exchange-alt"></i></a>
                                 {% endif %}
                             </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="7" class="px-6 py-4 text-center text-gray-500">No se encontraron productos que coincidan con los filtros.</td>
+                            <td colspan="7" class="px-3 px-1 text-center text-gray-500">No se encontraron productos que coincidan con los filtros.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -131,13 +137,13 @@
 
     <!-- Vista de Cuadrícula (Grid) -->
     <div id="grid-view-container" class="hidden">
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {% for product in products %}
             <div class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 flex flex-col">
                 <div class="p-4 flex-grow">
                     <h3 class="text-lg font-bold text-gray-800 truncate" title="{{ product.name }}">{{ product.name }}</h3>
                     <p class="text-sm text-gray-500 mb-2">{{ product.marca or 'Sin marca' }}</p>
-                    <p class="text-xs text-gray-400">Cód. Barra: {{ product.barcode }}</p>
+                    <p class="text-xs text-gray-800"><i class="fas fa-barcode w-4 inline-block text-left"></i> {{ product.barcode }}</p>
                     <p class="text-xs text-gray-400 mb-3">Grupo: {{ product.grupo or 'N/A' }}</p>
 
                     <div class="flex justify-between items-center mb-3">
@@ -152,9 +158,13 @@
                     </div>
                 </div>
                 <div class="bg-gray-50 p-3 border-t flex justify-around items-center">
-                    <a href="{{ url_for('main.product_detail', product_id=product.id) }}" title="Ver Detalle" class="text-indigo-600 hover:text-indigo-900"><i class="fas fa-eye"></i></a>
-                    {% if user_role == 'administrador' %}
-                        <a href="{{ url_for('main.edit_product_cost', product_id=product.id) }}" title="Editar Costos" class="text-blue-600 hover:text-blue-900"><i class="fas fa-edit"></i></a>
+                    <a href="{{ url_for('main.product_detail', product_id=product.id) }}" title="Ver Detalle" class="text-indigo-600 hover:text-indigo-900 mx-1"><i class="fas fa-eye"></i></a>
+                    {% if user_role in ['Superusuario', 'Gerente'] %}
+                        <a href="{{ url_for('main.edit_product', product_id=product.id) }}" title="Editar Producto" class="text-yellow-600 hover:text-yellow-900 mx-1"><i class="fas fa-pencil-alt"></i></a>
+                        <a href="{{ url_for('main.edit_product_cost', product_id=product.id) }}" title="Editar Costos" class="text-blue-600 hover:text-blue-900 mx-1"><i class="fas fa-calculator"></i></a>
+                    {% endif %}
+                    {% if user_role in ['Superusuario', 'Gerente', 'Administrador'] %}
+                        <a href="{{ url_for('main.movement_list', product_id=product.id) }}" title="Ver Movimientos" class="text-green-600 hover:text-green-900 mx-1"><i class="fas fa-exchange-alt"></i></a>
                     {% endif %}
                 </div>
             </div>
