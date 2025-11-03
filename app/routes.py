@@ -896,21 +896,21 @@ def generate_barcode_pdf_reportlab(products, company_info, currency_symbol):
 
             # Product name (centered, allow two lines for long names)
             c.setFont("Helvetica", 8)
-            product_name = product['name'][:60]  # Allow longer names
-            if len(product_name) > 30:
+            product_name = product['name'][:54]  # Allow longer names
+            if len(product_name) > 27:
                 # Split into two lines
                 words = product_name.split()
                 line1 = ""
                 line2 = ""
                 for word in words:
-                    if len(line1 + " " + word) <= 30:
+                    if len(line1 + " " + word) <= 27:
                         line1 += " " + word if line1 else word
                     else:
                         line2 += " " + word if line2 else word
                 if not line2:
                     # If can't split nicely, force split
-                    line1 = product_name[:30]
-                    line2 = product_name[30:]
+                    line1 = product_name[:27]
+                    line2 = product_name[27:]
             else:
                 line1 = product_name
                 line2 = ""
