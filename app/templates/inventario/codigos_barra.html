@@ -1,61 +1,138 @@
 {% extends "base.html" %}
 
+{% block head_extra %}
+<style>
+    .label-preview {
+        width: 180px; /* Ancho fijo para la previsualización */
+        height: 90px; /* Alto fijo */
+        border: 1px dashed #ccc;
+        padding: 5px;
+        font-family: 'Helvetica', sans-serif;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-sizing: border-box;
+        background-color: white;
+        font-size: 10px;
+        line-height: 1.2;
+        text-align: center;
+    }
+    .label-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        width: 100%;
+    }
+    .label-company-name {
+        font-size: 9px;
+        font-weight: bold;
+        text-align: left;
+        max-width: 60%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .label-price {
+        font-size: 11px;
+        font-weight: bold;
+        text-align: right;
+    }
+    .label-product-name {
+        font-size: 10px;
+        font-weight: normal;
+        /* Lógica para truncar a 2 líneas */
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        margin: 2px 0;
+    }
+    .label-barcode-container {
+        width: 100%;
+        margin: 0 auto;
+    }
+    .label-barcode-container svg {
+        max-width: 100%;
+        height: 30px; /* Altura fija para el código de barras */
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container mx-auto p-4">
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-barcode mr-2"></i>Imprimir Códigos de Barra</h1>
     </div>
 
-    <div class="bg-white p-6 rounded-lg shadow-md">
+    <div class="bg-white p-4 rounded-lg shadow-md">
         <form id="print-form" action="{{ url_for('main.imprimir_codigos_barra') }}" method="post" target="_blank">
             <!-- Filtros y Búsqueda -->
-            <div class="flex items-center justify-between mb-4">
-                <div class="flex items-center space-x-4">
-                    <div class="relative">
-                        <input type="text" id="search-input" name="search" placeholder="Buscar por código o nombre..."
-                               class="border border-gray-300 rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <span class="absolute inset-y-0 right-0 flex items-center pr-3">
-                            <i class="fas fa-search text-gray-400"></i>
-                        </span>
-                    </div>
-                    <div class="relative">
-                        <select id="group-filter" name="group" class="border border-gray-300 rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">Todos los Grupos</option>
-                            {% for group in product_groups %}
-                            <option value="{{ group }}">{{ group }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <button type="button" id="filter-btn" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
-                        Filtrar
-                    </button>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <input type="text" id="search-input" name="search" placeholder="Buscar por código o nombre..."
+                       class="md:col-span-2 border border-gray-300 rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                
+                <select id="group-filter" name="group" class="border border-gray-300 rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">Todos los Grupos</option>
+                    {% for group in product_groups %}
+                    <option value="{{ group }}">{{ group }}</option>
+                    {% endfor %}
+                </select>
+
+                <div class="flex items-center space-x-2">
+                    <select id="sort-by" name="sort_by" class="w-full border border-gray-300 rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="id" {% if sort_by == 'id' %}selected{% endif %}>Más Recientes</option>
+                        <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Nombre</option>
+                        <option value="barcode" {% if sort_by == 'barcode' %}selected{% endif %}>Cód. Barras</option>
+                        <option value="codigo_producto" {% if sort_by == 'codigo_producto' %}selected{% endif %}>Cód. Producto</option>
+                    </select>
+                    <select id="sort-order" name="sort_order" class="border border-gray-300 rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>Desc</option>
+                        <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>Asc</option>
+                    </select>
                 </div>
-                <button type="submit" id="print-btn" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors">
-                    <i class="fas fa-print mr-2"></i>Imprimir Seleccionados
+            </div>
+            <div class="flex justify-between items-center mb-4">
+                 <button type="button" id="filter-btn" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
+                    <i class="fas fa-filter mr-2"></i>Filtrar / Actualizar
+                </button>
+                 <button type="submit" id="print-btn" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors">
+                    <i class="fas fa-print mr-2"></i>Imprimir Seleccionados (<span id="selected-count">0</span>)
                 </button>
             </div>
 
             <!-- Tabla de Productos -->
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto border rounded-lg">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 <input type="checkbox" id="select-all">
                             </th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código de Barras</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detalles</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vista Previa de Etiqueta</th>
                         </tr>
                     </thead>
                     <tbody id="product-table-body" class="bg-white divide-y divide-gray-200">
                         {% for product in products %}
-                        <tr data-product-id="{{ product.id }}" data-barcode="{{ product.barcode }}">
-                            <td class="px-6 py-4 whitespace-nowrap">
+                        <tr data-product-id="{{ product.id }}" data-barcode="{{ product.barcode }}" data-name="{{ product.name }}" data-price="{{ product.price_usd }}">
+                            <td class="px-4 py-2 whitespace-nowrap">
                                 <input type="checkbox" name="product_ids" value="{{ product.id }}" class="product-checkbox">
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ product.name }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                <svg id="barcode-{{ product.id }}"></svg>
+                            <td class="px-4 py-2 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">{{ product.name }}</div>
+                                <div class="text-xs text-gray-500"><strong>Cód. Barra:</strong> {{ product.barcode }}</div>
+                                <div class="text-xs text-gray-500"><strong>Cód. Prod:</strong> {{ product.codigo_producto or 'N/A' }}</div>
+                            </td>
+                            <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                <div><strong>Marca:</strong> {{ product.marca or 'N/A' }}</div>
+                                <div><strong>Talla:</strong> {{ product.size or 'N/A' }}</div>
+                                <div><strong>Color:</strong> {{ product.color or 'N/A' }}</div>
+                            </td>
+                            <td class="px-4 py-2 whitespace-nowrap">
+                                <div class="label-preview" id="preview-{{ product.id }}">
+                                    <!-- El contenido se generará con JS -->
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -70,8 +147,11 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const selectAllCheckbox = document.getElementById('select-all');
+    const selectedCountSpan = document.getElementById('selected-count');
     const searchInput = document.getElementById('search-input');
     const groupFilter = document.getElementById('group-filter');
+    const sortBySelect = document.getElementById('sort-by');
+    const sortOrderSelect = document.getElementById('sort-order');
     const filterBtn = document.getElementById('filter-btn');
     const tableBody = document.getElementById('product-table-body');
 
@@ -80,21 +160,35 @@ document.addEventListener('DOMContentLoaded', function () {
         rows.forEach(row => {
             const barcodeValue = row.dataset.barcode;
             const productId = row.dataset.productId;
-            if (barcodeValue && productId) {
+            const productName = row.dataset.name;
+            const productPrice = parseFloat(row.dataset.price).toFixed(2);
+
+            const previewContainer = document.getElementById(`preview-${productId}`);
+            if (previewContainer) {
+                const companyName = "{{ company_info.name if company_info else '' }}";
+                const currencySymbol = "{{ currency_symbol }}";
+                const displaySymbol = currencySymbol === '$' ? 'REF.' : currencySymbol;
+
+                previewContainer.innerHTML = `
+                    <div class="label-header">
+                        <span class="label-company-name">${companyName}</span>
+                        <span class="label-price">${displaySymbol} ${productPrice}</span>
+                    </div>
+                    <div class="label-product-name">${productName}</div>
+                    <div class="label-barcode-container">
+                        <svg id="barcode-svg-${productId}"></svg>
+                    </div>
+                `;
+
                 try {
-                    JsBarcode(`#barcode-${productId}`, barcodeValue, {
+                    JsBarcode(`#barcode-svg-${productId}`, barcodeValue, {
                         format: "CODE128",
-                        displayValue: true,
-                        fontSize: 14,
-                        height: 50,
-                        width: 1.5
+                        displayValue: false, // El valor se muestra debajo del PDF, no en el SVG
+                        height: 40,
+                        margin: 0
                     });
                 } catch (e) {
-                    console.error(`Error generating barcode for product ${productId}:`, e);
-                    const barcodeElement = document.getElementById(`barcode-${productId}`);
-                    if(barcodeElement) {
-                        barcodeElement.outerHTML = '<p class="text-red-500">Error</p>';
-                    }
+                    console.error(`Error generating barcode for preview ${productId}:`, e);
                 }
             }
         });
@@ -103,18 +197,27 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateTable(products) {
         tableBody.innerHTML = ''; // Limpiar tabla
         products.forEach(product => {
-            const row = `
-                <tr data-product-id="${product.id}" data-barcode="${product.barcode}">
-                    <td class="px-6 py-4 whitespace-nowrap">
+            const rowHtml = `
+                <tr data-product-id="${product.id}" data-barcode="${product.barcode}" data-name="${product.name}" data-price="${product.price_usd}">
+                    <td class="px-4 py-2 whitespace-nowrap">
                         <input type="checkbox" name="product_ids" value="${product.id}" class="product-checkbox">
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${product.name}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <svg id="barcode-${product.id}"></svg>
+                    <td class="px-4 py-2 whitespace-nowrap">
+                        <div class="text-sm font-medium text-gray-900">${product.name}</div>
+                        <div class="text-xs text-gray-500"><strong>Cód. Barra:</strong> ${product.barcode}</div>
+                        <div class="text-xs text-gray-500"><strong>Cód. Prod:</strong> ${product.codigo_producto || 'N/A'}</div>
+                    </td>
+                    <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                        <div><strong>Marca:</strong> ${product.marca || 'N/A'}</div>
+                        <div><strong>Talla:</strong> ${product.size || 'N/A'}</div>
+                        <div><strong>Color:</strong> ${product.color || 'N/A'}</div>
+                    </td>
+                    <td class="px-4 py-2 whitespace-nowrap">
+                        <div class="label-preview" id="preview-${product.id}"></div>
                     </td>
                 </tr>
             `;
-            tableBody.innerHTML += row;
+            tableBody.innerHTML += rowHtml;
         });
         generateBarcodes();
         updateCheckboxEventListeners();
@@ -122,19 +225,33 @@ document.addEventListener('DOMContentLoaded', function () {
     
     function updateCheckboxEventListeners() {
         const productCheckboxes = document.querySelectorAll('.product-checkbox');
+        
+        function updateSelectedCount() {
+            const count = document.querySelectorAll('.product-checkbox:checked').length;
+            selectedCountSpan.textContent = count;
+        }
+
         selectAllCheckbox.addEventListener('change', function () {
             productCheckboxes.forEach(checkbox => {
                 checkbox.checked = selectAllCheckbox.checked;
             });
+            updateSelectedCount();
         });
+
+        productCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateSelectedCount);
+        });
+        updateSelectedCount(); // Initial count
     }
 
     // Filtrado y búsqueda
     filterBtn.addEventListener('click', function() {
         const searchTerm = searchInput.value.toLowerCase();
         const group = groupFilter.value;
+        const sortBy = sortBySelect.value;
+        const sortOrder = sortOrderSelect.value;
         
-        fetch(`{{ url_for('main.codigos_barra_api') }}?search=${searchTerm}&group=${group}`)
+        fetch(`{{ url_for('main.codigos_barra_api') }}?search=${searchTerm}&group=${group}&sort_by=${sortBy}&sort_order=${sortOrder}`)
             .then(response => response.json())
             .then(data => {
                 updateTable(data.products);
@@ -149,12 +266,13 @@ document.addEventListener('DOMContentLoaded', function () {
         const selectedCheckboxes = document.querySelectorAll('.product-checkbox:checked');
         if (selectedCheckboxes.length === 0) {
             e.preventDefault();
-            alert('Por favor, seleccione al menos un producto para imprimir.');
+            toastr.warning('Por favor, seleccione al menos un producto para imprimir.', 'Selección Vacía');
             return false;
         }
         // Mostrar indicador de carga
         printBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generando PDF...';
         printBtn.disabled = true;
+        setTimeout(() => { printBtn.disabled = false; printBtn.innerHTML = `<i class="fas fa-print mr-2"></i>Imprimir Seleccionados (<span id="selected-count">${selectedCheckboxes.length}</span>)`; }, 5000);
     });
 
     // Generación inicial de códigos de barras

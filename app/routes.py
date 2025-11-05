@@ -816,16 +816,39 @@ def codigos_barra():
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
         return redirect(url_for('main.new_order'))
 
-    # Obtener IDs de productos preseleccionados desde la URL
     preselected_ids_str = request.args.get('product_ids', '')
     preselected_ids = preselected_ids_str.split(',') if preselected_ids_str else []
 
-    products = Product.query.all()
+    sort_by = request.args.get('sort_by', 'id')
+    sort_order = request.args.get('sort_order', 'desc')
+
+    query = Product.query
+
+    # Lógica de ordenación
+    valid_sort_columns = {
+        'name': Product.name,
+        'barcode': Product.barcode,
+        'codigo_producto': Product.codigo_producto,
+        'id': Product.id
+    }
+    sort_column = valid_sort_columns.get(sort_by, Product.id)
+
+    if sort_order == 'desc':
+        query = query.order_by(sort_column.desc())
+    else:
+        query = query.order_by(sort_column.asc())
+
+    products = query.all()
     groups = db.session.query(Product.grupo).distinct().order_by(Product.grupo).all()
     product_groups = [g[0] for g in groups if g[0]]
+    company_info = CompanyInfo.query.first()
+    _, currency_symbol = get_main_calculation_currency_info()
+
     return render_template('inventario/codigos_barra.html', title='Imprimir Códigos de Barra', 
                            products=products, product_groups=product_groups,
-                           preselected_ids=preselected_ids)
+                           preselected_ids=preselected_ids,
+                           company_info=company_info, currency_symbol=currency_symbol,
+                           sort_by=sort_by, sort_order=sort_order)
 
 @routes_blueprint.route('/inventario/codigos_barra_api', methods=['GET']) # type: ignore
 @login_required
@@ -835,6 +858,9 @@ def codigos_barra_api():
 
     search_term = request.args.get('search', '').lower()
     group_filter = request.args.get('group', '').strip()
+    sort_by = request.args.get('sort_by', 'id')
+    sort_order = request.args.get('sort_order', 'desc')
+
     query = Product.query
 
     if group_filter:
@@ -845,8 +871,28 @@ def codigos_barra_api():
             Product.name.ilike(f'%{search_term}%'),
             Product.barcode.ilike(f'%{search_term}%')
         ))
-    products = query.all()
-    return jsonify(products=[{'id': p.id, 'name': p.name, 'barcode': p.barcode} for p in products])
+
+    # Lógica de ordenación para la API
+    valid_sort_columns = {
+        'name': Product.name,
+        'barcode': Product.barcode,
+        'codigo_producto': Product.codigo_producto,
+        'id': Product.id
+    }
+    sort_column = valid_sort_columns.get(sort_by, Product.id)
+
+    if sort_order == 'desc':
+        query = query.order_by(sort_column.desc())
+    else:
+        query = query.order_by(sort_column.asc())
+
+    products = query.limit(500).all() # Limitar para no sobrecargar la respuesta
+    
+    return jsonify(products=[{
+        'id': p.id, 'name': p.name, 'barcode': p.barcode,
+        'codigo_producto': p.codigo_producto, 'marca': p.marca,
+        'size': p.size, 'color': p.color, 'price_usd': p.price_usd
+    } for p in products])
 
 def generate_barcode_pdf_reportlab(products, company_info, currency_symbol):
     """
@@ -896,21 +942,21 @@ def generate_barcode_pdf_reportlab(products, company_info, currency_symbol):
 
             # Product name (centered, allow two lines for long names)
             c.setFont("Helvetica", 8)
-            product_name = product['name'][:60]  # Allow longer names
-            if len(product_name) > 30:
+            product_name = product['name'][:54]  # Allow longer names
+            if len(product_name) > 27:
                 # Split into two lines
                 words = product_name.split()
                 line1 = ""
                 line2 = ""
                 for word in words:
-                    if len(line1 + " " + word) <= 30:
+                    if len(line1 + " " + word) <= 27:
                         line1 += " " + word if line1 else word
                     else:
                         line2 += " " + word if line2 else word
                 if not line2:
                     # If can't split nicely, force split
-                    line1 = product_name[:30]
-                    line2 = product_name[30:]
+                    line1 = product_name[:27]
+                    line2 = product_name[27:]
             else:
                 line1 = product_name
                 line2 = ""
