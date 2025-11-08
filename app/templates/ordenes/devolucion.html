@@ -1,136 +1,132 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto p-4 max-w-4xl">
-    <div class="flex items-center mb-6">
-        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-undo-alt mr-2"></i>Anulación / Devolución de Venta</h1>
-    </div>
+<div class="container mx-auto p-2 max-w-7xl">
+    
+    
 
-    <!-- Search Form -->
-    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
-        <form method="GET" action="{{ url_for('main.return_order') }}">
-            <label for="order_id_search" class="block text-gray-700 text-sm font-bold mb-2">Buscar Orden por ID:</label>
-            <div class="flex items-center">
-                <input type="number" id="order_id_search" name="order_id_search" placeholder="Ingrese el número de la orden"
-                       class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
-                       value="{{ request.args.get('order_id_search', '') }}">
-                <button type="submit" class="ml-4 bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
-                    <i class="fas fa-search mr-2"></i>Buscar
-                </button>
-            </div>
-        </form>
-    </div>
+    
+        <div class="bg-white p-4 rounded-lg shadow-md mt-4">
+            <!-- Search Form -->
+            
+                <form method="GET" action="{{ url_for('main.return_order') }}">
+                    <label for="order_id_search" class="block text-gray-700 text-sm font-bold mb-2">Buscar Orden por ID:</label>
+                    <div class="flex items-center">
+                        <input type="number" id="order_id_search" name="order_id_search" placeholder="Ingrese el número de la orden"
+                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value="{{ request.args.get('order_id_search', '') }}">
+                        <button type="submit" class="ml-4 bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
+                            <i class="fas fa-search mr-2"></i>Buscar
+                        </button>
+                    </div>
+                </form>
+        {% if order %}
+            <form method="POST" action="{{ url_for('main.return_order') }}" id="return-form">
+                <input type="hidden" name="order_id" value="{{ order.id }}">
 
-    {% if order %}
-    <div class="bg-white p-6 rounded-lg shadow-md">
-        <form method="POST" action="{{ url_for('main.return_order') }}" id="return-form">
-            <input type="hidden" name="order_id" value="{{ order.id }}">
-
-            <!-- Order Details -->
-            <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 mb-6">
-                <!-- LEFT COLUMN: Client and Order Info -->
-                <div class="lg:col-span-1 space-y-6">
-                    <!-- Client Info -->
-                    <div class="border p-4 rounded-lg bg-gray-50 shadow-lg">
-                        <h2 class="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Información del Cliente</h2>
-                        <div class="space-y-2 text-sm text-gray-600">
-                            <p><strong>Nombre: </strong>{{ order.client.name }}</p>
-                            {% if order.client.cedula_rif %}<p><strong>Cédula/RIF: </strong>{{ order.client.cedula_rif }}</p>{% endif %}
-                            {% if order.client.phone %}<p><strong>Teléfono: </strong>{{ order.client.phone }}</p>{% endif %}
-                            {% if order.client.address %}<p><strong>Dirección: </strong>{{ order.client.address }}</p>{% endif %}
+                <!-- Main two-column layout -->
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-4">
+                    <!-- LEFT COLUMN: Client and Order Info -->
+                    <div class="space-y-4 lg:col-span-1">
+                        <!-- Client Info -->
+                        <div class="border p-4 rounded-lg bg-gray-50 shadow-sm">
+                            <h2 class="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Información del Cliente</h2>
+                            <div class="space-y-2 text-sm text-gray-600">
+                                <p><strong>Nombre: </strong>{{ order.client.name }}</p>
+                                {% if order.client.cedula_rif %}<p><strong>Cédula/RIF: </strong>{{ order.client.cedula_rif }}</p>{% endif %}
+                                {% if order.client.phone %}<p><strong>Teléfono: </strong>{{ order.client.phone }}</p>{% endif %}
+                                {% if order.client.address %}<p><strong>Dirección: </strong>{{ order.client.address }}</p>{% endif %}
+                            </div>
+                        </div>
+                        <!-- Order Info -->
+                        <div class="border p-4 rounded-lg bg-gray-50 shadow-sm">
+                            <h2 class="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Detalles de la Orden</h2>
+                            <div class="space-y-2 text-sm text-gray-600">
+                                <p><strong>Estado:</strong> <span class="font-semibold">{{ order.status }}</span></p>
+                                <p><strong>Tipo:</strong> <span class="font-semibold">{{ order.order_type.replace('regular', 'Venta Regular').replace('credit', 'Crédito').replace('reservation', 'Apartado')|title }}</span></p>
+                                <p><strong>Fecha:</strong> <span class="font-semibold">{{ order.date_created|ve_datetime }}</span></p>
+                                <p><strong>Total Pagado:</strong> <span class="font-semibold">{{ order.paid_amount_usd | usd_format }}</span></p>
+                            </div>
                         </div>
                     </div>
-                    <!-- Order Info -->
-                    <div class="border p-4 rounded-lg shadow-lg">
-                        <h2 class="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Detalles de la Orden</h2>
-                        <div class="space-y-2 text-sm text-gray-600">
-                            <p><strong>Estado:</strong> <span class="font-semibold">{{ order.status }}</span></p>
-                            <p><strong>Tipo:</strong> <span class="font-semibold">{{ order.order_type.replace('regular', 'Venta Regular').replace('credit', 'Crédito').replace('reservation', 'Apartado')|title }}</span></p>
-                            <p><strong>Fecha:</strong> <span class="font-semibold">{{ order.date_created|ve_datetime }}</span></p>
-                            <p><strong>Total Pagado:</strong> <span class="font-semibold">{{ order.paid_amount_usd | usd_format }}</span></p>
+
+                    <!-- RIGHT COLUMN: Actions -->
+                    <div class="lg:col-span-3">
+                        {% if order.status in ['Anulada', 'Devolución Parcial'] %}
+                        <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
+                            <p class="font-bold">Orden Ya Procesada</p>
+                            <p>Esta orden ya ha sido procesada para anulación o devolución y no puede ser modificada.</p>
                         </div>
+                        {% else %}
+                        
+
+                        <!-- Actions: Partial Return -->
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-700 mb-2">1. Devolución Parcial</h3>
+                            <p class="text-sm text-gray-600 mb-4">Seleccione los productos y cantidades a devolver. El stock se repondrá y podrá procesar un reembolso por el valor correspondiente.</p>
+
+                            <div class="overflow-x-auto mb-4 border rounded-lg">
+                                <table class="min-w-full bg-white text-sm">
+                                    <thead class="bg-gray-100">
+                                        <tr>
+                                            <th class="py-2 px-4 text-left font-semibold text-gray-600">Códigos</th>
+                                            <th class="py-2 px-4 text-left font-semibold text-gray-600">Producto</th>
+                                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Cant. Vendida</th>
+                                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Precio Unit. (Bs)</th>
+                                            <th class="py-2 px-4 text-center font-semibold text-gray-600" style="width: 150px;">Cantidad a Devolver</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="text-gray-700 divide-y divide-gray-200">
+                                        {% for item in order.items %}
+                                        <tr class="return-item-row">
+                                            <td class="py-2 px-4">
+                                                <div class="text-xs"><strong>COD:</strong> {{ item.product.codigo_producto or 'N/A' }}</div>
+                                                <div class="text-xs"><i class="fas fa-barcode w-4 inline-block text-left"></i> {{ item.product.barcode }}</div>
+                                            </td>
+                                            <td class="py-2 px-4">
+                                                {{ item.product.name }}
+                                                <input type="hidden" name="return_item_id" value="{{ item.id }}">
+                                            </td>
+                                            <td class="py-2 px-4 text-center">{{ item.quantity }} (Devueltos: {{ item.returned_quantity or 0 }})</td>
+                                            <td class="py-2 px-4 text-center" data-price="{{ item.price }}">{{ "%.2f"|format(item.price) }}</td>
+                                            <td class="py-2 px-4 text-center">
+                                                {% set available_to_return = item.quantity - (item.returned_quantity or 0) %}
+                                                <input type="number" name="return_quantity" class="shadow-sm appearance-none border rounded w-24 py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-center return-quantity-input"
+                                                       min="0" max="{{ available_to_return }}" value="0" data-item-id="{{ item.id }}">
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="return_reason" class="block text-gray-700 text-sm font-bold mb-2">Motivo de la Devolución (Obligatorio):</label>
+                                <input type="text" id="return_reason" name="return_reason" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+
+                            <div class="flex justify-end mt-6">
+                                <input type="hidden" name="refund_payments_data" id="refund-payments-data-input">
+                                <input type="hidden" name="action" value="devolucion_parcial">
+                                <button type="button" id="open-refund-modal-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">
+                                    <i class="fas fa-check-circle mr-2"></i>Procesar Devolución Parcial
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Actions: Total Annulment -->
+                        <div class="mb-6 border-b pb-6">
+                            <h3 class="text-lg font-semibold text-gray-700 mb-2">2. Anulación Total</h3>
+                            <p class="text-sm text-gray-600 mb-3">Esta acción devolverá TODOS los productos al inventario y revertirá TODOS los pagos asociados a la orden. La orden quedará marcada como "Anulada".</p>
+                            <button type="submit" name="action" value="anulacion_total" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
+                                    onclick="return confirm('¿Está seguro de que desea anular COMPLETAMENTE esta orden? Esta acción no se puede deshacer.')">
+                                <i class="fas fa-exclamation-triangle mr-2"></i>Anular Orden Completa
+                            </button>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
-                
-                <!-- RIGHT COLUMN: Placeholder for alignment -->
-                <div class="lg:col-span-3">
-                    <!-- This column can be used for other details if needed, or left empty to push the info to the left -->
-                </div>
-            </div>
-
-
-
-            {% if order.status in ['Anulada', 'Devolución Parcial'] %}
-            <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6" role="alert">
-                <p class="font-bold">Orden Ya Procesada</p>
-                <p>Esta orden ya ha sido procesada para anulación o devolución y no puede ser modificada.</p>
-            </div>
-            {% else %}
-            <!-- Actions: Total Annulment -->
-            <div class="mb-6">
-                <h3 class="text-lg font-semibold text-gray-700 mb-2">Anulación Total</h3>
-                <p class="text-sm text-gray-600 mb-3">Esta acción devolverá TODOS los productos al inventario y revertirá TODOS los pagos asociados a la orden. La orden quedará marcada como "Anulada".</p>
-                <button type="submit" name="action" value="anulacion_total" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
-                        onclick="return confirm('¿Está seguro de que desea anular COMPLETAMENTE esta orden? Esta acción no se puede deshacer.')">
-                    <i class="fas fa-exclamation-triangle mr-2"></i>Anular Orden Completa
-                </button>
-            </div>
-
-            <!-- Actions: Partial Return -->
-            <div class="border-t pt-6">
-                <h3 class="text-lg font-semibold text-gray-700 mb-2">Devolución Parcial</h3>
-                <p class="text-sm text-gray-600 mb-4">Seleccione los productos y cantidades a devolver. El stock se repondrá y podrá procesar un reembolso por el valor correspondiente.</p>
-
-                <div class="overflow-x-auto mb-4">
-                    <table class="min-w-full bg-white text-sm">
-                        <thead class="bg-gray-100">
-                            <tr>
-                                <th class="py-2 px-4 text-left font-semibold text-gray-600">Códigos</th>
-                                <th class="py-2 px-4 text-left font-semibold text-gray-600">Producto</th>
-                                <th class="py-2 px-4 text-center font-semibold text-gray-600">Cant. Vendida</th>
-                                <th class="py-2 px-4 text-center font-semibold text-gray-600">Precio Unit. (Bs)</th>
-                                <th class="py-2 px-4 text-center font-semibold text-gray-600" style="width: 150px;">Cantidad a Devolver</th>
-                            </tr>
-                        </thead>
-                        <tbody class="text-gray-700 divide-y divide-gray-200">
-                            {% for item in order.items %}
-                            <tr class="return-item-row">
-                                <td class="py-2 px-4">
-                                    <div class="text-xs"><strong>COD:</strong> {{ item.product.codigo_producto or 'N/A' }}</div>
-                                    <div class="text-xs"><i class="fas fa-barcode w-4 inline-block text-left"></i> {{ item.product.barcode }}</div>
-                                </td>
-                                <td class="py-2 px-4">
-                                    {{ item.product.name }}
-                                    <input type="hidden" name="return_item_id" value="{{ item.id }}">
-                                </td>
-                                <td class="py-2 px-4 text-center">{{ item.quantity }} (Devueltos: {{ item.returned_quantity or 0 }})</td>
-                                <td class="py-2 px-4 text-center" data-price="{{ item.price }}">{{ "%.2f"|format(item.price) }}</td>
-                                <td class="py-2 px-4 text-center">
-                                    {% set available_to_return = item.quantity - (item.returned_quantity or 0) %}
-                                    <input type="number" name="return_quantity" class="shadow-sm appearance-none border rounded w-24 py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-center return-quantity-input"
-                                           min="0" max="{{ available_to_return }}" value="0" data-item-id="{{ item.id }}">
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="mb-4">
-                    <label for="return_reason" class="block text-gray-700 text-sm font-bold mb-2">Motivo de la Devolución (Obligatorio):</label>
-                    <input type="text" id="return_reason" name="return_reason" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-
-                <div class="flex justify-end mt-6">
-                    <input type="hidden" name="refund_payments_data" id="refund-payments-data-input">
-                    <input type="hidden" name="action" value="devolucion_parcial">
-                    <button type="button" id="open-refund-modal-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">
-                        <i class="fas fa-check-circle mr-2"></i>Procesar Devolución Parcial
-                    </button>
-                </div>
-            </div>
-            {% endif %}
-        </form>
+            </form>
+        </div>
     </div>
     {% endif %}
 </div>

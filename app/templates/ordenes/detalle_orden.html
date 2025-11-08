@@ -183,7 +183,7 @@
                     <div class="bg-gray-50 p-4 rounded-lg self-start shadow-lg">
                         <div class="space-y-2">
                             <div class="flex justify-between">
-                                <span class="font-semibold">Subtotal (Post-Devolución):</span>
+                                <span class="font-semibold">Subtotal:</span>
                                 {% set subtotal_ns = namespace(value=0) %}
                                 {% for item in order.items %}
                                     {% set subtotal_ns.value = subtotal_ns.value + (item.price * (item.quantity - (item.returned_quantity or 0))) %}

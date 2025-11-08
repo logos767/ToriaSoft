@@ -368,9 +368,8 @@
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Reporte Mensual</h3>
                 <p class="mb-4"><span class="role-badge role-todos">Todos los roles</span></p>
                 <p class="text-gray-600">Permite generar un completo reporte financiero en formato PDF para un mes y año específicos. Este reporte es ideal para cierres contables e incluye estado de resultados, análisis de ventas, cuentas por cobrar, flujo de fondos y más.</p>
-                <div class="my-4 screenshot-placeholder">
-                    <i class="fas fa-camera mr-2"></i>
-                    <span>Captura de pantalla del generador de Reporte Mensual</span>
+                <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
+                    <img src="{{ url_for('static', filename='img/manual_usuario/reporte_mensual.png') }}" alt="Captura de pantalla del reporte mensual de ventas" class="w-full">
                 </div>
 
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Estadísticas</h3>
@@ -424,9 +423,7 @@
                 <p class="mt-4 text-gray-600">
                     Es crucial asignar el rol correcto a cada usuario para mantener la seguridad e integridad de los datos del sistema.
                 </p>
-                <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
-                    <img src="{{ url_for('static', filename='img/manual_usuario/gestion_usuarios.png') }}" alt="Captura de pantalla de la gestión de usuarios" class="w-full">
-                </div>
+                
             </section>
 
             <section id="perfil" class="mb-12 bg-white p-6 rounded-lg shadow-md">

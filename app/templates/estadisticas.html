@@ -1,86 +1,53 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto p-4">
-    <h1 class="text-3xl font-bold text-gray-800 mb-6"><i class="fas fa-chart-line mr-2"></i>{{ title }}</h1>
+<div class="container mx-auto p-1 md:p-2">
+    
 
-    <!-- Filtros de Período -->
-    <div class="bg-white p-4 rounded-lg shadow-md mb-6">
-        <form method="GET" action="{{ url_for('main.estadisticas') }}" id="stats-filter-form">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                <div>
-                    <label for="period" class="block text-sm font-medium text-gray-700">Ver por</label>
-                    <select name="period" id="period" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                        <option value="monthly" {% if filters.period == 'monthly' %}selected{% endif %}>Mensual (Año Actual)</option>
-                        <option value="daily" {% if filters.period == 'daily' %}selected{% endif %}>Diario</option>
-                        <option value="custom" {% if filters.period == 'custom' %}selected{% endif %}>Rango Personalizado</option>
-                    </select>
-                </div>
 
-                <div id="daily-filter" class="{% if filters.period != 'daily' %}hidden{% endif %}">
-                    <label for="date" class="block text-sm font-medium text-gray-700">Seleccionar Día</label>
-                    <input type="date" name="date" id="date" value="{{ filters.start_date }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                </div>
-
-                <div id="custom-filter" class="md:col-span-2 grid grid-cols-2 gap-4 {% if filters.period != 'custom' %}hidden{% endif %}">
-                    <div>
-                        <label for="start_date" class="block text-sm font-medium text-gray-700">Desde</label>
-                        <input type="date" name="start_date" id="start_date" value="{{ filters.start_date }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                    </div>
-                    <div>
-                        <label for="end_date" class="block text-sm font-medium text-gray-700">Hasta</label>
-                        <input type="date" name="end_date" id="end_date" value="{{ filters.end_date }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                    </div>
-                </div>
-
-                <div class="flex items-end space-x-2">
-                    <button type="submit" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors w-full text-center">
-                        <i class="fas fa-filter mr-2"></i>Aplicar
-                    </button>
-                </div>
-            </div>
-        </form>
-    </div>
-
-    <!-- Generar Reporte Mensual PDF -->
-    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
-        <h2 class="text-2xl font-semibold text-gray-700 mb-4">Reporte de Cierre Mensual</h2>
-        <p class="text-gray-600 mb-6">
-            Seleccione un mes y año para generar un reporte detallado en formato PDF. El reporte incluirá un resumen financiero completo del mes, análisis de ventas, estado de cuentas por cobrar, flujo de caja y más.
-        </p>
-        <form method="GET" action="{{ url_for('main.generar_reporte_mensual_pdf') }}" target="_blank" id="monthly-report-form">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                <div>
-                    <label for="report_month" class="block text-sm font-medium text-gray-700">Mes</label>
-                    <select name="month" id="report_month" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                        <option value="1">Enero</option>
-                        <option value="2">Febrero</option>
-                        <option value="3">Marzo</option>
-                        <option value="4">Abril</option>
-                        <option value="5">Mayo</option>
-                        <option value="6">Junio</option>
-                        <option value="7">Julio</option>
-                        <option value="8">Agosto</option>
-                        <option value="9">Septiembre</option>
-                        <option value="10">Octubre</option>
-                        <option value="11">Noviembre</option>
-                        <option value="12">Diciembre</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="report_year" class="block text-sm font-medium text-gray-700">Año</label>
-                    <input type="number" name="year" id="report_year" placeholder="Ej: 2024" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" required>
-                </div>
-                <button type="submit" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors w-full text-center">
-                    <i class="fas fa-file-pdf mr-2"></i>Generar PDF
-                </button>
-            </div>
-        </form>
-    </div>
 
     <!-- Resumen Total del Período -->
-    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
-        <h2 class="text-2xl font-semibold text-gray-700 mb-6">Resumen del Período Seleccionado</h2>
+    <div class="bg-white p-4 rounded-lg shadow-md mb-4">
+        <div style="display: flex; justify-content: space-between;">
+            <h2 class="text-xl font-semibold text-gray-700 m-2">Resumen del Período Seleccionado</h2>
+                <!-- Filtros de Período -->
+            <div class="d-flex p-1 rounded-lg mb-2">
+                <form method="GET" action="{{ url_for('main.estadisticas') }}" id="stats-filter-form">
+                    <div style="align-items: center;" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        <div>
+                            <select name="period" id="period" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                <option value="monthly" {% if filters.period == 'monthly' %}selected{% endif %}>Mensual (Año Actual)</option>
+                                <option value="daily" {% if filters.period == 'daily' %}selected{% endif %}>Diario</option>
+                                <option value="custom" {% if filters.period == 'custom' %}selected{% endif %}>Rango Personalizado</option>
+                            </select>
+                        </div>
+
+                        <div id="daily-filter" class="{% if filters.period != 'daily' %}hidden{% endif %}">
+                            <label for="date" class="block text-sm font-medium text-gray-700">Seleccionar Día</label>
+                            <input type="date" name="date" id="date" value="{{ filters.start_date }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        </div>
+
+                        <div id="custom-filter" class="md:col-span-2 grid grid-cols-2 gap-4 {% if filters.period != 'custom' %}hidden{% endif %}">
+                            <div>
+                                <label for="start_date" class="block text-sm font-medium text-gray-700">Desde</label>
+                                <input type="date" name="start_date" id="start_date" value="{{ filters.start_date }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="end_date" class="block text-sm font-medium text-gray-700">Hasta</label>
+                                <input type="date" name="end_date" id="end_date" value="{{ filters.end_date }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            </div>
+                        </div>
+
+                        <div class="flex items-end space-x-2">
+                            <button type="submit" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors w-full text-center">
+                                <i class="fas fa-filter mr-2"></i>Aplicar
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 text-center">
             <div class="bg-blue-50 p-3 rounded-lg">
                 <h3 class="text-sm font-semibold text-blue-800">Ventas Totales</h3>
@@ -109,16 +76,49 @@
         </div>
     </div>
 
-    <!-- Gráfico de Ganancias y Pérdidas -->
-    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
-        <h2 class="text-xl font-semibold text-gray-700 mb-4">Desglose de Resultados por Período</h2>
-        <canvas id="profitLossChart"></canvas>
+    <!-- Grid principal para gráficos y acciones -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        <!-- Columna principal para el gráfico de resultados -->
+        <div class="lg:col-span-2 bg-white p-4 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Desglose de Resultados por Período</h2>
+            <div class="h-64 md:h-80">
+                <canvas id="profitLossChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Columna lateral para gráficos pequeños y acciones -->
+        <div class="space-y-4">
+            <!-- Gráfico de Productos más vendidos -->
+            <div class="bg-white p-4 rounded-lg shadow-md">
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">Top 5 Productos Vendidos</h2>
+                <div class="h-48">
+                    <canvas id="topProductsChart"></canvas>
+                </div>
+            </div>
+            <!-- Generar Reporte Mensual PDF -->
+            <div class="bg-white p-4 rounded-lg shadow-md">
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">Reporte de Cierre Mensual</h2>
+                <form method="GET" action="{{ url_for('main.generar_reporte_mensual_pdf') }}" target="_blank" id="monthly-report-form">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                        <div class="sm:col-span-2 grid grid-cols-2 gap-2">
+                            <select name="month" id="report_month" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                {% for i in range(1, 13) %}<option value="{{ i }}">{{ ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"][i-1] }}</option>{% endfor %}
+                            </select>
+                            <input type="number" name="year" id="report_year" placeholder="Año" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" required>
+                        </div>
+                        <button type="submit" class="bg-red-600 text-white font-bold py-2 px-3 rounded-lg hover:bg-red-700 transition-colors w-full text-center text-sm">
+                            <i class="fas fa-file-pdf mr-1"></i>Generar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 
     <!-- Tabla de Desglose -->
-    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
-        <h2 class="text-xl font-semibold text-gray-700 mb-4">Tabla de Resultados Detallados</h2>
-        <div class="overflow-x-auto">
+    <div class="bg-white p-4 rounded-lg shadow-md mb-4">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">Resultados Detallados por Período</h2>
+        <div class="overflow-x-auto max-h-96">
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                     <tr>
@@ -152,16 +152,10 @@
         </div>
     </div>
     
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <!-- Gráfico de Productos más vendidos -->
-        <div class="bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">Top 5 Productos Vendidos (por Cantidad)</h2>
-            <canvas id="topProductsChart"></canvas>
-        </div>
-        
-        <!-- Gráfico de Clientes más frecuentes -->
-        <div class="bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">Top 5 Clientes Frecuentes (por # de Órdenes)</h2>
+    <!-- Gráfico de Clientes más frecuentes -->
+    <div class="bg-white p-4 rounded-lg shadow-md">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">Top 5 Clientes Frecuentes (por # de Órdenes)</h2>
+        <div class="h-64">
             <canvas id="frequentClientsChart"></canvas>
         </div>
     </div>
@@ -196,8 +190,8 @@
             const defaultMonth = reportDate.getMonth() + 1; // getMonth es 0-11, el valor del select es 1-12
             const defaultYear = reportDate.getFullYear();
 
-            reportMonthSelect.value = defaultMonth;
-            reportYearInput.value = defaultYear;
+            reportMonthSelect.value = defaultMonth; // Set default month
+            reportYearInput.value = defaultYear; // Set default year
         }
 
         // Datos de la plantilla
@@ -206,61 +200,53 @@
         const profitLossChartData = {{ profit_loss_chart_data | tojson }};
         const currencySymbol = '{{ currency_symbol }}';
         
-        // Gráfico de Top Productos
-        new Chart(document.getElementById('topProductsChart'), {
-            type: 'pie',
-            data: {
-                labels: topProductsData.labels,
-                datasets: [{
-                    label: 'Cantidad Vendida',
-                    data: topProductsData.values,
-                    backgroundColor: [
-                        'rgba(75, 192, 192, 0.6)',
-                        'rgba(153, 102, 255, 0.6)',
-                        'rgba(255, 159, 64, 0.6)',
-                        'rgba(255, 99, 132, 0.6)',
-                        'rgba(54, 162, 235, 0.6)'
-                    ],
-                    borderColor: [
-                        'rgba(75, 192, 192, 1)',
-                        'rgba(153, 102, 255, 1)',
-                        'rgba(255, 159, 64, 1)',
-                        'rgba(255, 99, 132, 1)',
-                        'rgba(54, 162, 235, 1)'
-                    ],
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true
-            }
-        });
-
-        // Gráfico de Clientes Frecuentes
-        new Chart(document.getElementById('frequentClientsChart'), {
-            type: 'bar',
-            data: {
-                labels: frequentClientsData.labels,
-                datasets: [{
-                    label: '# de Órdenes',
-                    data: frequentClientsData.values,
-                    backgroundColor: 'rgba(255, 205, 86, 0.5)',
-                    borderColor: 'rgba(255, 205, 86, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
+        // Gráfico de Top Productos (Pie Chart)
+        if (document.getElementById('topProductsChart') && topProductsData.labels.length > 0) {
+            new Chart(document.getElementById('topProductsChart'), {
+                type: 'pie',
+                data: {
+                    labels: topProductsData.labels,
+                    datasets: [{
+                        label: 'Cantidad Vendida',
+                        data: topProductsData.values,
+                        backgroundColor: ['#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#6366F1'],
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right', labels: { boxWidth: 12 } } }
                 }
-            }
-        });
+            });
+        }
 
-        // Gráfico de Resultados por Período
-        new Chart(document.getElementById('profitLossChart'), {
+        // Gráfico de Clientes Frecuentes (Bar Chart)
+        if (document.getElementById('frequentClientsChart') && frequentClientsData.labels.length > 0) {
+            new Chart(document.getElementById('frequentClientsChart'), {
+                type: 'bar',
+                data: {
+                    labels: frequentClientsData.labels,
+                    datasets: [{
+                        label: '# de Órdenes',
+                        data: frequentClientsData.values,
+                        backgroundColor: '#FBBF24',
+                        borderColor: '#D97706',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // Gráfico de Resultados por Período (Line/Bar Combo)
+        if (document.getElementById('profitLossChart') && profitLossChartData.labels.length > 0) {
+            new Chart(document.getElementById('profitLossChart'), {
             type: 'line',
             data: {
                 labels: profitLossChartData.labels,
@@ -291,14 +277,15 @@
                 }]
             },
             options: {
-                responsive: true,
+                responsive: true, // Mantiene la relación de aspecto
+                maintainAspectRatio: false, // Permite que el gráfico llene el contenedor
                 scales: {
                     y: {
                         beginAtZero: true,
                     }
                 },
                 plugins: {
-                    title: { display: true, text: 'Comparativa de Ventas, Costos y Utilidad Neta' },
+                    title: { display: false }, // El título ya está en el HTML
                     legend: {
                         display: true,
                         position: 'top'
@@ -321,6 +308,7 @@
                 }
             }
         });
+        }
     });
 </script>
 {% endblock %}
