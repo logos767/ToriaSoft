@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-4xl">
+    <div class="flex items-center mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-undo-alt mr-2"></i>Anulación / Devolución de Venta</h1>
+    </div>
+
+    <!-- Search Form -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+        <form method="GET" action="{{ url_for('main.return_order') }}">
+            <label for="order_id_search" class="block text-gray-700 text-sm font-bold mb-2">Buscar Orden por ID:</label>
+            <div class="flex items-center">
+                <input type="number" id="order_id_search" name="order_id_search" placeholder="Ingrese el número de la orden"
+                       class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       value="{{ request.args.get('order_id_search', '') }}">
+                <button type="submit" class="ml-4 bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
+                    <i class="fas fa-search mr-2"></i>Buscar
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {% if order %}
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <form method="POST" action="{{ url_for('main.return_order') }}" id="return-form">
+            <input type="hidden" name="order_id" value="{{ order.id }}">
+
+            <!-- Order Details -->
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 mb-6">
+                <!-- LEFT COLUMN: Client and Order Info -->
+                <div class="lg:col-span-1 space-y-6">
+                    <!-- Client Info -->
+                    <div class="border p-4 rounded-lg bg-gray-50 shadow-lg">
+                        <h2 class="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Información del Cliente</h2>
+                        <div class="space-y-2 text-sm text-gray-600">
+                            <p><strong>Nombre: </strong>{{ order.client.name }}</p>
+                            {% if order.client.cedula_rif %}<p><strong>Cédula/RIF: </strong>{{ order.client.cedula_rif }}</p>{% endif %}
+                            {% if order.client.phone %}<p><strong>Teléfono: </strong>{{ order.client.phone }}</p>{% endif %}
+                            {% if order.client.address %}<p><strong>Dirección: </strong>{{ order.client.address }}</p>{% endif %}
+                        </div>
+                    </div>
+                    <!-- Order Info -->
+                    <div class="border p-4 rounded-lg shadow-lg">
+                        <h2 class="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Detalles de la Orden</h2>
+                        <div class="space-y-2 text-sm text-gray-600">
+                            <p><strong>Estado:</strong> <span class="font-semibold">{{ order.status }}</span></p>
+                            <p><strong>Tipo:</strong> <span class="font-semibold">{{ order.order_type.replace('regular', 'Venta Regular').replace('credit', 'Crédito').replace('reservation', 'Apartado')|title }}</span></p>
+                            <p><strong>Fecha:</strong> <span class="font-semibold">{{ order.date_created|ve_datetime }}</span></p>
+                            <p><strong>Total Pagado:</strong> <span class="font-semibold">{{ order.paid_amount_usd | usd_format }}</span></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- RIGHT COLUMN: Placeholder for alignment -->
+                <div class="lg:col-span-3">
+                    <!-- This column can be used for other details if needed, or left empty to push the info to the left -->
+                </div>
+            </div>
+
+
+
+            {% if order.status in ['Anulada', 'Devolución Parcial'] %}
+            <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6" role="alert">
+                <p class="font-bold">Orden Ya Procesada</p>
+                <p>Esta orden ya ha sido procesada para anulación o devolución y no puede ser modificada.</p>
+            </div>
+            {% else %}
+            <!-- Actions: Total Annulment -->
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">Anulación Total</h3>
+                <p class="text-sm text-gray-600 mb-3">Esta acción devolverá TODOS los productos al inventario y revertirá TODOS los pagos asociados a la orden. La orden quedará marcada como "Anulada".</p>
+                <button type="submit" name="action" value="anulacion_total" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
+                        onclick="return confirm('¿Está seguro de que desea anular COMPLETAMENTE esta orden? Esta acción no se puede deshacer.')">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>Anular Orden Completa
+                </button>
+            </div>
+
+            <!-- Actions: Partial Return -->
+            <div class="border-t pt-6">
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">Devolución Parcial</h3>
+                <p class="text-sm text-gray-600 mb-4">Seleccione los productos y cantidades a devolver. El stock se repondrá y podrá procesar un reembolso por el valor correspondiente.</p>
+
+                <div class="overflow-x-auto mb-4">
+                    <table class="min-w-full bg-white text-sm">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="py-2 px-4 text-left font-semibold text-gray-600">Códigos</th>
+                                <th class="py-2 px-4 text-left font-semibold text-gray-600">Producto</th>
+                                <th class="py-2 px-4 text-center font-semibold text-gray-600">Cant. Vendida</th>
+                                <th class="py-2 px-4 text-center font-semibold text-gray-600">Precio Unit. (Bs)</th>
+                                <th class="py-2 px-4 text-center font-semibold text-gray-600" style="width: 150px;">Cantidad a Devolver</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-gray-700 divide-y divide-gray-200">
+                            {% for item in order.items %}
+                            <tr class="return-item-row">
+                                <td class="py-2 px-4">
+                                    <div class="text-xs"><strong>COD:</strong> {{ item.product.codigo_producto or 'N/A' }}</div>
+                                    <div class="text-xs"><i class="fas fa-barcode w-4 inline-block text-left"></i> {{ item.product.barcode }}</div>
+                                </td>
+                                <td class="py-2 px-4">
+                                    {{ item.product.name }}
+                                    <input type="hidden" name="return_item_id" value="{{ item.id }}">
+                                </td>
+                                <td class="py-2 px-4 text-center">{{ item.quantity }} (Devueltos: {{ item.returned_quantity or 0 }})</td>
+                                <td class="py-2 px-4 text-center" data-price="{{ item.price }}">{{ "%.2f"|format(item.price) }}</td>
+                                <td class="py-2 px-4 text-center">
+                                    {% set available_to_return = item.quantity - (item.returned_quantity or 0) %}
+                                    <input type="number" name="return_quantity" class="shadow-sm appearance-none border rounded w-24 py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-center return-quantity-input"
+                                           min="0" max="{{ available_to_return }}" value="0" data-item-id="{{ item.id }}">
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mb-4">
+                    <label for="return_reason" class="block text-gray-700 text-sm font-bold mb-2">Motivo de la Devolución (Obligatorio):</label>
+                    <input type="text" id="return_reason" name="return_reason" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <div class="flex justify-end mt-6">
+                    <input type="hidden" name="refund_payments_data" id="refund-payments-data-input">
+                    <input type="hidden" name="action" value="devolucion_parcial">
+                    <button type="button" id="open-refund-modal-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">
+                        <i class="fas fa-check-circle mr-2"></i>Procesar Devolución Parcial
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+    {% endif %}
+</div>
+<!-- Refund Modal -->
+<div id="refund-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-10 mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl leading-6 font-medium text-gray-900" id="refund-modal-title">Confirmar Devolución</h3>
+                <button id="close-refund-modal-btn" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <div id="refund-modal-content">
+                <!-- Content will be injected by JS -->
+            </div>
+
+            <div class="mt-6 flex justify-end space-x-4">
+                <button type="button" id="cancel-refund-btn" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300">
+                    Cancelar
+                </button>
+                <button type="button" id="confirm-refund-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">
+                    <i class="fas fa-check-circle mr-2"></i>Confirmar Devolución
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Template for Refund Section (to be injected into modal) -->
+<template id="refund-section-template">
+    <div class="mt-6 border-t pt-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-700">Procesar Reembolso</h3>
+            <div class="text-right">
+                <p class="text-sm text-gray-600">Valor a Reembolsar:</p>
+                <p id="total-refund-value" class="text-xl font-bold text-red-600">0.00 Bs</p>
+            </div>
+        </div>
+
+        <!-- Refund Form -->
+        <div id="add-refund-form" class="border p-3 rounded-lg bg-gray-50">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                <div>
+                    <label for="refund-method" class="block text-sm font-medium text-gray-700">Método de Reembolso</label>
+                    <select id="refund-method" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <option value="efectivo_ves">Efectivo (Bs)</option>
+                        <option value="efectivo_usd">Efectivo (USD)</option>
+                        <option value="transferencia">Transferencia</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="refund-amount" class="block text-sm font-medium text-gray-700">Monto a Reembolsar</label>
+                    <input type="number" id="refund-amount" step="0.01" min="0.01" class="mt-1 block w-full py-1 px-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                </div>
+                <div class="md:col-span-1">
+                    <button type="button" id="add-refund-btn" class="w-full bg-blue-500 text-white font-bold py-1 px-3 rounded-lg hover:bg-blue-600">
+                        <i class="fas fa-plus mr-1"></i>Agregar Reembolso
+                    </button>
+                </div>
+            </div>
+            <!-- Conditional fields for refund -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                <div id="refund-bank-group" class="hidden">
+                    <label for="refund-bank" class="block text-sm font-medium text-gray-700">Desde Banco</label>
+                    <select id="refund-bank" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <option value="">Seleccione un banco</option>
+                        {% for bank in banks %}<option value="{{ bank.id }}">{{ bank.name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div id="refund-cashbox-group">
+                    <label for="refund-cashbox" class="block text-sm font-medium text-gray-700">Desde Caja</label>
+                    <select id="refund-cashbox" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <option value="">Seleccione una caja</option>
+                        {% for box in cash_boxes %}<option value="{{ box.id }}">{{ box.name }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Refund list -->
+        <div class="mt-3">
+            <h4 class="text-base font-medium text-gray-800 mb-1">Reembolsos a Realizar</h4>
+            <div id="refunds-list" class="space-y-1 max-h-40 overflow-y-auto"></div>
+        </div>
+    </div>
+</template>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const returnQuantityInputs = document.querySelectorAll('.return-quantity-input');
+    const currentRate = {{ current_rate or 1.0 }};
+    let refundPayments = [];
+
+    function calculateTotalRefund() {
+        let totalValue = 0;
+        returnQuantityInputs.forEach(input => {
+            const quantity = parseInt(input.value) || 0;
+            if (quantity > 0) {
+                const row = input.closest('.return-item-row');
+                const price = parseFloat(row.querySelector('[data-price]').dataset.price) || 0;
+                totalValue += quantity * price;
+            }
+        });
+        return totalValue;
+    }
+
+    returnQuantityInputs.forEach(input => {
+        input.addEventListener('input', calculateTotalRefund);
+    });
+
+    // --- Modal and Refund Logic ---
+    const refundModal = document.getElementById('refund-modal');
+    const openRefundModalBtn = document.getElementById('open-refund-modal-btn');
+    const closeRefundModalBtn = document.getElementById('close-refund-modal-btn');
+    const cancelRefundBtn = document.getElementById('cancel-refund-btn');
+    const confirmRefundBtn = document.getElementById('confirm-refund-btn');
+    const refundModalContent = document.getElementById('refund-modal-content');
+    const refundPaymentsDataInput = document.getElementById('refund-payments-data-input');
+    const returnForm = document.getElementById('return-form');
+
+    function setupRefundEventListeners() {
+        const refundMethodSelect = document.getElementById('refund-method');
+        const refundBankGroup = document.getElementById('refund-bank-group');
+        const refundCashboxGroup = document.getElementById('refund-cashbox-group');
+        const addRefundBtn = document.getElementById('add-refund-btn');
+        const refundsListDiv = document.getElementById('refunds-list');
+
+        if (!refundMethodSelect) return;
+
+        refundMethodSelect.addEventListener('change', function() {
+            refundBankGroup.classList.toggle('hidden', this.value !== 'transferencia');
+            refundCashboxGroup.classList.toggle('hidden', !this.value.startsWith('efectivo'));
+        });
+        refundMethodSelect.dispatchEvent(new Event('change'));
+
+        addRefundBtn.addEventListener('click', function() {
+            const method = refundMethodSelect.value;
+            const amount = parseFloat(document.getElementById('refund-amount').value);
+            const bankId = document.getElementById('refund-bank').value;
+            const cashboxId = document.getElementById('refund-cashbox').value;
+
+            if (!amount || amount <= 0) {
+                alert('Ingrese un monto de reembolso válido.');
+                return;
+            }
+
+            let currency = 'VES';
+            let amountVesEquivalent = amount;
+            if (method === 'efectivo_usd') {
+                currency = 'USD';
+                amountVesEquivalent = amount * currentRate;
+            }
+
+            const refund = {
+                amount: amount,
+                currency: currency,
+                amount_ves_equivalent: amountVesEquivalent,
+                bank_id: method === 'transferencia' ? bankId : null,
+                cash_box_id: method.startsWith('efectivo') ? cashboxId : null,
+                method_name: refundMethodSelect.options[refundMethodSelect.selectedIndex].text
+            };
+            refundPayments.push(refund);
+            renderRefunds();
+        });
+
+        refundsListDiv.addEventListener('click', function(e) {
+            if (e.target.closest('.remove-refund-btn')) {
+                const index = e.target.closest('.remove-refund-btn').dataset.index;
+                refundPayments.splice(index, 1);
+                renderRefunds();
+            }
+        });
+    }
+
+    function renderRefunds() {
+        const refundsListDiv = document.getElementById('refunds-list');
+        if (!refundsListDiv) return;
+        refundsListDiv.innerHTML = '';
+        refundPayments.forEach((p, index) => {
+            const div = document.createElement('div');
+            div.className = 'flex justify-between items-center bg-gray-100 p-2 rounded';
+            let details = `${p.method_name}: ${p.amount.toFixed(2)} ${p.currency}`;
+            div.innerHTML = `<span>${details}</span><button type="button" data-index="${index}" class="remove-refund-btn text-red-500 hover:text-red-700"><i class="fas fa-times"></i></button>`;
+            refundsListDiv.appendChild(div);
+        });
+        refundPaymentsDataInput.value = JSON.stringify(refundPayments);
+    }
+
+    openRefundModalBtn.addEventListener('click', function() {
+        const reason = document.getElementById('return_reason').value.trim();
+        const totalRefundValue = calculateTotalRefund();
+
+        if (totalRefundValue <= 0) {
+            alert('Debe seleccionar al menos un producto para devolver.');
+            return;
+        }
+        if (!reason) {
+            alert('El motivo de la devolución es obligatorio.');
+            return;
+        }
+
+        const hasPayments = {{ 'true' if order.payments else 'false' }};
+
+        if (hasPayments) {
+            const refundTemplate = document.getElementById('refund-section-template').content.cloneNode(true);
+            refundModalContent.innerHTML = '';
+            refundModalContent.appendChild(refundTemplate);
+            document.getElementById('total-refund-value').textContent = totalRefundValue.toFixed(2) + ' Bs';
+            setupRefundEventListeners();
+        } else {
+            refundModalContent.innerHTML = `
+                <div class="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4" role="alert">
+                    <p class="font-bold">Confirmación de Devolución sin Reembolso</p>
+                    <p>Esta orden no tiene pagos registrados. Al confirmar, solo se devolverán los productos al inventario.</p>
+                    <p class="mt-2"><strong>Valor de la devolución:</strong> ${totalRefundValue.toFixed(2)} Bs (se registrará como una nota de crédito para el cliente).</p>
+                </div>
+            `;
+        }
+
+        refundModal.classList.remove('hidden');
+    });
+
+    function closeModal() {
+        refundModal.classList.add('hidden');
+        refundPayments = []; // Reset payments when modal is closed
+        refundPaymentsDataInput.value = '';
+    }
+
+    closeRefundModalBtn.addEventListener('click', closeModal);
+    cancelRefundBtn.addEventListener('click', closeModal);
+
+    confirmRefundBtn.addEventListener('click', function() {
+        const totalRefundValue = calculateTotalRefund();
+        const totalRefundedAmount = refundPayments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
+        const hasPayments = {{ 'true' if order.payments else 'false' }};
+
+        if (hasPayments && Math.abs(totalRefundValue - totalRefundedAmount) > 0.01) {
+            alert(`El monto total reembolsado (Bs ${totalRefundedAmount.toFixed(2)}) no coincide con el valor de los productos a devolver (Bs ${totalRefundValue.toFixed(2)}). Por favor, ajuste los montos del reembolso.`);
+            return;
+        }
+
+        // If validation passes, submit the form
+        returnForm.submit();
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-7xl">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-history mr-2"></i>Historial de Devoluciones y Anulaciones</h1>
+        <a href="{{ url_for('main.return_order') }}" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
+            <i class="fas fa-plus mr-2"></i>Nueva Devolución
+        </a>
+    </div>
+
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <div class="overflow-x-auto">
+            <table class="min-w-full bg-white text-sm">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="py-2 px-4 text-left font-semibold text-gray-600">ID Devolución</th>
+                        <th class="py-2 px-4 text-left font-semibold text-gray-600">ID Orden Original</th>
+                        <th class="py-2 px-4 text-left font-semibold text-gray-600">Fecha</th>
+                        <th class="py-2 px-4 text-left font-semibold text-gray-600">Tipo</th>
+                        <th class="py-2 px-4 text-right font-semibold text-gray-600">Valor (Bs)</th>
+                        <th class="py-2 px-4 text-left font-semibold text-gray-600">Usuario</th>
+                        <th class="py-2 px-4 text-center font-semibold text-gray-600">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="text-gray-700 divide-y divide-gray-200">
+                    {% for ret in returns %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 px-4 font-mono">{{ ret.return_code }}</td>
+                        <td class="py-2 px-4">
+                            <a href="{{ url_for('main.order_detail', order_id=ret.order_id) }}" class="text-blue-600 hover:underline" title="Ver Orden Original">#{{ ret.order_id|order_id_format }}</a>
+                        </td>
+                        <td class="py-2 px-4">{{ ret.date|ve_datetime }}</td>
+                        <td class="py-2 px-4">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ 'bg-red-100 text-red-800' if ret.return_type == 'Anulación Total' else 'bg-yellow-100 text-yellow-800' }}">
+                                {{ ret.return_type }}
+                            </span>
+                        </td>
+                        <td class="py-2 px-4 text-right font-semibold">{{ "%.2f"|format(ret.total_refund_value_ves) }}</td>
+                        <td class="py-2 px-4">{{ ret.user.username }}</td>
+                        <td class="py-2 px-4 text-center">
+                            <a href="{{ url_for('main.return_detail', return_id=ret.id) }}" class="text-indigo-600 hover:text-indigo-900" title="Ver Detalles">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

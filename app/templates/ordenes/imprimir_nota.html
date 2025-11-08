@@ -9,11 +9,11 @@
             size: 55mm auto;
             margin: 2mm;
         }
-
+        
         .watermark {
-            position: fixed; left: 50%; transform: translateX(-50%) rotate(-45deg); color: rgba(128, 128, 128, 0.15); font-size: 1.5rem; font-weight: bold; z-index: -1; pointer-events: none; white-space: nowrap;
+            position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); color: rgba(255, 0, 0, 0.2); font-size: 2.5rem; font-weight: bold; z-index: -1000; pointer-events: none; white-space: nowrap;
         }
-
+        
         body {
             width: 45mm; /* 58mm - 2mm margin left - 2mm margin right */
             padding: 0;
@@ -87,6 +87,11 @@
     </style>
 </head>
 <body>
+    <!-- Marca de agua para órdenes anuladas -->
+    {% if order.status == 'Anulada' %}
+        <div class="watermark">ANULADA</div>
+    {% endif %}
+
     <!-- Encabezado de la empresa -->
     <div class="header">
         {% if company_info.logo_filename %}
@@ -152,17 +157,25 @@
         </thead>
         <tbody>
             {% for item in order.items %}
-            <tr>
-                <td>{{ item.quantity }}x</td>
-                <td>{{ item.product.name }}</td>
+            {% set net_quantity = item.quantity - (item.returned_quantity or 0) %}
+            {% set is_returned = (item.returned_quantity or 0) > 0 %}
+            <tr {% if is_returned %}style="text-decoration: line-through; color: #888;"{% endif %}>
+                <td>{{ item.quantity }}x</td> {# Mostramos la cantidad original vendida #}
+                <td>{{ item.product.name }}
+                </td>
                 {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}
-                    <td style="text-align: right;">{{ currency_symbol }} {{ "%.2f"|format((item.price * item.quantity) / order.exchange_rate_at_sale) }}</td>
+                    <td style="text-align: right;">{{ currency_symbol }} {{ "%.2f"|format((item.price * net_quantity) / order.exchange_rate_at_sale) }}</td>
                 {% else %}
-                    <td style="text-align: right;">Bs. {{ "%.2f"|format(item.price * item.quantity) }}</td>
+                    <td style="text-align: right;">Bs. {{ "0.00" if is_returned else "%.2f"|format(item.price * net_quantity) }}</td>
                 {% endif %}
             </tr>
             <tr style="font-size: 8px;">
                 <td></td>
+                {% if is_returned %}
+                    <td colspan="2" style="padding-left: 5px; font-weight: bold; color: #d00; text-decoration: none;">
+                        (Devuelto: {{ item.returned_quantity }})
+                    </td>
+                {% endif %}
                 {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}
                     <td colspan="2" style="padding-left: 5px;">@ {{ currency_symbol }} {{ "%.2f"|format(item.price / order.exchange_rate_at_sale) }} c/u</td>
                 {% else %}
@@ -218,30 +231,26 @@
     <div class="totals">
         <div class="total-item">
             <span>Subtotal:</span>
+            {% set subtotal_ns = namespace(value=0) %}
+            {% for item in order.items %}
+                {% set subtotal_ns.value = subtotal_ns.value + (item.price * (item.quantity - (item.returned_quantity or 0))) %}
+            {% endfor %}
             {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}
-                <span>{{ currency_symbol }} {{ "%.2f"|format(subtotal / order.exchange_rate_at_sale) }}</span>
+                <span>{{ currency_symbol }} {{ "%.2f"|format(subtotal_ns.value / order.exchange_rate_at_sale) }}</span>
             {% else %}
-                <span>Bs. {{ "%.2f"|format(subtotal) }}</span>
+                <span>Bs. {{ "%.2f"|format(subtotal_ns.value) }}</span>
             {% endif %}
         </div>
         {% if order.discount_usd > 0 %}
         <div class="total-item">
             <span>Descuento:</span>
             {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}
-                <span>-{{ currency_symbol }} {{ "%.2f"|format((subtotal - order.total_amount) / order.exchange_rate_at_sale) }}</span>
+                <span>-{{ currency_symbol }} {{ "%.2f"|format(order.discount_usd) }}</span>
             {% else %}
-                <span>-Bs. {{ "%.2f"|format(subtotal - order.total_amount) }}</span>
+                <span>-Bs. {{ "%.2f"|format(order.discount_usd * order.exchange_rate_at_sale) }}</span>
             {% endif %}
         </div>
         {% endif %}
-        <div class="total-item" style="display: none;">
-            <span>IVA (16%):</span>
-            {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}
-                <span>{{ currency_symbol }} {{ "%.2f"|format(iva / order.exchange_rate_at_sale) }}</span>
-            {% else %}
-                <span>Bs. {{ "%.2f"|format(iva) }}</span>
-            {% endif %}
-        </div>
         <div class="total-item grand-total">
             <span>Total:</span>
             {% if (is_credit_sale or order.order_type == 'reservation') and order.exchange_rate_at_sale > 0 %}

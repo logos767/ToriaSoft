@@ -107,14 +107,9 @@
                         <a href="{{ url_for('main.client_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-users mr-2"></i><span class="sidebar-text">Clientes</span>
                         </a>
-                        <a href="#" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-file-invoice mr-2"></i><span class="sidebar-text">Facturas</span>
+                        <a href="{{ url_for('main.return_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-undo-alt mr-2"></i><span class="sidebar-text">Devoluciones</span>
                         </a>
-                        {% if is_gerente() %}
-                        <a href="{{ url_for('main.estadisticas') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-chart-line mr-2"></i><span class="sidebar-text">Estadísticas</span>
-                        </a>
-                        {% endif %}
                     </div>
                 </details>
 
@@ -129,9 +124,6 @@
                         {% if is_administrador() %}
                         <a href="{{ url_for('main.inventory_stock') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-list mr-2"></i><span class="sidebar-text">Existencias</span>
-                        </a>
-                        <a href="{{ url_for('main.adjustment_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-history mr-2"></i><span class="sidebar-text">Ajuste de Inventario</span>
                         </a>
                         {% endif %}
                         <a href="{{ url_for('main.movement_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm"> {# is_administrador() check is inside the route #}
@@ -188,9 +180,6 @@
                         <a href="{{ url_for('main.my_withdrawals') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-history mr-2"></i><span class="sidebar-text">Mis Retiros</span>
                         </a>
-                        <a href="{{ url_for('main.daily_closing') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-calendar-check mr-2"></i><span class="sidebar-text">Cierre Diario</span>
-                        </a>
                         {% if is_administrador() %} {# Superusuario, Gerente, administrador can view pending withdrawals and cashbox movements #}
                         <a href="{{ url_for('main.pending_withdrawals') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm relative">
                             <i class="fas fa-hourglass-half mr-2"></i><span class="sidebar-text">Retiros Pendientes</span>
@@ -200,6 +189,30 @@
                         </a>
                         <a href="{{ url_for('main.cashbox_movements') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-exchange-alt mr-2"></i><span class="sidebar-text">Movimientos de Caja</span>
+                        </a>
+                        {% endif %}
+                    </div>
+                </details>
+
+                <details class="group">
+                    <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
+                        <i class="fas fa-chart-pie mr-2"></i><span class="sidebar-text">Reportes</span>
+                    </summary>
+                    <div class="ml-4 mt-2 space-y-1">
+                        <a href="{{ url_for('main.daily_closing') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-calendar-check mr-2"></i><span class="sidebar-text">Cierre Diario</span>
+                        </a>
+                        <a href="{{ url_for('main.reporte_mensual') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-file-invoice-dollar mr-2"></i><span class="sidebar-text">Reporte Mensual</span>
+                        </a>
+                        {% if is_administrador() %}
+                        <a href="{{ url_for('main.adjustment_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-clipboard-check mr-2"></i><span class="sidebar-text">Reporte de Inventario</span>
+                        </a>
+                        {% endif %}
+                        {% if is_gerente() %}
+                        <a href="{{ url_for('main.estadisticas') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-chart-line mr-2"></i><span class="sidebar-text">Estadísticas</span>
                         </a>
                         {% endif %}
                     </div>

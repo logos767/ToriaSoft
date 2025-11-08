@@ -201,9 +201,40 @@ class OrderItem(db.Model):
     quantity = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Float, nullable=False) # Precio en VES en el momento de la venta
     cost_at_sale_ves = db.Column(db.Float, nullable=True) # Costo unitario en VES en el momento de la venta
+    returned_quantity = db.Column(db.Integer, nullable=False, default=0)
 
     def __repr__(self):
         return f"OrderItem('{self.order_id}', '{self.product_id}', '{self.quantity}')"
+
+class OrderReturn(db.Model):
+    __tablename__ = 'order_returns'
+    id = db.Column(db.Integer, primary_key=True)
+    return_code = db.Column(db.String(50), unique=True, nullable=False)
+    order_id = db.Column(db.BigInteger, db.ForeignKey('order.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
+    return_type = db.Column(db.String(50), nullable=False) # 'Anulación Total', 'Devolución Parcial'
+    reason = db.Column(db.String(255), nullable=False)
+    total_refund_value_ves = db.Column(db.Float, nullable=False, default=0.0)
+
+    # Relationships
+    order = db.relationship('Order', backref=db.backref('returns', lazy='dynamic'))
+    user = db.relationship('User', backref=db.backref('processed_returns', lazy='dynamic'))
+    items = db.relationship('OrderReturnItem', backref='order_return', lazy=True, cascade="all, delete-orphan")
+    # Relación con los movimientos financieros de reembolso
+    refund_movements = db.relationship('ManualFinancialMovement', backref='order_return', lazy='dynamic')
+
+class OrderReturnItem(db.Model):
+    __tablename__ = 'order_return_items'
+    id = db.Column(db.Integer, primary_key=True)
+    order_return_id = db.Column(db.Integer, db.ForeignKey('order_returns.id'), nullable=False)
+    order_item_id = db.Column(db.Integer, db.ForeignKey('order_item.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False) # Cantidad devuelta en esta transacción
+    price_at_return_ves = db.Column(db.Float, nullable=False)
+
+    # Relationship to Product
+    product = db.relationship('Product')
 
 class Bank(db.Model):
     __tablename__ = 'banks'
@@ -282,6 +313,7 @@ class ManualFinancialMovement(db.Model):
     bank_id = db.Column(db.Integer, db.ForeignKey('banks.id'), nullable=True)
     cash_box_id = db.Column(db.Integer, db.ForeignKey('cash_boxes.id'), nullable=True)
     purchase_id = db.Column(db.Integer, db.ForeignKey('purchase.id'), nullable=True, index=True)
+    order_return_id = db.Column(db.Integer, db.ForeignKey('order_returns.id'), nullable=True, index=True)
     
     # Relationships
     bank = db.relationship('Bank', backref=db.backref('manual_movements', lazy='dynamic'))
@@ -339,7 +371,7 @@ class Movement(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     type = db.Column(db.String(20), nullable=False)  # 'Entrada', 'Salida'
     warehouse_id = db.Column(db.Integer, db.ForeignKey('warehouse.id'), nullable=False)
-    quantity = db.Column(db.Integer, nullable=False)
+    quantity = db.Column(db.Integer, nullable=False) 
     date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
     document_id = db.Column(db.BigInteger, nullable=True) # ID de la orden, compra, etc.
     document_type = db.Column(db.String(50), nullable=True) # 'Orden de Venta', 'Orden de Compra', 'Ajuste'
@@ -462,3 +494,18 @@ class Notification(db.Model):
 
     def __repr__(self):
         return f"Notification('{self.message}', '{self.is_read}')"
+
+class UserActivityLog(db.Model):
+    __tablename__ = 'user_activity_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    timestamp = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
+    action = db.Column(db.String(255), nullable=False)
+    details = db.Column(db.Text, nullable=True)
+    target_id = db.Column(db.String(50), nullable=True) # String to accommodate codes like AIV23...
+    target_type = db.Column(db.String(50), nullable=True)
+
+    user = db.relationship('User', backref=db.backref('activity_logs', lazy='dynamic'))
+
+    def __repr__(self):
+        return f"UserActivityLog('{self.user.username}', '{self.action}', '{self.timestamp}')"

@@ -2,18 +2,23 @@
 
 {% block content %}
 <div class="container mx-auto p-4 max-w-7xl">
-    <div class="bg-white p-6 rounded-lg shadow-md">
+    <div class="bg-white p-4 rounded-lg shadow-md">
         <form method="POST" action="{{ url_for('main.new_purchase') }}" id="purchase-form">
-            <h1 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-shopping-basket mr-2"></i>Crear Nueva Orden de Compra</h1>
+            <div class="flex justify-between items-center mb-4">
+                <h1 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-shopping-basket mr-2"></i>Crear Nueva Orden de Compra</h1>
+            </div>
             <!-- Main two-column layout -->
             <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-4">
                 <!-- LEFT COLUMN: Provider and Actions -->
                 <div class="space-y-4 lg:col-span-1">
                     <div>
                         <h2 class="text-lg font-semibold text-gray-700 mb-2">1. Información del Proveedor</h2>
-                        <div class="flex items-center space-x-2">
-                            <select id="provider_id" name="provider_id" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500
-                            </select>
+                        <div class="flex items-end space-x-2">
+                            <div class="relative w-full">
+                                <input type="text" id="provider_search" name="provider_search" autocomplete="off" placeholder="Buscar por Nombre, RIF..." class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <input type="hidden" id="provider_id" name="provider_id" required>
+                                <div id="provider_suggestions" class="absolute bg-white border rounded-b-lg mt-1 w-full z-30 hidden max-h-48 overflow-y-auto"></div>
+                            </div>
                             <button type="button" id="open-new-provider-modal-btn" title="Crear Nuevo Proveedor" class="bg-green-500 text-white p-2 rounded hover:bg-green-600 transition-colors flex-shrink-0">
                                 <i class="fas fa-plus"></i>
                             </button>
@@ -43,6 +48,11 @@
                                 <div id="product-suggestions" class="absolute bg-white border rounded-b-lg mt-1 w-full z-20 hidden max-h-60 overflow-y-auto"></div>
                             </div>
                         </div>
+                        <div class="flex justify-end mt-2">
+                        <button type="button" id="add-product-btn" class="bg-blue-500 text-white py-1 px-3 rounded hover:bg-blue-600 transition-colors text-sm">
+                            <i class="fas fa-plus mr-1"></i>Agregar Producto
+                        </button>
+                    </div>
                     </div>
                     <div id="product-list" class="max-h-[50vh] overflow-y-auto border rounded-lg">
                         <table class="table-auto w-full text-sm">
@@ -84,11 +94,7 @@
                             </tbody>
                         </table>
                     </div>
-                    <div class="flex justify-end mt-2">
-                        <button type="button" id="add-product-btn" class="bg-blue-500 text-white py-1 px-3 rounded hover:bg-blue-600 transition-colors text-sm">
-                            <i class="fas fa-plus mr-1"></i>Agregar Producto
-                        </button>
-                    </div>
+                    
                 </div>
             </div>
 
@@ -437,31 +443,6 @@
             productListBody.appendChild(firstRow);
         }
 
-        // --- Provider Details Logic ---
-        function showProviderInfo(provider) {
-            const providerInfoDiv = document.getElementById('provider_info');
-            if (provider) {
-                document.getElementById('provider_tax_id').textContent = provider.tax_id || 'N/A';
-                document.getElementById('provider_phone').textContent = provider.phone || 'N/A';
-                document.getElementById('provider_email').textContent = provider.email || 'N/A';
-                providerInfoDiv.classList.remove('hidden');
-            } else {
-                providerInfoDiv.classList.add('hidden');
-            }
-        }
-
-        providerSelect.addEventListener('change', function() {
-            const selectedProviderId = this.value;
-            const selectedProvider = allProviders.find(p => p.id == selectedProviderId);
-            showProviderInfo(selectedProvider);
-        });
-
-        // Show details for the initially selected provider on page load
-        if (providerSelect.value) {
-            const initialProvider = allProviders.find(p => p.id == providerSelect.value);
-            showProviderInfo(initialProvider);
-        }
-
 
         // --- New Provider Modal Logic ---
         function openNewProviderModal() {
@@ -500,14 +481,21 @@
                 body: JSON.stringify(providerData)
             })
             .then(response => {
-                if (!response.ok) { return response.json().then(err => { throw new Error(err.error || 'Error desconocido'); }); }
+                if (!response.ok) { 
+                    return response.json().then(err => { throw new Error(err.error || 'Error desconocido'); }); 
+                }
                 return response.json();
             })
             .then(newProvider => {
                 closeNewProviderModal();
-                allProviders.push(newPd, true, true);
-                providerSelect.appendCr change to show details
-                toastr.success(`Provee
+                allProviders.push(newProvider);
+                // After creating, select it automatically
+                showProviderInfo(newProvider);
+                document.getElementById('provider_search').value = `${newProvider.name} - ${newProvider.tax_id || ''}`;
+                document.getElementById('provider_suggestions').classList.add('hidden');
+                toastr.success(`Proveedor "${newProvider.name}" creado y seleccionado.`, 'Éxito');
+
+            })
             .catch(error => {
                 newProviderModalErrorMessage.textContent = error.message;
                 newProviderModalError.classList.remove('hidden');
@@ -583,6 +571,7 @@
             if (existingRow) {
                 const quantityInput = existingRow.querySelector('.quantity-input');
                 quantityInput.value = (parseInt(quantityInput.value) || 0) + 1;
+                updatePurchaseSummary();
                 quantityInput.focus();
             } else {
                 const newRow = productTemplate.cloneNode(true);
@@ -591,10 +580,10 @@
                 select.value = product.id;
                 initializeProductItem(newRow);
                 newRow.querySelector('.quantity-input').value = 1;
+                updatePurchaseSummary();
                 productListBody.appendChild(newRow);
                 newRow.querySelector('.quantity-input').focus();
             }
-            updatePurchaseSummary();
             keywordSearchInput.value = '';
             productSuggestions.classList.add('hidden');
         }
@@ -637,15 +626,90 @@
             e.preventDefault();
             const barcode = this.value.trim();
             if (!barcode) return;
+            
+            fetch(`/api/product_by_barcode/${barcode}`)
+                .then(response => {
+                    if (!response.ok) throw new Error('Producto no encontrado');
+                    return response.json();
+                })
+                .then(product => {
+                    addProductToTable(product);
+                    this.value = '';
+                })
+                .catch(error => toastr.error(error.message, 'Error'));
+        });
 
-            const product = allProducts.find(p => p.barcode === barcode);
-            if (product) {
-                addProductToTable(product);
-                this.value = '';
+        // --- Provider Search Logic (similar to client search) ---
+        const providerSearchInput = document.getElementById('provider_search');
+        const providerSuggestions = document.getElementById('provider_suggestions');
+        const providerIdInput = document.getElementById('provider_id');
+        const providerInfoDiv = document.getElementById('provider_info');
+        let providerSearchDebounce = null;
+
+        function showProviderInfo(provider) {
+            if (provider && provider.id) {
+                document.getElementById('provider_tax_id').textContent = provider.tax_id || 'N/A';
+                document.getElementById('provider_phone').textContent = provider.phone || 'N/A';
+                document.getElementById('provider_email').textContent = provider.email || 'N/A';
+                providerInfoDiv.classList.remove('hidden');
+                providerIdInput.value = provider.id;
             } else {
-                toastr.error('Producto no encontrado. Puede crearlo manualmente.', 'Error');
+                providerInfoDiv.classList.add('hidden');
+                providerIdInput.value = '';
+            }
+        }
+
+        providerSearchInput.addEventListener('input', function() {
+            const query = this.value.trim();
+            showProviderInfo(null); // Clear info on new input
+
+            if (query.length < 2) {
+                providerSuggestions.classList.add('hidden');
+                return;
+            }
+
+            clearTimeout(providerSearchDebounce);
+            providerSearchDebounce = setTimeout(() => {
+                fetch(`/api/search_providers?q=${encodeURIComponent(query)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        providerSuggestions.innerHTML = '';
+                        if (data.providers && data.providers.length > 0) {
+                            data.providers.forEach(provider => {
+                                const div = document.createElement('div');
+                                div.className = 'p-2 hover:bg-blue-100 cursor-pointer';
+                                div.innerHTML = `
+                                    <div class="font-semibold">${provider.name}</div>
+                                    <div class="text-sm text-gray-600">RIF: ${provider.tax_id || 'N/A'}</div>
+                                `;
+                                div.addEventListener('click', () => {
+                                    providerSearchInput.value = `${provider.name} - ${provider.tax_id || ''}`;
+                                    providerSuggestions.classList.add('hidden');
+                                    showProviderInfo(provider);
+                                });
+                                providerSuggestions.appendChild(div);
+                            });
+                        } else {
+                            const div = document.createElement('div');
+                            div.className = 'p-2 text-center text-gray-500';
+                            div.textContent = 'No se encontraron proveedores.';
+                            providerSuggestions.appendChild(div);
+                        }
+                        providerSuggestions.classList.remove('hidden');
+                    });
+            }, 300);
+        });
+
+        // Hide suggestions when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!providerSearchInput.contains(e.target) && !providerSuggestions.contains(e.target)) {
+                providerSuggestions.classList.add('hidden');
+            }
+            if (!keywordSearchInput.contains(e.target) && !productSuggestions.contains(e.target)) {
+                productSuggestions.classList.add('hidden');
             }
         });
+
 
         // --- Payment Modal Logic ---
         const paymentModal = document.getElementById('payment-modal');

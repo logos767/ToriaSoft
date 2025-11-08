@@ -4,7 +4,7 @@ import secrets
 import firebase_admin
 from firebase_admin import credentials
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, session
 
 # Import extensions
 from .extensions import db, login_manager, bcrypt, socketio
@@ -208,6 +208,22 @@ def create_app():
             if not order_id:
                 return ''
             return f"{order_id:09d}"
+
+        @app.template_filter('usd_format')
+        def usd_format_filter(value):
+            """Formats a value as USD/EUR currency."""
+            if value is None:
+                return ''
+            try:
+                # Determine symbol based on session/company settings
+                from .models import CompanyInfo
+                company_info = CompanyInfo.query.first()
+                default_currency = company_info.calculation_currency if company_info and company_info.calculation_currency else 'USD'
+                display_currency = session.get('display_currency', default_currency)
+                symbol = '€' if display_currency == 'EUR' else '$'
+                return f"{symbol} {float(value):,.2f}"
+            except (ValueError, TypeError):
+                return value
 
         # Add get_current_time_ve to context for use in templates
         @app.context_processor

@@ -2,96 +2,109 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Reporte de Existencias</title>
+    <title>Reporte de Conteo de Inventario</title>
     <style>
         @page {
-            size: letter;
+            size: A4;
             margin: 0.5cm;
         }
         body {
-            font-family: 'Helvetica', sans-serif;
-            font-size: 10px;
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-size: 9pt;
             color: #333;
         }
         .header {
             text-align: center;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
             border-bottom: 1px solid #ccc;
-            padding-bottom: 5px;
+            padding-bottom: 3px;
         }
         .header h1 {
             margin: 0;
-            font-size: 14px;
+            font-size: 12pt;
         }
-        .header p {
+        .header h2 {
             margin: 2px 0;
-            font-size: 11px;
+            font-size: 11pt;
+            color: #555;
+        }
+        .info {
+            margin-bottom: 5px;
+            font-size: 9pt;
+        }
+        .info p {
+            margin: 2px 0;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 5px;
+            font-size: 9pt;
         }
         th, td {
             border: 1px solid #ddd;
-            padding: 1px;
+            padding: 3px 6px; /* Márgenes más compactos */
             text-align: left;
         }
         th {
             background-color: #f2f2f2;
             font-weight: bold;
         }
-        .text-center { text-align: center; }
-        .text-right { text-align: right; }
-        .real-stock-col {
-            width: 10%;
-            text-align: center;
+        .count-col {
+            width: 10%; /* Ajustado para el conteo físico */
             border-left: 2px solid #aaa;
             border-right: 2px solid #aaa;
         }
         .footer {
             position: fixed;
-            bottom: -1cm;
+            bottom: 0;
             left: 0;
             right: 0;
             text-align: center;
-            font-size: 9px;
+            font-size: 8pt;
             color: #777;
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>{{ company_info.name if company_info else 'Mi Empresa' }}</h1>
-        <p>Reporte de Conteo de Inventario</p>
-        <p>Generado el: {{ generation_date }}</p>
+        <h1>{{ company_info.name if company_info else 'Reporte de Inventario' }}</h1>
+        <h2>Conteo Físico de Inventario</h2>
     </div>
-
+    <div class="info">
+        <p><strong>Fecha de Generación:</strong> {{ generation_date }}</p>
+        <p><strong>Almacén:</strong> {{ warehouse_name }}</p>
+    </div>
     <table>
         <thead>
             <tr>
-                <th>Código Producto</th>
-                <th>Producto</th>
-                <th class="text-center">Existencia Teórica</th>
-                <th class="real-stock-col">Existencia Real (Conteo)</th>
+                <th style="width: 15%;">Código:</th>
+                <th style="width: 65%;">Descripción (Nombre, Marca, Color, Talla)</th>
+                <th style="width: 10%;">Existencia Teórica</th>
+                <th class="count-col">Conteo Físico</th>
             </tr>
         </thead>
         <tbody>
-            {% for product in products %}
+            {% for data in products_data %}
             <tr>
-                <td>{{ product.codigo_producto or 'N/A' }} {% if product.barcode %}({{ product.barcode[-5:] }}){% endif %}</td>
                 <td>
-                    {{ product.name }}{% if product.size %} | T: {{ product.size }}{% endif %}{% if product.color %} | C: {{ product.color }}{% endif %}
+                    {{ data.product.barcode }}
                 </td>
-                <td class="text-center">{{ product.stock }}</td>
-                <td class="real-stock-col"></td>
+                <td style="font-size: 8pt;">
+                    <strong>{{ data.product.codigo_producto or 'N/A' }} - {{ data.product.name }}</strong>
+                    | {{ data.product.marca or '' }}
+                    | {{ data.product.color or '' }}
+                    | s{{ data.product.size or '' }}
+                </td>
+                <td style="text-align: center; font-weight: bold;">
+                    {{ data.stock }}
+                </td>
+                <td class="count-col"></td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
-
     <div class="footer">
-        Página <span class="page"></span> de <span class="topage"></span>
+        Página <span class="page-number"></span> de <span class="page-count"></span>
     </div>
 </body>
 </html>

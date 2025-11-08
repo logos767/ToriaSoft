@@ -70,11 +70,12 @@
                 <li><a href="#dashboard" class="block hover:bg-gray-700 p-2 rounded">Dashboard</a></li>
                 <li><a href="#ventas" class="block hover:bg-gray-700 p-2 rounded">Módulo de Ventas</a></li>
                 <li><a href="#inventario" class="block hover:bg-gray-700 p-2 rounded">Módulo de Inventario</a></li>
+                <li><a href="#devoluciones" class="block hover:bg-gray-700 p-2 rounded">Devoluciones y Anulaciones</a></li>
                 <li><a href="#compras" class="block hover:bg-gray-700 p-2 rounded">Módulo de Compras</a></li>
                 <li><a href="#finanzas" class="block hover:bg-gray-700 p-2 rounded">Módulo de Finanzas</a></li>
                 <li><a href="#clientes" class="block hover:bg-gray-700 p-2 rounded">Módulo de Clientes</a></li>
                 <li><a href="#proveedores" class="block hover:bg-gray-700 p-2 rounded">Módulo de Proveedores</a></li>
-                <li><a href="#reportes" class="block hover:bg-gray-700 p-2 rounded">Reportes y Estadísticas</a></li>
+                <li><a href="#reportes" class="block hover:bg-gray-700 p-2 rounded">Reportes</a></li>
                 <li><a href="#configuracion" class="block hover:bg-gray-700 p-2 rounded">Configuración</a></li>
                 <li><a href="#perfil" class="block hover:bg-gray-700 p-2 rounded">Perfil de Usuario</a></li>
             </ul>
@@ -144,15 +145,15 @@
                 <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-shopping-cart mr-2"></i>Módulo de Ventas</h2>
                 
                 <h3 class="text-xl font-semibold text-gray-700 mb-2">Crear Nueva Orden de Venta</h3>
-                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
+                <p class="mb-4"><span class="role-badge role-todos">Todos los roles</span></p>
                 <p class="text-gray-600">Esta es la pantalla principal para registrar ventas. El proceso es el siguiente:</p>
                 <ol class="list-decimal list-inside text-gray-600 space-y-2 mt-4">
                     <li><strong>Seleccionar Cliente:</strong> Busque un cliente existente por nombre, cédula o RIF. Si el cliente no existe, el sistema le permitirá crearlo directamente desde esta pantalla.</li>
                     <li><strong>Añadir Productos:</strong> Puede añadir productos de tres maneras:
                         <ul class="list-disc list-inside ml-6 mt-2">
-                            <li>Escaneando el código de barras del producto.</li>
-                            <li>Buscando el producto por nombre o código.</li>
-                            <li>Seleccionándolo manualmente de una lista desplegable.</li>
+                            <li><strong>Escanear Código de Barras:</strong> Es el método más rápido. Simplemente escanee el código y el producto se añadirá a la lista.</li>
+                            <li><strong>Buscar por Nombre/Código:</strong> Escriba el nombre o código del producto para ver sugerencias y selecciónelo.</li>
+                            <li><strong>Selección Manual:</strong> Use la lista desplegable para encontrar y añadir un producto.</li>
                         </ul>
                     </li>
                     <li><strong>Ajustar Cantidades y Precios:</strong> Modifique la cantidad de cada producto. Los gerentes y superusuarios también pueden editar el precio de venta en USD directamente en la orden.</li>
@@ -164,25 +165,96 @@
                 <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
                     <img src="{{ url_for('static', filename='img/manual_usuario/nueva_orden.png') }}" alt="Captura de pantalla de la página de Nueva Orden" class="w-full">
                 </div>
+                <h4 class="text-lg font-semibold text-gray-700 mt-4 mb-2">Detalle del Modal de Pagos</h4>
+                <p class="text-gray-600">El modal de pagos es una herramienta flexible para registrar cómo el cliente abona la orden. Permite combinar múltiples métodos de pago:</p>
+                <ul class="list-disc list-inside text-gray-600 space-y-2 mt-2">
+                    <li><strong>Efectivo (Bs o USD):</strong> Seleccione la caja donde ingresa el dinero.</li>
+                    <li><strong>Transferencia/Pago Móvil:</strong> Se le pedirá la referencia, el banco de origen, los datos del emisor (teléfono/C.I.) y el banco de destino.</li>
+                    <li><strong>Punto de Venta:</strong> Seleccione el punto de venta utilizado. El sistema asociará el ingreso al banco configurado para ese POS.</li>
+                </ul>
+                <p class="mt-2 text-gray-600">A medida que agrega pagos, el sistema muestra el monto total pagado y el restante, facilitando el cálculo del vuelto si es necesario.</p>
+                <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
+                    <img src="{{ url_for('static', filename='img/manual_usuario/modal_pagos.png') }}" alt="Captura de pantalla del Modal de Pagos" class="w-full">
+                </div>
 
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Lista de Órdenes</h3>
-                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
+                <p class="mb-4"><span class="role-badge role-todos">Todos los roles</span></p>
                 <p class="text-gray-600">Muestra un historial de todas las órdenes de venta. Puede filtrar por cliente, número de orden, estado y rango de fechas. Desde aquí puede acceder al detalle de cada orden.</p>
 
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Detalle de Orden e Impresión</h3>
-                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
+                <p class="mb-4"><span class="role-badge role-todos">Todos los roles</span></p>
                 <p class="text-gray-600">Muestra toda la información de una orden específica, incluyendo productos, montos, pagos realizados y saldo pendiente. Desde aquí se puede reimprimir la nota de entrega o el recibo.</p>
 
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Créditos y Apartados</h3>
-                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
-                <p class="text-gray-600">Las secciones de "Créditos" y "Apartados" en el menú principal le permiten ver y gestionar estas órdenes especiales. Puede acceder a sus detalles para registrar abonos adicionales.</p>
+                <p class="mb-4"><span class="role-badge role-todos">Todos los roles</span></p>
+                <p class="text-gray-600">El sistema permite gestionar ventas que no se pagan en su totalidad al momento de la creación. Estas se dividen en Créditos y Apartados, cada una con su propia sección en el menú de Ventas.</p>
+                
+                <h4 class="text-lg font-semibold text-gray-700 mt-4 mb-2">Gestión de Créditos</h4>
+                <p class="text-gray-600">Una venta a crédito implica que el cliente se lleva el producto y paga el saldo pendiente posteriormente. Para gestionar estos pagos:</p>
+                <ol class="list-decimal list-inside text-gray-600 space-y-2 mt-2">
+                    <li>Vaya a "Ventas" > "Créditos" en el menú lateral para ver la lista de todas las órdenes a crédito.</li>
+                    <li>Haga clic en el ID de la orden para acceder a su página de detalle.</li>
+                    <li>En la página de detalle, verá el saldo pendiente y un botón para "Registrar Abono".</li>
+                    <li>Al hacer clic, se abrirá el mismo modal de pagos que en una venta normal. Registre el pago que el cliente está realizando.</li>
+                    <li>Una vez que el crédito esté totalmente pagado, su estado cambiará automáticamente a "Pagada".</li>
+                </ol>
+
+                <h4 class="text-lg font-semibold text-gray-700 mt-4 mb-2">Gestión de Apartados</h4>
+                <p class="text-gray-600">En un apartado, el producto se reserva para el cliente mientras este realiza abonos hasta completar el pago. El producto no se entrega hasta que el pago esté completo.</p>
+                <ol class="list-decimal list-inside text-gray-600 space-y-2 mt-2">
+                    <li>Vaya a "Ventas" > "Apartados" para ver la lista de apartados activos y completados.</li>
+                    <li>Acceda al detalle del apartado que desea gestionar.</li>
+                    <li>Utilice el botón "Registrar Abono" para añadir nuevos pagos.</li>
+                    <li>Cuando el saldo pendiente llegue a cero, el estado cambiará a "Pagado".</li>
+                    <li>Una vez pagado, aparecerá un botón para "Marcar como Entregado". Úselo cuando el cliente retire el producto para finalizar el ciclo del apartado.</li>
+                </ol>
+            </section>
+
+            <section id="devoluciones" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-undo-alt mr-2"></i>Devoluciones y Anulaciones</h2>
+                <p class="mb-4"><span class="role-badge role-administrador">Administrador</span> <span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">
+                    Esta funcionalidad permite gestionar la anulación completa de una venta o la devolución parcial de productos. Se accede a través del menú "Ventas" > "Devoluciones" o directamente desde el detalle de una orden.
+                </p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Anulación Total</h3>
+                <p class="text-gray-600">
+                    Esta opción se utiliza para cancelar una orden de venta por completo. El sistema realiza las siguientes acciones automáticamente:
+                </p>
+                <ul class="list-disc list-inside text-gray-600 space-y-2 mt-2">
+                    <li>Todos los productos de la orden son devueltos al inventario del almacén de origen.</li>
+                    <li>Todos los pagos registrados en la orden son revertidos, generando movimientos de egreso en las cuentas correspondientes (cajas o bancos).</li>
+                    <li>La orden original queda marcada con el estado "Anulada".</li>
+                    <li>Se crea un registro de la anulación en el historial de devoluciones.</li>
+                </ul>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Devolución Parcial</h3>
+                <p class="text-gray-600">
+                    Permite devolver solo algunos productos o una parte de la cantidad vendida. El proceso es el siguiente:
+                </p>
+                <ol class="list-decimal list-inside text-gray-600 space-y-2 mt-2">
+                    <li>Busque la orden por su ID en la pantalla de devoluciones.</li>
+                    <li>En la sección "Devolución Parcial", ingrese la cantidad a devolver para cada producto.</li>
+                    <li>Escriba un motivo obligatorio para la devolución.</li>
+                    <li>Haga clic en "Procesar Devolución Parcial". Se abrirá un modal para gestionar el reembolso.</li>
+                    <li><strong>Gestión del Reembolso:</strong> El sistema calculará el valor total en Bolívares de los productos devueltos. En el modal, deberá registrar cómo se le devuelve el dinero al cliente (ej. en efectivo desde una caja, por transferencia desde un banco). El monto del reembolso debe coincidir con el valor de la devolución.</li>
+                    <li>Al confirmar, el sistema devolverá el stock de los productos seleccionados, registrará el egreso financiero del reembolso y marcará la orden original como "Devolución Parcial".</li>
+                </ol>
+                <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
+                    <img src="{{ url_for('static', filename='img/manual_usuario/devolucion.png') }}" alt="Captura de pantalla de la página de Devoluciones" class="w-full">
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Historial de Devoluciones</h3>
+                <p class="text-gray-600">
+                    Todas las anulaciones y devoluciones parciales quedan registradas en el "Historial de Devoluciones", accesible desde el menú de Ventas. Desde aquí puede consultar el detalle de cada operación, viendo qué productos se devolvieron, el motivo y los reembolsos financieros asociados.
+                </p>
             </section>
 
             <section id="inventario" class="mb-12 bg-white p-6 rounded-lg shadow-md">
                 <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-boxes mr-2"></i>Módulo de Inventario</h2>
 
                 <h3 class="text-xl font-semibold text-gray-700 mb-2">Lista de Inventario</h3>
-                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
+                <p class="mb-4"><span class="role-badge role-todos">Todos los roles</span></p>
                 <p class="text-gray-600">Muestra todos los productos registrados en el sistema. Permite buscar, filtrar por grupo y ordenar. Los roles con permisos pueden crear, editar y ver el detalle de cada producto desde aquí.</p>
 
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Crear Producto</h3>
@@ -194,7 +266,7 @@
                 <p class="text-gray-600">Permite modificar la información de un producto existente (nombre, descripción, imagen, marca, grupo, etc.).</p>
 
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Existencias por Almacén</h3>
-                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
+                <p class="mb-4"><span class="role-badge role-todos">Todos los roles</span></p>
                 <p class="text-gray-600">Presenta una tabla con todos los productos y su cantidad de stock en cada uno de los almacenes definidos en el sistema. Permite generar un reporte en PDF para el conteo físico de inventario.</p>
 
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Ajuste de Inventario</h3>
@@ -241,66 +313,69 @@
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Movimientos Manuales</h3>
                 <p class="mb-4"><span class="role-badge role-administrador">Administrador</span> <span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
                 <p class="text-gray-600">Permite registrar ingresos o egresos que no están directamente ligados a una venta o compra, como el pago de servicios, sueldos, etc. Estos movimientos afectarán los saldos de las cuentas correspondientes.</p>
-
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Retiros de Efectivo</h3>
-                <p class="text-gray-600">
-                    Cualquier usuario puede solicitar un retiro de efectivo desde una de las cajas. La solicitud quedará en estado "Pendiente".
-                    Los <span class="role-badge role-administrador">Administrador</span>, <span class="role-badge role-gerente">Gerente</span> y <span class="role-badge role-superusuario">Superusuario</span> pueden ver y aprobar o rechazar estas solicitudes desde la sección "Retiros Pendientes".
-                    Al aprobar un retiro, el saldo de la caja se descuenta automáticamente y se puede imprimir un recibo de la operación.
-                </p>
-
-                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Cierre Diario</h3>
-                <p class="text-gray-600">
-                    Esta herramienta genera un reporte consolidado de la actividad financiera de un día específico. El reporte incluye:
-                    <ul class="list-disc list-inside text-gray-600 space-y-2 mt-2">
-                        <li>Resumen de ventas y costo de mercancía vendida.</li>
-                        <li>Desglose de pagos recibidos por método.</li>
-                        <li>Flujo de caja para cada cuenta (saldo inicial, ingresos, egresos, saldo final).</li>
-                        <li>Lista de retiros de efectivo aprobados en el día.</li>
-                    </ul>
-                    Puede visualizarlo en pantalla o generar un PDF completo.
-                </p>
-                <div class="my-4 border rounded-lg overflow-hidden shadow-lg"> {# is_vendedor() #}
-                    <img src="{{ url_for('static', filename='img/manual_usuario/cierre_diario.png') }}" alt="Captura de pantalla del reporte de Cierre Diario" class="w-full">
-                </div>
+                <p class="text-gray-600">Cualquier usuario puede solicitar un retiro de efectivo desde una de las cajas. La solicitud quedará en estado "Pendiente". Los roles administrativos pueden ver y aprobar/rechazar estas solicitudes desde "Retiros Pendientes". Al aprobar un retiro, el saldo de la caja se descuenta y se puede imprimir un recibo.</p>
             </section>
 
             <section id="clientes" class="mb-12 bg-white p-6 rounded-lg shadow-md">
                 <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-user-friends mr-2"></i>Módulo de Clientes</h2>
-                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
-                <p class="text-gray-600">Permite gestionar la base de datos de clientes. Puede crear nuevos clientes, editar su información y ver el detalle de cada uno, incluyendo su historial de compras y su estado de cuenta (deudas pendientes). Desde el detalle del cliente, también puede registrar abonos a sus deudas.</p>
+                <p class="mb-4"><span class="role-badge role-todos">Todos los roles</span></p>
+                <p class="text-gray-600">Este módulo centraliza toda la información relacionada con sus clientes, facilitando un seguimiento detallado y una gestión eficiente de las relaciones comerciales.</p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Crear y Listar Clientes</h3>
+                <p class="text-gray-600">Puede crear un nuevo cliente desde el menú "Ventas" > "Clientes" > "Nuevo Cliente", o directamente desde la pantalla de "Nueva Orden de Venta" si el cliente no se encuentra en la búsqueda. La lista de clientes muestra toda su base de datos y sirve como punto de acceso para ver los detalles de cada uno.</p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Detalle del Cliente: Un Centro de Control</h3>
+                <p class="text-gray-600">Al hacer clic en un cliente de la lista, accederá a su página de detalle. Esta pantalla es un centro de control completo para ese cliente, donde puede:</p>
+                <ul class="list-disc list-inside text-gray-600 space-y-2 mt-2">
+                    <li>Ver y editar su información de contacto (nombre, RIF, teléfono, dirección, etc.).</li>
+                    <li>Consultar el historial completo de todas sus compras (órdenes).</li>
+                    <li>Ver un resumen de su estado de cuenta, incluyendo el monto total que adeuda.</li>
+                    <li><strong>Registrar abonos a cualquier orden pendiente:</strong> Para cada orden con saldo pendiente, encontrará un botón para registrar un pago. Esto le permite gestionar todas las deudas de un cliente desde una única pantalla, sin necesidad de ir a la sección de Créditos o Apartados por separado.</li>
+                </ul>
+                <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
+                    <img src="{{ url_for('static', filename='img/manual_usuario/detalle_cliente.png') }}" alt="Captura de pantalla del detalle de un cliente" class="w-full">
+                </div>
             </section>
 
             <section id="proveedores" class="mb-12 bg-white p-6 rounded-lg shadow-md">
                 <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-dolly-flatbed mr-2"></i>Módulo de Proveedores</h2>
                 <p class="mb-4"><span class="role-badge role-administrador">Administrador</span> <span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
-                <p class="text-gray-600">Permite gestionar la base de datos de proveedores. Puede crear, editar y consultar la información de contacto de sus proveedores.</p>
+                <p class="text-gray-600">Este módulo le permite mantener una base de datos organizada de todos sus proveedores. La información registrada aquí se utiliza al crear nuevas órdenes de compra.</p>
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Crear y Consultar Proveedores</h3>
+                <p class="text-gray-600">Desde el menú "Compras" > "Proveedores", puede acceder a la lista de proveedores existentes y crear nuevos. Al crear un proveedor, puede registrar información detallada, incluyendo:</p>
+                <ul class="list-disc list-inside text-gray-600 space-y-2 mt-2">
+                    <li>Información fiscal (Nombre, RIF).</li>
+                    <li>Datos de contacto (teléfono, email, dirección).</li>
+                    <li>Persona de contacto principal.</li>
+                    <li>Información bancaria para pagos.</li>
+                    <li>Términos de pago y envío acordados.</li>
+                </ul>
             </section>
 
             <section id="reportes" class="mb-12 bg-white p-6 rounded-lg shadow-md">
-                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-chart-pie mr-2"></i>Reportes y Estadísticas</h2>
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-chart-pie mr-2"></i>Módulo de Reportes</h2>
                 
-                <h3 class="text-xl font-semibold text-gray-700 mb-2">Estadísticas de Ventas</h3>
-                <p class="mb-4"><span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
-                <p class="text-gray-600">Ofrece un análisis profundo de la rentabilidad del negocio. Puede filtrar por día, mes o un rango de fechas personalizado. Muestra gráficos y tablas con:</p>
-                <ul class="list-disc list-inside text-gray-600 space-y-2 mt-2">
-                    <li>Ventas, Costos y Utilidad Neta a lo largo del tiempo.</li>
-                    <li>Un resumen financiero (P&L) con utilidad bruta y neta.</li>
-                    <li>Ranking de los productos más vendidos y los clientes más frecuentes.</li>
-                </ul>
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Cierre Diario</h3>
+                <p class="mb-4"><span class="role-badge role-todos">Todos los roles</span></p>
+                <p class="text-gray-600">
+                    Esta herramienta genera un reporte consolidado de la actividad financiera de un día específico. El reporte incluye un resumen de ventas, desglose de pagos por método, flujo de caja para cada cuenta y la lista de retiros aprobados. Puede visualizarlo en pantalla o generar un PDF completo y detallado.
+                </p>
+                <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
+                    <img src="{{ url_for('static', filename='img/manual_usuario/cierre_diario.png') }}" alt="Captura de pantalla del reporte de Cierre Diario" class="w-full">
+                </div>
 
-                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Reporte Mensual (PDF)</h3>
-                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
-                <p class="text-gray-600">Genera un completo reporte financiero en formato PDF para un mes y año específicos. Este reporte es ideal para cierres contables e incluye:</p>
-                <ul class="list-disc list-inside text-gray-600 space-y-2 mt-2">
-                    <li>Estado de Resultados (P&L) del mes.</li>
-                    <li>Gráfico de resumen de resultados.</li>
-                    <li>Ranking de productos más vendidos.</li>
-                    <li>Resumen de ventas por tipo (contado, crédito, apartado).</li>
-                    <li>Reporte de Cuentas por Cobrar pendientes al final del mes.</li>
-                    <li>Reporte de Cobros realizados durante el mes.</li>
-                    <li>Estado de Flujo de Fondos para cada cuenta bancaria y caja.</li>
-                </ul>
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Reporte Mensual</h3>
+                <p class="mb-4"><span class="role-badge role-todos">Todos los roles</span></p>
+                <p class="text-gray-600">Permite generar un completo reporte financiero en formato PDF para un mes y año específicos. Este reporte es ideal para cierres contables e incluye estado de resultados, análisis de ventas, cuentas por cobrar, flujo de fondos y más.</p>
+                <div class="my-4 screenshot-placeholder">
+                    <i class="fas fa-camera mr-2"></i>
+                    <span>Captura de pantalla del generador de Reporte Mensual</span>
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Estadísticas</h3>
+                <p class="mb-4"><span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">Ofrece un análisis profundo de la rentabilidad del negocio. Puede filtrar por día, mes o un rango de fechas personalizado para visualizar gráficos y tablas con ventas, costos, utilidad neta, ranking de productos y clientes.</p>
             </section>
 
             <section id="configuracion" class="mb-12 bg-white p-6 rounded-lg shadow-md">
@@ -335,11 +410,28 @@
                 <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
                     <img src="{{ url_for('static', filename='img/manual_usuario/editar_costos_producto.png') }}" alt="Captura de pantalla de la edición de costos de un producto" class="w-full">
                 </div>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Gestión de Usuarios y Accesos</h3>
+                <p class="mb-4"><span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">
+                    Esta sección, accesible solo para el Superusuario, permite gestionar las cuentas de los usuarios que pueden acceder al sistema, así como sus niveles de permiso (roles). Se encuentra en el menú lateral bajo "Configuración" > "Usuarios".
+                </p>
+                <ul class="list-disc list-inside text-gray-600 space-y-2 mt-4">
+                    <li><strong>Crear Usuario:</strong> Puede añadir un nuevo usuario proporcionando un nombre de usuario, una contraseña y asignando un rol.</li>
+                    <li><strong>Editar Usuario:</strong> Para cada usuario existente, puede cambiar su rol o establecer una nueva contraseña.</li>
+                    <li><strong>Eliminar Usuario:</strong> Puede eliminar permanentemente la cuenta de un usuario.</li>
+                </ul>
+                <p class="mt-4 text-gray-600">
+                    Es crucial asignar el rol correcto a cada usuario para mantener la seguridad e integridad de los datos del sistema.
+                </p>
+                <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
+                    <img src="{{ url_for('static', filename='img/manual_usuario/gestion_usuarios.png') }}" alt="Captura de pantalla de la gestión de usuarios" class="w-full">
+                </div>
             </section>
 
             <section id="perfil" class="mb-12 bg-white p-6 rounded-lg shadow-md">
                 <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-user-circle mr-2"></i>Perfil de Usuario</h2>
-                <p class="mb-4"><span class="role-badge role-todos">Todos</span></p>
+                <p class="mb-4"><span class="role-badge role-todos">Todos los roles</span></p>
                 <p class="text-gray-600">Haciendo clic en su nombre en el menú lateral, puede acceder a su perfil para ver y editar su información personal, como nombre, datos de contacto, redes sociales, información bancaria y foto de perfil.</p>
             </section>
 

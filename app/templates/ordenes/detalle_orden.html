@@ -17,6 +17,7 @@
             {% endif %}
         </div>
     </div>
+    
 
     <div class="bg-white p-8 rounded-lg shadow-md">
         <div class="flex justify-end mb-4">
@@ -61,10 +62,24 @@
                         <p><strong>Tasa de Cambio:</strong> <span class="font-semibold">Bs. {{ "%.2f"|format(order.exchange_rate_at_sale) }}</span></p>
                     </div>
                 </div>
+                {% if order.status not in ['Anulada', 'Devolución Parcial'] and is_administrador() %}
+                <div class="text-right">
+                    <a href="{{ url_for('main.return_order', order_id=order.id) }}" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                        <i class="fas fa-undo-alt mr-2"></i>Anular / Devolver
+                    </a>
+                </div>
+                {% endif %}
             </div>
             
             <!-- RIGHT COLUMN: Products and Financials -->
             <div class="lg:col-span-3 space-y-8">
+                {% if order.status == 'Anulada' %}
+                <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-6 rounded-lg shadow-lg h-full flex flex-col justify-center items-center">
+                    <i class="fas fa-ban text-5xl mb-4"></i>
+                    <h2 class="text-2xl font-bold">Orden Anulada</h2>
+                    <p class="mt-2">Esta orden fue anulada y sus productos fueron devueltos al inventario.</p>
+                </div>
+                {% else %}
                 <!-- Products -->
                 <div>
                     <h2 class="text-xl font-semibold text-gray-700 mb-4">Productos en la Orden</h2>
@@ -81,17 +96,21 @@
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200 md:divide-y-0">
                                 {% for item in order.items %}
-                                <tr class="md:table-row">
+                                {% set net_quantity = item.quantity - (item.returned_quantity or 0) %}
+                                <tr class="md:table-row {% if net_quantity <= 0 %}bg-gray-100 text-gray-400 line-through{% endif %}">
                                     <!-- Vista Móvil: Columna 1 (Producto y Códigos) -->
                                     <td class="px-4 py-3 md:hidden">
                                         <p class="font-bold text-gray-900">{{ item.product.name }}</p>
                                         <p class="text-xs text-gray-600"><strong>COD:</strong> {{ item.product.codigo_producto or 'N/A' }}</p>
                                         <p class="text-xs text-gray-600"><i class="fas fa-barcode w-4 inline-block text-left"></i> {{ item.product.barcode }}</p>
+                                        {% if item.returned_quantity and item.returned_quantity > 0 %}
+                                        <span class="text-xs font-bold text-red-500 no-underline">DEVUELTO: {{ item.returned_quantity or 0 }}</span>
+                                        {% endif %}
                                     </td>
                                     <!-- Vista Móvil: Columna 2 (Valores) -->
                                     <td class="px-4 py-3 md:hidden text-right">
-                                        <p class="font-bold text-gray-800">Bs. {{ "%.2f" % (item.price * item.quantity) }}</p>
-                                        <p class="text-xs text-gray-500">{{ item.quantity }} x Bs. {{ "%.2f" % item.price }}</p>
+                                        <p class="font-bold text-gray-800">Bs. {{ "%.2f" % (item.price * net_quantity) }}</p>
+                                        <p class="text-xs text-gray-500">{{ net_quantity }} x Bs. {{ "%.2f" % item.price }}</p>
                                     </td>
 
                                     <!-- Vista Desktop (Celdas originales) -->
@@ -99,16 +118,22 @@
                                         <div><strong>COD:</strong> {{ item.product.codigo_producto or 'N/A' }}</div>
                                         <div><i class="fas fa-barcode w-4 inline-block text-left"></i> {{ item.product.barcode }}</div>
                                     </td>
-                                    <td class="hidden md:table-cell px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{{ item.product.name }}</td>
-                                    <td class="hidden md:table-cell px-4 py-3 whitespace-nowrap text-sm text-center text-gray-500">{{ item.quantity }}</td>
+                                    <td class="hidden md:table-cell px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                        {{ item.product.name }}
+                                        {% if item.returned_quantity and item.returned_quantity > 0 %}
+                                        <span class="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-800 no-underline">DEVUELTO: {{ item.returned_quantity or 0 }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="hidden md:table-cell px-4 py-3 whitespace-nowrap text-sm text-center text-gray-500">{{ net_quantity }}</td>
                                     <td class="hidden md:table-cell px-4 py-3 whitespace-nowrap text-sm text-center text-gray-500">Bs. {{ "%.2f" % item.price }}</td>
-                                    <td class="hidden md:table-cell px-4 py-3 whitespace-nowrap text-sm text-center font-bold text-gray-800">Bs. {{ "%.2f" % (item.price * item.quantity) }}</td>
+                                    <td class="hidden md:table-cell px-4 py-3 whitespace-nowrap text-sm text-center font-bold text-gray-800">Bs. {{ "%.2f" % (item.price * net_quantity) }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
                 </div>
+                {% endif %}
 
                 <!-- Payments and Financial Summary -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -158,8 +183,12 @@
                     <div class="bg-gray-50 p-4 rounded-lg self-start shadow-lg">
                         <div class="space-y-2">
                             <div class="flex justify-between">
-                                <span class="font-semibold">Subtotal:</span>
-                                <span>Bs. {{ "%.2f"|format(subtotal) }}</span>
+                                <span class="font-semibold">Subtotal (Post-Devolución):</span>
+                                {% set subtotal_ns = namespace(value=0) %}
+                                {% for item in order.items %}
+                                    {% set subtotal_ns.value = subtotal_ns.value + (item.price * (item.quantity - (item.returned_quantity or 0))) %}
+                                {% endfor %}
+                                <span>Bs. {{ "%.2f"|format(subtotal_ns.value) }}</span>
                             </div>
                             {% if order.discount_usd > 0 and order.exchange_rate_at_sale > 0 %}
                             <div class="flex justify-between">
@@ -197,6 +226,7 @@
                 </div>
             </div>
         </div>
+        
     </div>
 </div>
 {% endblock %}

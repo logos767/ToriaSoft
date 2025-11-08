@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-7xl">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-users-cog mr-2"></i>{{ title }}</h1>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Columna para crear usuario -->
+        <div class="lg:col-span-1">
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4 border-b pb-2">Crear Nuevo Usuario</h2>
+                <form action="{{ url_for('main.add_user') }}" method="POST">
+                    <div class="mb-4">
+                        <label for="username" class="block text-gray-700 font-bold mb-2">Nombre de Usuario</label>
+                        <input type="text" id="username" name="username" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label for="password" class="block text-gray-700 font-bold mb-2">Contraseña</label>
+                        <input type="password" id="password" name="password" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="mb-6">
+                        <label for="role" class="block text-gray-700 font-bold mb-2">Rol de Usuario</label>
+                        <select id="role" name="role" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                            <option value="Vendedor">Vendedor</option>
+                            <option value="Administrador">Administrador</option>
+                            <option value="Gerente">Gerente</option>
+                            <option value="Superusuario">Superusuario</option>
+                        </select>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
+                            <i class="fas fa-plus mr-2"></i>Crear Usuario
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Columna para listar usuarios -->
+        <div class="lg:col-span-2">
+            <div class="bg-white p-2 rounded-lg shadow-md">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuario</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rol</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for user in users %}
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="flex items-center">
+                                        <div class="flex-shrink-0 h-10 w-10">
+                                            <img class="h-10 w-10 rounded-full object-cover" src="{{ url_for('static', filename='profile_pics/' + (user.profile_image_file or 'default.png')) }}" alt="">
+                                        </div>
+                                        <div class="ml-4">
+                                            <div class="text-sm font-medium text-gray-900">{{ user.username }}</div>
+                                            <div class="text-sm text-gray-500">{{ user.email or 'Sin email' }}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                        {% if user.role == 'Superusuario' %} bg-purple-100 text-purple-800 
+                                        {% elif user.role == 'Gerente' %} bg-pink-100 text-pink-800
+                                        {% elif user.role == 'Administrador' %} bg-blue-100 text-blue-800
+                                        {% else %} bg-green-100 text-green-800 {% endif %}">
+                                        {{ user.role }}
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                                    <button onclick="openEditModal({{ user.id }}, '{{ user.username }}', '{{ user.role }}')" class="text-indigo-600 hover:text-indigo-900 mr-3" title="Editar Usuario">
+                                        <i class="fas fa-edit text-lg"></i>
+                                    </button>
+                                    <form action="{{ url_for('main.delete_user', user_id=user.id) }}" method="POST" class="inline-block" onsubmit="return confirm('¿Estás seguro de que quieres eliminar a este usuario? Esta acción no se puede deshacer.');">
+                                        <button type="submit" class="text-red-600 hover:text-red-900" title="Eliminar Usuario">
+                                            <i class="fas fa-trash-alt text-lg"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Editar Usuario -->
+<div id="edit-user-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <form id="edit-user-form" method="POST">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl leading-6 font-medium text-gray-900">Editar Usuario</h3>
+                <button type="button" onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Nombre de Usuario</label>
+                    <p id="edit-username" class="mt-1 text-lg font-semibold text-gray-800"></p>
+                </div>
+                <div>
+                    <label for="edit-role" class="block text-sm font-medium text-gray-700">Rol</label>
+                    <select id="edit-role" name="role" required class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <option value="Vendedor">Vendedor</option>
+                        <option value="Administrador">Administrador</option>
+                        <option value="Gerente">Gerente</option>
+                        <option value="Superusuario">Superusuario</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="edit-password" class="block text-sm font-medium text-gray-700">Nueva Contraseña (opcional)</label>
+                    <input type="password" id="edit-password" name="password" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Dejar en blanco para no cambiar">
+                </div>
+            </div>
+            <div class="mt-8 flex justify-end">
+                <button type="button" onclick="closeEditModal()" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 mr-4">Cancelar</button>
+                <button type="submit" class="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700"><i class="fas fa-save mr-2"></i>Guardar Cambios</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openEditModal(userId, username, currentRole) {
+        const modal = document.getElementById('edit-user-modal');
+        const form = document.getElementById('edit-user-form');
+        document.getElementById('edit-username').textContent = username;
+        document.getElementById('edit-role').value = currentRole;
+        document.getElementById('edit-password').value = '';
+        form.action = `/configuracion/usuarios/editar/${userId}`;
+        modal.classList.remove('hidden');
+    }
+
+    function closeEditModal() {
+        const modal = document.getElementById('edit-user-modal');
+        modal.classList.add('hidden');
+    }
+</script>
+{% endblock %}

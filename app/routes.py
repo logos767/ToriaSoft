@@ -30,8 +30,8 @@ from firebase_admin import messaging
 from sqlalchemy.orm import joinedload, subqueryload
 from .extensions import db, bcrypt, socketio
 from .models import (User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, 
-                    CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, 
-                    CashBox, Payment, ManualFinancialMovement, InventoryAdjustment, InventoryAdjustmentItem, VE_TIMEZONE, 
+                    CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, UserActivityLog,
+                    CashBox, Payment, ManualFinancialMovement, InventoryAdjustment, InventoryAdjustmentItem, VE_TIMEZONE, OrderReturn, OrderReturnItem,
                     UserDevice, Warehouse, ProductStock, WarehouseTransfer, BulkLoadLog)
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -62,6 +62,25 @@ def is_vendedor():
 
 # --- End Helper functions for role-based access control ---
 
+# --- Helper function for user activity logging ---
+def log_user_activity(action, details=None, target_id=None, target_type=None):
+    """
+    Logs an activity for the current user if they are not a Superusuario.
+    """
+    if current_user.is_authenticated and current_user.role != 'Superusuario':
+        try:
+            log_entry = UserActivityLog(
+                user_id=current_user.id,
+                action=action,
+                details=details,
+                target_id=str(target_id) if target_id is not None else None,
+                target_type=target_type
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+        except Exception as e:
+            current_app.logger.error(f"Error logging user activity for user {current_user.id}: {e}")
+            db.session.rollback()
 
 routes_blueprint = Blueprint('main', __name__)
 
@@ -1099,6 +1118,12 @@ def imprimir_codigos_barra():
     except Exception as e:
         current_app.logger.error(f"Error generating PDF with ReportLab: {str(e)}")
         error_message = f"Error generando PDF: {str(e)}. Intente con menos productos o contacte al administrador."
+        log_user_activity(
+            action="Intentó imprimir códigos de barra",
+            details=f"Error al generar PDF para {len(product_ids)} productos.",
+            target_id=None,
+            target_type="BarcodePrinting"
+        )
 
         # Fallback: try to generate a simple error PDF with ReportLab
         try:
@@ -1120,6 +1145,12 @@ def imprimir_codigos_barra():
         except:
             # If even error PDF fails, return plain text
             return Response(error_message, mimetype='text/plain')
+    
+    log_user_activity(
+        action="Imprimió códigos de barra",
+        details=f"Generó PDF con {total_labels} etiquetas para {len(products_to_print)} productos.",
+        target_id=None,
+        target_type="BarcodePrinting")
 
 @routes_blueprint.route('/inventario/carga_masiva/imprimir_codigos/<int:log_id>', methods=['GET'])
 @login_required
@@ -1170,10 +1201,63 @@ def print_bulk_load_barcodes(log_id):
 @routes_blueprint.route('/inventario/existencias')
 @login_required
 def inventory_stock():
-    # Cargar productos con sus niveles de stock por almacén
-    products_with_stock = Product.query.options(joinedload(Product.stock_levels).joinedload(ProductStock.warehouse)).filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).order_by(Product.name).all()
+    # No role check here, as per original code and user's implicit request for report visibility.
+    # Permissions for specific actions (like PDF report or adjustment) are handled in their respective routes.
+
+    selected_warehouse_id = request.args.get('warehouse_id', type=int)
+    show_zero_stock = request.args.get('show_zero_stock') == 'on'
+
     warehouses = Warehouse.query.order_by(Warehouse.id).all()
-    return render_template('inventario/existencias.html', title='Existencias por Almacén', products_data=products_with_stock, warehouses=warehouses)
+    products_data = [] # This will hold {'product': Product_obj, 'stock': quantity}
+    selected_warehouse_name = None
+
+    if selected_warehouse_id:
+        selected_warehouse_obj = next((wh for wh in warehouses if wh.id == selected_warehouse_id), None)
+        if selected_warehouse_obj:
+            selected_warehouse_name = selected_warehouse_obj.name
+
+        # Query for products with stock in the selected warehouse
+        query = db.session.query(Product, ProductStock.quantity) \
+                          .join(ProductStock, Product.id == ProductStock.product_id) \
+                          .filter(ProductStock.warehouse_id == selected_warehouse_id) \
+                          .filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None)))
+
+        if not show_zero_stock:
+            query = query.filter(ProductStock.quantity > 0)
+        
+        products_with_stock_tuples = query.order_by(Product.name).all()
+        products_data = [{'product': p, 'stock': q} for p, q in products_with_stock_tuples]
+
+    else:
+        # If no specific warehouse is selected, show all products with their total stock.
+        # We need to calculate the total stock within the query itself.
+        
+        # Subquery to sum quantities for each product across all warehouses
+        total_stock_subquery = db.session.query(
+            ProductStock.product_id,
+            func.sum(ProductStock.quantity).label('total_quantity')
+        ).group_by(ProductStock.product_id).subquery()
+
+        # Main query: select Product and its total_quantity from the subquery
+        query = db.session.query(
+            Product,
+            func.coalesce(total_stock_subquery.c.total_quantity, 0).label('total_stock')
+        ).outerjoin(total_stock_subquery, Product.id == total_stock_subquery.c.product_id) \
+        .filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None)))
+
+        if not show_zero_stock:
+            query = query.filter(func.coalesce(total_stock_subquery.c.total_quantity, 0) > 0)
+        
+        products_with_stock_tuples = query.order_by(Product.name).all()
+        products_data = [{'product': p, 'stock': q} for p, q in products_with_stock_tuples]
+
+    return render_template('inventario/existencias.html',
+                           title='Existencias por Almacén',
+                           products_data=products_data,
+                           warehouses=warehouses,
+                           selected_warehouse_id=selected_warehouse_id,
+                           selected_warehouse_name=selected_warehouse_name,
+                           show_zero_stock=show_zero_stock)
 
 @routes_blueprint.route('/inventario/existencias/reporte_pdf')
 @login_required
@@ -1182,15 +1266,48 @@ def inventory_stock_report_pdf():
     if not is_administrador():
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.inventory_stock'))
+    
+    selected_warehouse_id = request.args.get('warehouse_id', type=int)
+    show_zero_stock = request.args.get('show_zero_stock') == 'True' # The boolean is passed as a string
 
-    products = Product.query.filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).order_by(Product.name).all()
+    products_data = []
+    selected_warehouse_name = "Todos los Almacenes"
+
+    if selected_warehouse_id:
+        warehouse = Warehouse.query.get(selected_warehouse_id)
+        if warehouse:
+            selected_warehouse_name = warehouse.name
+
+        # Query for products with stock in the selected warehouse
+        query = db.session.query(Product, ProductStock.quantity) \
+                          .join(ProductStock, Product.id == ProductStock.product_id) \
+                          .filter(ProductStock.warehouse_id == selected_warehouse_id) \
+                          .filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None)))
+
+        if not show_zero_stock:
+            query = query.filter(ProductStock.quantity > 0)
+        
+        products_with_stock_tuples = query.order_by(Product.name).all()
+        products_data = [{'product': p, 'stock': q} for p, q in products_with_stock_tuples]
+    else:
+        # If no specific warehouse is selected, show all products with their total stock
+        total_stock_subquery = db.session.query(ProductStock.product_id, func.sum(ProductStock.quantity).label('total_quantity')).group_by(ProductStock.product_id).subquery()
+        query = db.session.query(Product, func.coalesce(total_stock_subquery.c.total_quantity, 0).label('total_stock')) \
+                          .outerjoin(total_stock_subquery, Product.id == total_stock_subquery.c.product_id) \
+                          .filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None)))
+        if not show_zero_stock:
+            query = query.filter(func.coalesce(total_stock_subquery.c.total_quantity, 0) > 0)
+        products_with_stock_tuples = query.order_by(Product.name).all()
+        products_data = [{'product': p, 'stock': q} for p, q in products_with_stock_tuples]
+
     company_info = CompanyInfo.query.first()
     generation_date = get_current_time_ve().strftime('%d/%m/%Y %H:%M:%S')
 
     html_string = render_template('pdf/inventory_stock_report.html',
-                                  products=products,
+                                  products_data=products_data,
                                   company_info=company_info,
-                                  generation_date=generation_date)
+                                  generation_date=generation_date,
+                                  warehouse_name=selected_warehouse_name)
 
     pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
 
@@ -1293,6 +1410,13 @@ def inventory_adjustment():
             db.session.bulk_save_objects(movements_to_create)
             db.session.commit()
             flash(f'Ajuste de inventario completado y guardado con ID #{adjustment_record.id}.', 'success')
+            
+            log_user_activity(
+                action="Realizó ajuste de inventario",
+                details=f"Ajuste con código {adjustment_record.adjustment_code}. Motivo: {reason}",
+                target_id=adjustment_record.adjustment_code,
+                target_type="InventoryAdjustment"
+            )
             return redirect(url_for('main.adjustment_result', adjustment_id=adjustment_record.id))
 
         except Exception as e:
@@ -1400,6 +1524,13 @@ def new_product():
             )
             db.session.add(new_prod)
             db.session.commit()
+
+            log_user_activity(
+                action="Creó nuevo producto",
+                details=f"Producto: {new_prod.name} (Cód. Barra: {new_prod.barcode})",
+                target_id=new_prod.id,
+                target_type="Product"
+            )
             flash('Producto creado exitosamente!', 'success')
             return redirect(url_for('main.inventory_list'))
         except (ValueError, IntegrityError) as e:
@@ -1434,6 +1565,13 @@ def edit_product(product_id):
             product.grupo = request.form.get('grupo')
 
             db.session.commit()
+            log_user_activity(
+                action="Modificó producto",
+                details=f"Producto: {product.name}",
+                target_id=product.id,
+                target_type="Product"
+            )
+
             flash(f'Producto "{product.name}" actualizado exitosamente.', 'success')
             return redirect(url_for('main.product_detail', product_id=product.id))
         except Exception as e:
@@ -1469,6 +1607,12 @@ def new_client():
             new_cli = Client(name=name, cedula_rif=cedula_rif, email=email, phone=phone, address=address)
             db.session.add(new_cli)
             db.session.commit()
+            log_user_activity(
+                action="Creó nuevo cliente",
+                details=f"Cliente: {new_cli.name} (CI/RIF: {new_cli.cedula_rif or 'N/A'})",
+                target_id=new_cli.id,
+                target_type="Client"
+            )
             flash('Cliente creado exitosamente!', 'success')
             return redirect(url_for('main.client_list'))
         except IntegrityError:
@@ -1544,6 +1688,12 @@ def client_detail(client_id):
             if order.due_amount <= 0.01:
                 order.status = 'Pagada'
             
+            log_user_activity(
+                action="Registró abono",
+                details=f"Abono de {payment.amount_paid:.2f} {payment.currency_paid} a la orden #{order.id:09d} del cliente '{order.client.name}'",
+                target_id=order.id,
+                target_type="Order"
+            )
             db.session.commit()
             flash(f'Abono registrado exitosamente para la orden #{order.id:09d}.', 'success')
             # After commit, the order.due_amount is updated. We can now recalculate total_due.
@@ -1616,6 +1766,12 @@ def new_provider():
                 shipping_terms=request.form.get('shipping_terms')
             )
             db.session.add(new_prov)
+            log_user_activity(
+                action="Creó nuevo proveedor",
+                details=f"Proveedor: {new_prov.name}",
+                target_id=new_prov.id,
+                target_type="Provider"
+            )
             db.session.commit()
             flash('Proveedor creado exitosamente!', 'success')
             return redirect(url_for('main.provider_list'))
@@ -1774,6 +1930,13 @@ def new_purchase():
             notification_link = url_for('main.purchase_detail', purchase_id=new_purchase.id)
             create_notification_for_admins(notification_message, notification_link)
 
+            log_user_activity(
+                action="Creó orden de compra",
+                details=f"Orden de compra para '{new_purchase.provider.name}' por un total de {new_purchase.total_cost:.2f} Bs.",
+                target_id=new_purchase.id,
+                target_type="Purchase"
+            )
+
             db.session.commit()
             flash('Compra creada exitosamente!', 'success')
             return redirect(url_for('main.purchase_list'))
@@ -1906,6 +2069,13 @@ def new_reception():
             notification_message = f"Recepción para la compra #{purchase.id} procesada."
             notification_link = url_for('main.reception_list')
             create_notification_for_admins(notification_message, notification_link)
+
+            log_user_activity(
+                action="Procesó recepción de mercancía",
+                details=f"Recepción para la compra #{purchase.id} del proveedor '{purchase.provider.name}'.",
+                target_id=reception.id,
+                target_type="Reception"
+            )
 
             db.session.commit()
             flash('Recepción completada y stock actualizado!', 'success')
@@ -2180,6 +2350,13 @@ def new_order():
             notification_link = url_for('main.order_detail', order_id=new_order.id)
             create_notification_for_admins(notification_message, notification_link)
 
+            log_user_activity(
+                action="Creó orden de venta",
+                details=f"Orden tipo '{sale_type}' para cliente '{new_order.client.name}' por un total de ${final_order_total_usd:.2f}.",
+                target_id=new_order.id,
+                target_type="Order"
+            )
+
             db.session.commit()
             if sale_type == 'reservation':
                 flash('Apartado creado exitosamente! Preparando para imprimir recibo...', 'success')
@@ -2267,6 +2444,12 @@ def credit_detail(order_id):
                 db.session.flush()
                 if order.due_amount <= 0.01:
                     order.status = 'Pagada'
+                log_user_activity(
+                    action="Registró abono a crédito",
+                    details=f"Abono de {payment.amount_paid:.2f} {payment.currency_paid} al crédito #{order.id:09d} del cliente '{order.client.name}'",
+                    target_id=order.id,
+                    target_type="Order"
+                )
                 db.session.commit()
                 flash('Abono al crédito registrado exitosamente.', 'success')
             except Exception as e:
@@ -2364,6 +2547,12 @@ def reservation_detail(order_id):
                 db.session.flush()
                 if order.due_amount <= 0.01 and order.status != 'Entregado':
                     order.status = 'Pagado'
+                log_user_activity(
+                    action="Registró abono a apartado",
+                    details=f"Abono de {payment.amount_paid:.2f} {payment.currency_paid} al apartado #{order.id:09d} del cliente '{order.client.name}'",
+                    target_id=order.id,
+                    target_type="Order"
+                )
                 db.session.commit()
                 flash('Abono registrado exitosamente.', 'success')
             except Exception as e:
@@ -2376,6 +2565,16 @@ def reservation_detail(order_id):
     points_of_sale = PointOfSale.query.order_by(PointOfSale.name).all()
     cash_boxes = CashBox.query.order_by(CashBox.name).all()
     return render_template('apartados/detalle.html', title=f'Detalle de Apartado #{order.id:09d}', order=order, banks=banks, points_of_sale=points_of_sale, cash_boxes=cash_boxes)
+
+
+@routes_blueprint.route('/actividad_usuarios')
+@login_required
+def user_activity_log():
+    if not is_superuser():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    logs = UserActivityLog.query.options(joinedload(UserActivityLog.user)).order_by(UserActivityLog.timestamp.desc()).all()
+    return render_template('actividad_usuarios.html', title='Actividad de Usuarios', logs=logs)
 
 
 # Nueva ruta para movimientos de inventario
@@ -2899,6 +3098,13 @@ def cargar_excel():
                     add_stock_and_movement(new_prod.id, warehouse_id, stock_to_add, load_log.id, f"Carga Masiva #{load_log.id}")
 
             db.session.commit()
+
+            log_user_activity(
+                action="Realizó carga masiva de productos",
+                details=f"Carga desde Excel al almacén ID {warehouse_id}. {len(new_products)} productos nuevos.",
+                target_id=load_log.id,
+                target_type="BulkLoadLog"
+            )
             flash(f'Se han agregado {len(new_products)} productos nuevos al inventario.', 'success')
             return redirect(url_for('main.inventory_list'))
 
@@ -2979,6 +3185,13 @@ def cargar_excel_confirmar():
                 add_stock_and_movement(update_data['id'], warehouse_id, update_data['stock_to_add'], load_log.id, "Carga Masiva Excel")
 
             db.session.commit()
+            log_user_activity(
+                action="Confirmó carga masiva de productos",
+                details=f"Carga desde Excel al almacén ID {warehouse_id}. {len(upload_data.get('new_products', []))} nuevos, {len(upload_data.get('updates', []))} actualizados.",
+                target_id=load_log.id,
+                target_type="BulkLoadLog"
+            )
+
             flash(f'Carga de inventario procesada exitosamente. Se crearon {len(upload_data.get("new_products", []))} productos y se actualizó el stock de {len(upload_data.get("updates", []))} productos.', 'success')
         except Exception as e:
             db.session.rollback()
@@ -3046,6 +3259,7 @@ def company_settings():
             # Manejar la subida del logo
             logo_file = form.logo_file.data
             if logo_file:
+                pass
                 upload_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'logos')
                 os.makedirs(upload_dir, exist_ok=True)
                 
@@ -3310,6 +3524,13 @@ def edit_product_cost(product_id):
                 product.profit_margin = 0
                 flash('El precio de venta debe ser un número positivo.', 'danger')
 
+            log_user_activity(
+                action="Actualizó costos de producto",
+                details=f"Producto: {product.name}. Nuevo precio: ${product.price_usd:.2f}, Margen: {product.profit_margin*100:.2f}%",
+                target_id=product.id,
+                target_type="Product"
+            )
+
             db.session.commit()
             flash(f'Costos y precio del producto "{product.name}" actualizados exitosamente.', 'success')
             return redirect(url_for('main.cost_list'))
@@ -3331,9 +3552,7 @@ def print_delivery_note(order_id):
     order = Order.query.get_or_404(order_id)
     company_info = CompanyInfo.query.first()
 
-    # IVA desactivado
-    subtotal = sum(item.price * item.quantity for item in order.items)
-    iva = 0
+    # El subtotal y el IVA se calculan directamente en la plantilla para manejar devoluciones.
     order_total_with_iva = order.total_amount # This is the final amount after discount
 
     # Calculate total paid and change
@@ -3369,8 +3588,6 @@ def print_delivery_note(order_id):
     return render_template('ordenes/imprimir_nota.html',
                            order=order,
                            company_info=company_info,
-                           subtotal=subtotal,
-                           iva=iva,
                            change=change,
                            barcode_base64=barcode_base64)
 
@@ -3614,6 +3831,36 @@ def api_new_provider():
         db.session.rollback()
         current_app.logger.error(f"Error creando nuevo proveedor vía API: {e}")
         return jsonify({'error': 'Ocurrió un error interno en el servidor.'}), 500
+
+@routes_blueprint.route('/api/search_providers')
+@login_required
+def api_search_providers():
+    """API endpoint to search providers by name, tax_id, or contact person."""
+    if not is_administrador():
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    query = request.args.get('q', '').strip()
+    if not query or len(query) < 2:
+        return jsonify(providers=[])
+
+    search_pattern = f'%{query}%'
+    providers = Provider.query.filter(
+        or_(
+            Provider.name.ilike(search_pattern),
+            Provider.tax_id.ilike(search_pattern),
+            Provider.contact_person_name.ilike(search_pattern)
+        )
+    ).limit(10).all()
+
+    providers_data = [{
+        'id': p.id,
+        'name': p.name,
+        'tax_id': p.tax_id,
+        'phone': p.phone,
+        'email': p.email
+    } for p in providers]
+
+    return jsonify(providers=providers_data)
 
 @routes_blueprint.route('/api/productos/nuevo', methods=['POST'])
 @login_required
@@ -4022,6 +4269,13 @@ def new_financial_movement():
                 else:
                     raise ValueError("Moneda no válida para la caja.")
 
+            log_user_activity(
+                action="Registró movimiento manual",
+                details=f"Tipo: {movement_type}, Monto: {amount:.2f} {currency}, Cuenta: {account.name}, Desc: {description}",
+                target_id=new_mov.id,
+                target_type="ManualFinancialMovement"
+            )
+
             db.session.add(new_mov)
             db.session.commit()
 
@@ -4100,6 +4354,13 @@ def new_cash_withdrawal():
                 elif currency == 'USD':
                     cash_box.balance_usd -= amount
             
+            log_user_activity(
+                action="Solicitó/Aprobó retiro de efectivo",
+                details=f"Monto: {amount:.2f} {currency} de la caja '{cash_box.name}'. Estado: {new_mov.status}",
+                target_id=new_mov.id,
+                target_type="ManualFinancialMovement"
+            )
+
             db.session.add(new_mov)
             db.session.commit()
 
@@ -4195,11 +4456,23 @@ def process_withdrawal(movement_id, action):
             
             movement.status = 'Aprobado'
             flash_message = 'Retiro aprobado y saldo de caja actualizado.'
+            log_user_activity(
+                action="Aprobó retiro de efectivo",
+                details=f"Aprobó retiro de {movement.amount:.2f} {movement.currency} solicitado por {movement.created_by_user.username}.",
+                target_id=movement.id,
+                target_type="ManualFinancialMovement"
+            )
             flash_category = 'success'
 
         elif action == 'reject':
             movement.status = 'Rechazado'
             flash_message = 'Retiro rechazado.'
+            log_user_activity(
+                action="Rechazó retiro de efectivo",
+                details=f"Rechazó retiro de {movement.amount:.2f} {movement.currency} solicitado por {movement.created_by_user.username}.",
+                target_id=movement.id,
+                target_type="ManualFinancialMovement"
+            )
             flash_category = 'info'
         
         else:
@@ -4236,6 +4509,20 @@ def daily_closing():
         flash('Fecha inválida. Usando la fecha de hoy.', 'warning')
 
     return render_template('finanzas/cierre_diario.html', title='Cierre Diario', report_date=report_date)
+
+@routes_blueprint.route('/finanzas/reporte-mensual', methods=['GET'])
+@login_required
+def reporte_mensual():
+    """Muestra la página dedicada a generar el reporte mensual en PDF."""
+    if not is_vendedor():
+        flash('No tienes permiso para acceder a esta página.', 'danger')
+        return redirect(url_for('main.new_order'))
+
+    # Pasamos la fecha de hoy para que el JavaScript en la plantilla
+    # pueda pre-seleccionar el mes anterior de forma fiable.
+    today = get_current_time_ve().date()
+    
+    return render_template('finanzas/reporte_mensual.html', title='Reporte Mensual', today=today)
 
 
 @routes_blueprint.route('/finanzas/cierre-diario/imprimir', methods=['GET'])
@@ -4604,6 +4891,13 @@ def warehouse_transfer():
                 movement_in = Movement(product_id=product_id, type='Entrada', warehouse_id=to_warehouse_id, quantity=quantity, document_id=transfer.id, document_type='Traslado de Almacén', description=f"Desde almacén ID {from_warehouse_id}", comment=comment)
                 db.session.add_all([movement_out, movement_in])
 
+            log_user_activity(
+                action="Realizó traslado de inventario",
+                details=f"Traslado con código {transfer.transfer_code} desde almacén ID {from_warehouse_id} a ID {to_warehouse_id}.",
+                target_id=transfer.id,
+                target_type="WarehouseTransfer"
+            )
+
             db.session.commit()
             flash('Traslado realizado exitosamente. Puede imprimir el reporte si lo necesita.', 'success')
             return redirect(url_for('main.transfer_detail', transfer_id=transfer.id))
@@ -4846,3 +5140,358 @@ def api_search_products_for_sale():
 def user_manual():
     """Muestra la página del manual de usuario."""
     return render_template('manual_usuario.html')
+
+# --- Rutas de Gestión de Usuarios (Solo Superusuario) ---
+
+@routes_blueprint.route('/configuracion/usuarios', methods=['GET'])
+@login_required
+def user_management():
+    if not is_superuser():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    # Query all users except the current superuser to prevent self-locking
+    users = User.query.filter(User.id != current_user.id).order_by(User.username).all()
+    
+    return render_template('configuracion/usuarios.html', title='Gestión de Usuarios', users=users)
+
+@routes_blueprint.route('/configuracion/usuarios/nuevo', methods=['POST'])
+@login_required
+def add_user():
+    if not is_superuser():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.user_management'))
+    
+    username = request.form.get('username')
+    password = request.form.get('password')
+    role = request.form.get('role')
+
+    if not all([username, password, role]):
+        flash('Todos los campos son requeridos.', 'danger')
+        return redirect(url_for('main.user_management'))
+
+    if User.query.filter_by(username=username).first():
+        flash(f'El nombre de usuario "{username}" ya existe.', 'danger')
+        return redirect(url_for('main.user_management'))
+
+    hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+    new_user = User(username=username, password=hashed_password, role=role)
+    db.session.add(new_user)
+    db.session.commit()
+
+    flash(f'Usuario "{username}" creado exitosamente.', 'success')
+    return redirect(url_for('main.user_management'))
+
+@routes_blueprint.route('/configuracion/usuarios/editar/<int:user_id>', methods=['POST'])
+@login_required
+def edit_user(user_id):
+    if not is_superuser():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.user_management'))
+
+    user_to_edit = User.query.get_or_404(user_id)
+    
+    user_to_edit.role = request.form.get('role')
+    new_password = request.form.get('password')
+
+    if new_password:
+        user_to_edit.password = bcrypt.generate_password_hash(new_password).decode('utf-8')
+    
+    db.session.commit()
+    flash(f'Usuario "{user_to_edit.username}" actualizado exitosamente.', 'success')
+    return redirect(url_for('main.user_management'))
+
+@routes_blueprint.route('/configuracion/usuarios/eliminar/<int:user_id>', methods=['POST'])
+@login_required
+def delete_user(user_id):
+    if not is_superuser():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.user_management'))
+
+    user_to_delete = User.query.get_or_404(user_id)
+    username = user_to_delete.username
+    db.session.delete(user_to_delete)
+    db.session.commit()
+
+    flash(f'Usuario "{username}" eliminado exitosamente.', 'success')
+    return redirect(url_for('main.user_management'))
+
+@routes_blueprint.route('/ordenes/devoluciones/lista')
+@login_required
+def return_list():
+    """Displays a history of all returns and cancellations."""
+    if not is_administrador():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    returns = OrderReturn.query.options(
+        joinedload(OrderReturn.user),
+        joinedload(OrderReturn.order)
+    ).order_by(OrderReturn.date.desc()).all()
+
+    return render_template('ordenes/lista_devoluciones.html', title='Historial de Devoluciones', returns=returns)
+
+@routes_blueprint.route('/ordenes/devoluciones/detalle/<int:return_id>')
+@login_required
+def return_detail(return_id):
+    """Shows the details of a specific return."""
+    if not is_administrador():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    # Usamos subqueryload para cargar los items y sus productos relacionados de forma eficiente.
+    # Es una alternativa a joinedload que puede ser más performante para colecciones.
+    return_record = OrderReturn.query.options(
+        subqueryload(OrderReturn.items).joinedload(OrderReturnItem.product),
+        joinedload(OrderReturn.order).joinedload(Order.client),
+        joinedload(OrderReturn.user)
+    ).filter_by(id=return_id).first_or_404()
+    return render_template('ordenes/detalle_devolucion.html', title=f'Detalle de Devolución {return_record.return_code}', return_record=return_record)
+# Nueva ruta para movimientos de inventario
+@routes_blueprint.route('/ordenes/devolucion', methods=['GET', 'POST']) # type: ignore
+@login_required
+def return_order():
+    """
+    Handles the cancellation (anulación) or return (devolución) of products from a sales order.
+    """
+    if not is_administrador():
+        flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    order = None
+    banks = Bank.query.order_by(Bank.name).all()
+    cash_boxes = CashBox.query.order_by(CashBox.name).all()
+
+
+    if request.method == 'POST':
+        order_id = request.form.get('order_id')
+        action = request.form.get('action')
+        order = Order.query.get_or_404(order_id)
+
+        if order.status in ['Anulada']:
+            flash(f'La orden #{order.id} ya ha sido procesada para anulación o devolución.', 'warning')
+            return redirect(url_for('main.return_order'))
+
+        try:
+            # Generate a unique code for the return
+            today_str = get_current_time_ve().strftime('%y%m%d')
+            count_today = OrderReturn.query.filter(OrderReturn.return_code.like(f"DEV{today_str}%")).count()
+            return_code = f"DEV{today_str}-{count_today + 1}"
+
+            if action == 'anulacion_total':
+                # 1. Create the main return record
+                total_value_ves = order.total_amount
+                return_record = OrderReturn(
+                    return_code=return_code,
+                    order_id=order.id,
+                    user_id=current_user.id,
+                    return_type='Anulación Total',
+                    reason='Anulación total de la orden.',
+                    total_refund_value_ves=total_value_ves
+                )
+                db.session.add(return_record)
+                db.session.flush()
+
+                # Return all items to stock
+                for item in order.items:
+                    # Create return item record
+                    OrderReturnItem.create(order_return_id=return_record.id, order_item_id=item.id, product_id=item.product_id, quantity=item.quantity, price_at_return_ves=item.price)
+                    warehouse_id_origen = 1 # Las ventas siempre salen de la tienda principal
+
+                    stock_entry = ProductStock.query.filter_by(product_id=item.product_id, warehouse_id=warehouse_id_origen).first()
+                    if stock_entry:
+                        stock_entry.quantity += item.quantity
+                    else:
+                        stock_entry = ProductStock(product_id=item.product_id, warehouse_id=warehouse_id_origen, quantity=item.quantity)
+                        db.session.add(stock_entry)
+                    
+                    # Create OrderReturnItem
+                    return_item_record = OrderReturnItem(
+                        order_return_id=return_record.id,
+                        order_item_id=item.id,
+                        product_id=item.product_id,
+                        quantity=item.quantity,
+                        price_at_return_ves=item.price
+                    )
+                    db.session.add(return_item_record)
+
+                    # 2. Crear movimiento de inventario de entrada
+                    movement = Movement(
+                        product_id=item.product_id, type='Entrada', warehouse_id=warehouse_id_origen,
+                        quantity=item.quantity, document_id=order.id, document_type='Anulación de Venta',
+                        description=f"Anulación total de la orden de venta #{order.id}",
+                        related_party_id=order.client_id, related_party_type='Cliente'
+                    )
+                    db.session.add(movement)
+
+                # 3. Revertir los pagos creando movimientos financieros de egreso
+                for payment in order.payments:
+                    refund_movement = ManualFinancialMovement(
+                        description=f"Reverso por anulación de orden #{order.id}. Pago original ID: {payment.id}",
+                        amount=payment.amount_paid,
+                        currency=payment.currency_paid,
+                        movement_type='Egreso',
+                        status='Aprobado',
+                        created_by_user_id=current_user.id,
+                        approved_by_user_id=current_user.id,
+                        date_approved=get_current_time_ve(),
+                        bank_id=payment.bank_id or (payment.pos.bank.id if payment.pos and payment.pos.bank else None),
+                        order_return_id=return_record.id,
+                        cash_box_id=payment.cash_box_id
+                    )
+                    db.session.add(refund_movement)
+
+                    # Actualizar saldos de cuentas
+                    if refund_movement.bank_id:
+                        bank = Bank.query.get(refund_movement.bank_id)
+                        if bank: bank.balance -= payment.amount_ves_equivalent
+                    elif refund_movement.cash_box_id:
+                        cash_box = CashBox.query.get(refund_movement.cash_box_id)
+                        if cash_box:
+                            if payment.currency_paid == 'VES': cash_box.balance_ves -= payment.amount_paid
+                            elif payment.currency_paid == 'USD': cash_box.balance_usd -= payment.amount_paid
+
+                # 4. Actualizar estado de la orden y registrar actividad
+                order.status = 'Anulada'
+                log_user_activity(action="Anuló orden de venta", details=f"Anulación total de la orden #{order.id}", target_id=order.id, target_type="Order")
+                db.session.commit()
+                flash(f'Orden #{order.id} anulada exitosamente. El stock y los saldos financieros han sido restaurados.', 'success')
+                return redirect(url_for('main.return_detail', return_id=return_record.id))
+
+            elif action == 'devolucion_parcial':
+                return_items = request.form.getlist('return_item_id')
+                return_quantities = request.form.getlist('return_quantity')
+                return_reason = request.form.get('return_reason', '').strip()
+                refund_payments_json = request.form.get('refund_payments_data') # This can be None
+                refund_payments = json.loads(refund_payments_json) if refund_payments_json else []
+
+
+                items_returned_count = 0
+                total_refund_value_ves = 0.0
+
+                for item_id, qty_str in zip(return_items, return_quantities):
+                    if (int(qty_str) if qty_str else 0) > 0:
+                        items_returned_count += 1
+                
+                if items_returned_count == 0:
+                    flash('No se seleccionaron productos para devolver.', 'warning')
+                    return redirect(url_for('main.return_order', order_id=order.id))
+
+                if not return_reason:
+                    raise ValueError("El motivo de la devolución es obligatorio.")
+
+
+                for item_id, qty_str in zip(return_items, return_quantities):
+                    quantity_to_return = int(qty_str) if qty_str else 0
+                    if quantity_to_return <= 0:
+                        continue
+
+                    order_item = OrderItem.query.get(item_id)
+                    if not order_item or order_item.order_id != order.id: # type: ignore
+                        continue
+                    
+                    # Check if trying to return more than what's left
+                    if quantity_to_return > (order_item.quantity - (order_item.returned_quantity or 0)):
+                        raise ValueError(f"Intento de devolver más unidades de las disponibles para '{order_item.product.name}'.")
+
+                    if quantity_to_return > order_item.quantity:
+                        raise ValueError(f"No se puede devolver más de la cantidad vendida para el producto '{order_item.product.name}'.")
+
+                    total_refund_value_ves += quantity_to_return * order_item.price
+
+                # Create the main return record
+                return_record = OrderReturn(
+                    return_code=return_code,
+                    order_id=order.id,
+                    user_id=current_user.id,
+                    return_type='Devolución Parcial',
+                    reason=return_reason,
+                    total_refund_value_ves=total_refund_value_ves
+                )
+                db.session.add(return_record)
+                db.session.flush()
+
+                for item_id, qty_str in zip(return_items, return_quantities):
+                    quantity_to_return = int(qty_str) if qty_str else 0
+                    if quantity_to_return <= 0: continue
+                    order_item = OrderItem.query.get(item_id)
+                    warehouse_id_origen = 1 # Las ventas siempre salen de la tienda principal
+
+
+                    stock_entry = ProductStock.query.filter_by(product_id=order_item.product_id, warehouse_id=warehouse_id_origen).first()
+                    if stock_entry:
+                        stock_entry.quantity += quantity_to_return
+                    else:
+                        stock_entry = ProductStock(product_id=order_item.product_id, warehouse_id=warehouse_id_origen, quantity=quantity_to_return)
+                        db.session.add(stock_entry)
+                    
+                    # Update the returned quantity on the original order item
+                    order_item.returned_quantity = (order_item.returned_quantity or 0) + quantity_to_return
+
+                    # Create OrderReturnItem record
+                    return_item_record = OrderReturnItem(
+                        order_return_id=return_record.id, order_item_id=order_item.id,
+                        product_id=order_item.product_id, quantity=quantity_to_return,
+                        price_at_return_ves=order_item.price)
+                    db.session.add(return_item_record)
+
+                    movement = Movement(
+                        product_id=order_item.product_id, type='Entrada', warehouse_id=warehouse_id_origen,
+                        quantity=quantity_to_return, document_id=order.id, document_type='Devolución de Venta',
+                        description=f"Devolución de la orden #{order.id}. Motivo: {return_reason}",
+                        related_party_id=order.client_id, related_party_type='Cliente'
+                    )
+                    db.session.add(movement)
+
+                # Procesar los reembolsos financieros
+                total_refunded_ves = 0.0 # Initialize here
+                for payment_info in refund_payments:
+                    amount = float(payment_info['amount'])
+                    currency = payment_info['currency']
+                    amount_ves_equivalent = float(payment_info['amount_ves_equivalent'])
+                    total_refunded_ves += amount_ves_equivalent
+
+                    refund_movement = ManualFinancialMovement(
+                        description=f"Reembolso por devolución de orden #{order.id}. Motivo: {return_reason}",
+                        amount=amount, currency=currency, movement_type='Egreso', status='Aprobado',
+                        created_by_user_id=current_user.id, approved_by_user_id=current_user.id,
+                        date_approved=get_current_time_ve(),
+                        bank_id=payment_info.get('bank_id'), cash_box_id=payment_info.get('cash_box_id'),
+                        order_return_id=return_record.id
+                    )
+                    db.session.add(refund_movement)
+
+                    # Actualizar saldos de cuentas
+                    if refund_movement.bank_id:
+                        bank = Bank.query.get(refund_movement.bank_id)
+                        if bank: bank.balance -= amount_ves_equivalent
+                    elif refund_movement.cash_box_id:
+                        cash_box = CashBox.query.get(refund_movement.cash_box_id)
+                        if cash_box:
+                            if currency == 'VES': cash_box.balance_ves -= amount
+                            elif currency == 'USD': cash_box.balance_usd -= amount
+
+                # Validar que el monto reembolsado coincida con el valor de los productos devueltos
+                if refund_payments and abs(total_refunded_ves - total_refund_value_ves) > 0.01:
+                    raise ValueError(f"El monto reembolsado (Bs. {total_refunded_ves:.2f}) no coincide con el valor de los productos devueltos (Bs. {total_refund_value_ves:.2f}).")
+
+                order.status = 'Devolución Parcial'
+                log_user_activity(action="Procesó devolución de venta", details=f"Devolución parcial de la orden #{order.id}. Motivo: {return_reason}", target_id=order.id, target_type="Order")
+                db.session.commit()
+                flash(f'Devolución para la orden #{order.id} procesada. El stock y los saldos financieros han sido actualizados.', 'success')
+                return redirect(url_for('main.return_detail', return_id=return_record.id))
+
+        except (ValueError, IntegrityError) as e:
+            db.session.rollback()
+            flash(f'Error al procesar la devolución: {e}', 'danger')
+            return redirect(url_for('main.return_order', order_id=order.id)) # type: ignore
+        
+    order_id_query = request.args.get('order_id_search', type=int)
+    if order_id_query:
+        order = Order.query.options(joinedload(Order.items).joinedload(OrderItem.product)).get(order_id_query)
+        if not order:
+            flash('La orden especificada no fue encontrada.', 'danger')
+            # Redirect if order is not found to prevent rendering with a None object
+            return redirect(url_for('main.return_order'))
+
+    return render_template('ordenes/devolucion.html', title='Anulación / Devolución de Venta', order=order, banks=banks, cash_boxes=cash_boxes)
