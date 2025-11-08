@@ -471,6 +471,10 @@ def login():
         password = request.form.get('password')
         user = User.query.filter_by(username=username).first()
         if user and bcrypt.check_password_hash(user.password, password):
+            if not user.is_active:
+                flash('Tu cuenta de usuario ha sido desactivada. Por favor, contacta al administrador.', 'danger')
+                return redirect(url_for('main.login'))
+
             login_user(user)
             
             # Actualizar la tasa de cambio al iniciar sesión
@@ -5150,10 +5154,17 @@ def user_management():
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.dashboard'))
     
-    # Query all users except the current superuser to prevent self-locking
-    users = User.query.filter(User.id != current_user.id).order_by(User.username).all()
+    show_inactive = request.args.get('show_inactive') == 'true'
+
+    # Query users except the current superuser
+    query = User.query.filter(User.id != current_user.id)
+
+    if not show_inactive:
+        query = query.filter(User.is_active_status == True)
     
-    return render_template('configuracion/usuarios.html', title='Gestión de Usuarios', users=users)
+    users = query.order_by(User.username).all()
+    
+    return render_template('configuracion/usuarios.html', title='Gestión de Usuarios', users=users, show_inactive=show_inactive)
 
 @routes_blueprint.route('/configuracion/usuarios/nuevo', methods=['POST'])
 @login_required
@@ -5201,20 +5212,24 @@ def edit_user(user_id):
     flash(f'Usuario "{user_to_edit.username}" actualizado exitosamente.', 'success')
     return redirect(url_for('main.user_management'))
 
-@routes_blueprint.route('/configuracion/usuarios/eliminar/<int:user_id>', methods=['POST'])
+@routes_blueprint.route('/configuracion/usuarios/toggle_status/<int:user_id>', methods=['POST'])
 @login_required
-def delete_user(user_id):
+def toggle_user_status(user_id):
+    """Toggles the is_active status of a user."""
     if not is_superuser():
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.user_management'))
 
-    user_to_delete = User.query.get_or_404(user_id)
-    username = user_to_delete.username
-    db.session.delete(user_to_delete)
+    user_to_toggle = User.query.get_or_404(user_id)
+    
+    # Toggle the is_active status
+    user_to_toggle.is_active_status = not user_to_toggle.is_active_status
     db.session.commit()
 
-    flash(f'Usuario "{username}" eliminado exitosamente.', 'success')
+    status = "activado" if user_to_toggle.is_active_status else "desactivado"
+    flash(f'El usuario "{user_to_toggle.username}" ha sido {status}.', 'success')
     return redirect(url_for('main.user_management'))
+
 
 @routes_blueprint.route('/ordenes/devoluciones/lista')
 @login_required

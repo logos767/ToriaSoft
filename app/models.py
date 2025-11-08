@@ -18,6 +18,7 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(20), unique=True, nullable=False)
     password = db.Column(db.String(60), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='empleado') # 'empleado', 'administrador'
+    is_active_status = db.Column(db.Boolean, nullable=False, default=True)
 
     # --- Campos del Perfil de Usuario ---
     first_name = db.Column(db.String(50), nullable=True)
@@ -33,6 +34,10 @@ class User(db.Model, UserMixin):
     bank_name = db.Column(db.String(100), nullable=True)
     bank_account_number = db.Column(db.String(25), nullable=True)
     
+    @property
+    def is_active(self):
+        """Sobrescribe la propiedad de Flask-Login para usar nuestro campo de la BD."""
+        return self.is_active_status
 
     def __repr__(self):
         return f"User('{self.username}', '{self.role}')"

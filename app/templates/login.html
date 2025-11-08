@@ -19,7 +19,7 @@
                 {% if messages %}
                     <div class="mb-4">
                         {% for category, message in messages %}
-                            <div class="p-3 rounded-lg text-white text-center {% if category == 'success' %}bg-green-500{% elif category == 'danger' %}bg-red-500{% else %}bg-gray-500{% endif %}">
+                            <div class="p-3 rounded-lg text-white text-center text-sm {% if category == 'success' %}bg-green-500{% elif category == 'danger' %}bg-red-500{% else %}bg-yellow-500{% endif %}">
                                 {{ message }}
                             </div>
                         {% endfor %}
