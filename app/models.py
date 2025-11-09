@@ -1,5 +1,8 @@
 from datetime import datetime
 import pytz
+import re
+import os
+from flask import current_app, url_for
 
 # Define la zona horaria de Venezuela (GMT-4)
 VE_TIMEZONE = pytz.timezone('America/Caracas')
@@ -79,6 +82,29 @@ class Product(db.Model):
     movements = db.relationship('Movement', backref='product', lazy='dynamic')
     stock_levels = db.relationship('ProductStock', backref='product', lazy='joined', cascade="all, delete-orphan")
 
+    @property
+    def display_image_url(self):
+        """
+        Returns the specific image URL if it exists, otherwise returns a default
+        image URL based on the product's group, or a final fallback default image.
+        """
+        if self.image_url:
+            # Check if the image_url is a full URL or a local path
+            if self.image_url.startswith('http://') or self.image_url.startswith('https://'):
+                return self.image_url
+            # It's a local path, generate URL
+            return url_for('static', filename=self.image_url)
+
+        # If no specific image, try group-based default
+        if self.grupo:
+            # Sanitize group name to create a valid filename
+            sanitized_group_name = re.sub(r'[^a-zA-Z0-9]+', '_', self.grupo).lower()
+            group_image_filename = f"img/productos/{sanitized_group_name}.png"
+            group_image_path = os.path.join(current_app.root_path, 'static', group_image_filename)
+            if os.path.exists(group_image_path):
+                return url_for('static', filename=group_image_filename)
+        # Fallback to the ultimate default image
+        return url_for('static', filename='img/productos/default.png')
     @property
     def stock(self):
         """Calcula el stock total sumando las existencias de todos los almacenes."""
