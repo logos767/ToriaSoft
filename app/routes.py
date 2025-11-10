@@ -824,7 +824,7 @@ def inventory_list():
 
     user_role = current_user.role if current_user.is_authenticated else 'invitado'
     return render_template('inventario/lista.html',
-                           title='Lista de Inventario',
+                           title='Productos',
                            products=products,
                            user_role=user_role,
                            product_groups=product_groups,

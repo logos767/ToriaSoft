@@ -1,59 +1,43 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mx-auto p-4 max-w-full">
-    <div class="flex items-center justify-between mb-6">
-        <div class="flex items-center space-x-4">
-            <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-boxes mr-2"></i>{{ title }}</h1>
+<div class="container mx-auto p-2 max-w-full">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-4">
+        <div class="flex items-center flex-shrink-0">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-800 mr-2"><i class="fas fa-boxes mr-2"></i>{{ title }}</h1>
             <!-- Botones de cambio de vista -->
-            <div class="flex items-center space-x-1">
-                <button id="list-view-btn" class="p-2 rounded-lg bg-blue-500 text-white" title="Vista de Lista">
+            <div class="flex items-center">
+                <button id="list-view-btn" class="p-2 rounded-lg bg-blue-500 text-white m-1" title="Vista de Lista">
                     <i class="fas fa-list"></i>
                 </button>
-                <button id="grid-view-btn" class="p-2 rounded-lg bg-gray-300 text-gray-700" title="Vista de Cuadrícula">
+                <button id="grid-view-btn" class="p-2 rounded-lg bg-gray-300 text-gray-700 m-1" title="Vista de Cuadrícula">
                     <i class="fas fa-th-large"></i>
                 </button>
             </div>
         </div>
-        {% if user_role == 'administrador' %}
-        <a href="{{ url_for('main.new_product') }}" class="bg-green-500 text-white font-bold py-4 px-5 rounded-lg hover:bg-green-600 transition-colors">
-            <i class="fas fa-plus mr-2"></i>Nuevo Producto
-        </a>
-        {% endif %}
-    </div>
 
-    <!-- Filtros y Búsqueda -->
-    <div class="bg-white p-4 rounded-lg shadow-md mb-6">
-        <form method="GET" action="{{ url_for('main.inventory_list') }}">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <!-- Campo de Búsqueda -->
-                <div class="md:col-span-2">
-                    <label for="search" class="block text-sm font-medium text-gray-700">Buscar</label>
-                    <input type="text" name="search" id="search" value="{{ filters.search or '' }}" placeholder="Código, barra, nombre, marca, talla..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                </div>
-
-                <!-- Filtro por Grupo -->
-                <div>
-                    <label for="group" class="block text-sm font-medium text-gray-700">Grupo</label>
-                    <select name="group" id="group" onchange="this.form.submit()" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                        <option value="">Todos los Grupos</option>
-                        {% for group in product_groups %}
-                        <option value="{{ group }}" {% if filters.group == group %}selected{% endif %}>{{ group }}</option>
-                        {% endfor %}
+        <!-- Filtros y Búsqueda -->
+        <div class="bg-white p-2 rounded-lg shadow-md w-full">
+            <form method="GET" action="{{ url_for('main.inventory_list') }}">
+                <div class="flex flex-wrap items-center gap-2">
+                    <input type="text" name="search" id="search" value="{{ filters.search or '' }}" placeholder="Buscar por código, nombre, marca..." class="flex-grow min-w-0 w-1/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    
+                    <select name="group" id="group" onchange="this.form.submit()" class="min-w-0 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <option value="">Todos los Grupos</option>
+                            {% for group in product_groups %}
+                            <option value="{{ group }}" {% if filters.group == group %}selected{% endif %}>{{ group }}</option>
+                            {% endfor %}
                     </select>
-                </div>
 
-                <!-- Botones -->
-                <div class="flex items-end space-x-2">
-                    <button type="submit" class="bg-blue-500 text-white font-bold py-4 px-5 rounded-lg hover:bg-blue-600 transition-colors w-full text-center">
-                        <i class="fas fa-filter mr-2"></i>Filtrar
-                    </button>
-                    <a href="{{ url_for('main.inventory_list') }}" class="bg-gray-500 text-white font-bold py-4 px-5 rounded-lg hover:bg-gray-600 transition-colors w-full text-center">
-                        <i class="fas fa-eraser mr-2"></i>Limpiar
+                    <button type="submit" class="bg-blue-500 text-white font-bold py-2 px-3 rounded-lg hover:bg-blue-600 transition-colors" title="Filtrar"><i class="fas fa-filter"></i></button>
+                    <a href="{{ url_for('main.inventory_list') }}" class="bg-gray-500 text-white font-bold py-2 px-3 rounded-lg hover:bg-gray-600 transition-colors" title="Limpiar Filtros"><i class="fas fa-eraser"></i></a>
+                    
+                    <a href="{{ url_for('main.new_product') }}" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors ml-auto text-sm whitespace-nowrap">
+                        <i class="fas fa-plus mr-2"></i>Nuevo Producto
                     </a>
                 </div>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
 
     <!-- Vista de Lista (Tabla) -->
@@ -137,7 +121,7 @@
 
     <!-- Vista de Cuadrícula (Grid) -->
     <div id="grid-view-container" class="hidden">
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {% for product in products %}
             <div class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 flex flex-col group">
                 <div class="relative">
