@@ -5003,8 +5003,6 @@ def transfer_history():
 @login_required
 def api_warehouse_stock(warehouse_id):
     """API para obtener el stock de todos los productos en un almacén específico."""
-    if not is_gerente():
-        return jsonify({'error': 'Acceso denegado'}), 403
     
     stocks = ProductStock.query.filter_by(warehouse_id=warehouse_id).all()
     stock_map = {stock.product_id: stock.quantity for stock in stocks}
