@@ -60,9 +60,6 @@
                 <a href="{{ url_for('main.dashboard') }}" class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white">
                     <i class="fas fa-tachometer-alt mr-2"></i><span class="sidebar-text">Dashboard</span>
                 </a>
-                {% endif %}
-                
-                {% if is_administrador() %}
                 <details class="group">
                     <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
                         <i class="fas fa-shopping-basket mr-2"></i><span class="sidebar-text">Compras</span> {# Superusuario, Gerente, administrador #}
@@ -121,20 +118,16 @@
                         <a href="{{ url_for('main.inventory_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm"> {# is_administrador() check is inside the route #}
                             <i class="fas fa-exchange-alt mr-2"></i><span class="sidebar-text">Productos</span>
                         </a>
-                        {% if is_administrador() %}
                         <a href="{{ url_for('main.inventory_stock') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-list mr-2"></i><span class="sidebar-text">Existencias</span>
                         </a>
-                        {% endif %}
-                        {% if is_administrador() %}
+                        {% if is_gerente() %} {# Solo Gerente y Superusuario pueden crear productos y códigos #}
                         <a href="{{ url_for('main.inventory_adjustment') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-sliders-h mr-2"></i><span class="sidebar-text">Ajuste de Inventario</span>
                         </a>
-                        {% endif %}
                         <a href="{{ url_for('main.movement_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm"> {# is_administrador() check is inside the route #}
                             <i class="fas fa-exchange-alt mr-2"></i><span class="sidebar-text">Movimientos</span>
                         </a>
-                        {% if is_gerente() %} {# Solo Gerente y Superusuario pueden crear productos y códigos #}
                         <a href="{{ url_for('main.new_product') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-plus mr-2"></i><span class="sidebar-text">Nuevo Producto</span>
                         </a>
@@ -144,18 +137,13 @@
                         <a href="{{ url_for('main.codigos_barra') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-barcode mr-2"></i><span class="sidebar-text">Códigos de Barra</span>
                         </a>
-                        {% endif %}
-                        
-                        {# --- Nueva sección de Almacenes --- #}
-                        {% if is_gerente() %} {# Solo Superusuario y Gerente pueden gestionar almacenes #}
-                        <div class="border-t border-gray-700 my-2"></div>
                         <a href="{{ url_for('main.warehouse_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-warehouse mr-2"></i><span class="sidebar-text">Gestionar Almacenes</span>
                         </a>
+                        {% endif %}
                         <a href="{{ url_for('main.transfer_history') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-exchange-alt mr-2"></i><span class="sidebar-text">Traslados</span>
                         </a>
-                        {% endif %}
 
                     </div> {# End of Inventory #}
                 </details>
