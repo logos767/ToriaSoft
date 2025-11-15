@@ -4836,10 +4836,7 @@ def warehouse_list():
 @login_required
 def warehouse_transfer():
     """Permite realizar traslados de stock entre almacenes."""
-    if not is_gerente():
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.dashboard'))
-
+    
     if request.method == 'POST':
         try:
             from_warehouse_id = request.form.get('from_warehouse_id', type=int)
@@ -4919,10 +4916,7 @@ def warehouse_transfer():
 @login_required
 def transfer_detail(transfer_id):
     """Muestra los detalles de un traslado específico."""
-    if not is_gerente():
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.dashboard'))
-
+    
     transfer = WarehouseTransfer.query.options(
         joinedload(WarehouseTransfer.user)
     ).get_or_404(transfer_id)
@@ -4953,10 +4947,7 @@ def transfer_detail(transfer_id):
 @login_required
 def print_transfer_report(transfer_id):
     """Genera un PDF con los detalles de un traslado."""
-    if not is_gerente(): # Superusuario and Gerente can print reports
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.dashboard'))
-
+    
     transfer = WarehouseTransfer.query.options(
         joinedload(WarehouseTransfer.user)
     ).get_or_404(transfer_id)
