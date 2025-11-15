@@ -4990,9 +4990,6 @@ def print_transfer_report(transfer_id):
 @login_required
 def transfer_history():
     """Muestra una lista de todos los traslados de almacén realizados."""
-    if not is_gerente():
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.dashboard'))
 
     transfers = WarehouseTransfer.query.options(
         joinedload(WarehouseTransfer.user)
@@ -5040,8 +5037,6 @@ def api_product_by_barcode_for_transfer(barcode):
 @login_required
 def api_search_products_for_transfer():
     """API para buscar productos por nombre o código de barras para traslados."""
-    if not is_gerente():
-        return jsonify({'error': 'Acceso denegado'}), 403
 
     query_str = request.args.get('q', '').strip().lower()
     from_warehouse_id = request.args.get('from_warehouse_id', type=int)
