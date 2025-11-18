@@ -2208,6 +2208,7 @@ def new_order():
         payments_data_json = request.form.get('payments_data')
         sale_type = request.form.get('sale_type', 'regular')
         payments_data = json.loads(payments_data_json) if payments_data_json else []
+        dispatch_reason = request.form.get('dispatch_reason', '').strip()
         
         rate_for_order = current_rate
         if is_gerente() and special_rate_str: # Only Gerente and Superuser can set special rate
@@ -2226,12 +2227,19 @@ def new_order():
             sequence_map = {
                 'regular': 'order_contado_seq',
                 'credit': 'order_credito_seq',
-                'reservation': 'order_apartado_seq'
+                'reservation': 'order_apartado_seq',
+                'special_dispatch': 'order_entrega_especial_seq'
             }
             sequence_name = sequence_map.get(sale_type)
             if not sequence_name:
                 raise ValueError("Tipo de venta no válido.")
             
+            if sale_type == 'special_dispatch':
+                if not dispatch_reason:
+                    raise ValueError("El motivo de la entrega es obligatorio para una Entrega Especial.")
+                # For special dispatch, totals are zero and no payments are allowed.
+                discount_usd = 0.0
+
             next_id = db.session.execute(text(f"SELECT nextval('{sequence_name}')")).scalar()
             
             order_total_usd_before_discount = sum(int(q) * float(p_usd) for q, p_usd in zip(quantities, prices_usd))
@@ -2241,19 +2249,22 @@ def new_order():
             discount_ves = discount_usd * rate_for_order
             final_order_total_ves = order_total_ves_before_discount - discount_ves
 
-            paid_total_usd = 0
-            paid_total_ves = 0
-            for p in payments_data:
-                if p['currency_paid'] == 'USD':
-                    p['amount_ves_equivalent'] = float(p['amount_paid']) * rate_for_order
-                else:
-                    p['amount_ves_equivalent'] = float(p['amount_paid'])
-                paid_total_ves += float(p['amount_ves_equivalent'])
-                # Calcular el equivalente en USD para el abono
-                p['amount_usd_equivalent'] = p['amount_ves_equivalent'] / rate_for_order
-                paid_total_usd += p['amount_usd_equivalent']
-            if sale_type == 'regular' and paid_total_ves < final_order_total_ves - 0.01:
-                raise ValueError(f"El monto pagado (Bs. {paid_total_ves:.2f}) es menor que el total de la orden (Bs. {final_order_total_ves:.2f}).")
+            # Financial validation only for sales, not for special dispatches
+            if sale_type != 'special_dispatch':
+                paid_total_usd = 0
+                paid_total_ves = 0
+                for p in payments_data:
+                    if p['currency_paid'] == 'USD':
+                        p['amount_ves_equivalent'] = float(p['amount_paid']) * rate_for_order
+                    else:
+                        p['amount_ves_equivalent'] = float(p['amount_paid'])
+                    paid_total_ves += float(p['amount_ves_equivalent'])
+                    # Calcular el equivalente en USD para el abono
+                    p['amount_usd_equivalent'] = p['amount_ves_equivalent'] / rate_for_order
+                    paid_total_usd += p['amount_usd_equivalent']
+                
+                if sale_type == 'regular' and paid_total_ves < final_order_total_ves - 0.01:
+                    raise ValueError(f"El monto pagado (Bs. {paid_total_ves:.2f}) es menor que el total de la orden (Bs. {final_order_total_ves:.2f}).")
 
             order_date = get_current_time_ve()
             if date_created_str:
@@ -2269,21 +2280,31 @@ def new_order():
             product_map = {str(p.id): p for p in products_from_db}
 
             # --- Stock validation before creating the order ---
-            for p_id, q in zip(product_ids, quantities):
-                quantity = int(q)
-                product = product_map.get(p_id) # type: ignore
-                if not product or quantity <= 0: # type: ignore
-                    continue
-                # La venta siempre es desde el almacén principal (ID 1)
-                if product.stock_tienda < quantity: # type: ignore
-                    raise ValueError(f'Stock insuficiente en Tienda para "{product.name}". Solicitado: {quantity}, Disponible: {product.stock_tienda}.')
+            # For special dispatches, we only validate stock if the user is a manager (immediate dispatch)
+            should_validate_stock_now = sale_type != 'special_dispatch' or (sale_type == 'special_dispatch' and is_gerente())
+            if should_validate_stock_now:
+                for p_id, q in zip(product_ids, quantities):
+                    quantity = int(q)
+                    product = product_map.get(p_id) # type: ignore
+                    if not product or quantity <= 0: # type: ignore
+                        continue
+                    # La venta siempre es desde el almacén principal (ID 1)
+                    if product.stock_tienda < quantity: # type: ignore
+                        raise ValueError(f'Stock insuficiente en Tienda para "{product.name}". Solicitado: {quantity}, Disponible: {product.stock_tienda}.')
 
             new_order = Order(
                 id=next_id, client_id=client_id, status='Pendiente', total_amount=0, 
                 total_amount_usd=final_order_total_usd, discount_usd=discount_usd, 
                 exchange_rate_at_sale=rate_for_order,
-                date_created=order_date, order_type=sale_type
+                date_created=order_date, order_type=sale_type,
+                dispatch_reason=dispatch_reason if sale_type == 'special_dispatch' else None
             )
+            # Override totals for special dispatch
+            if sale_type == 'special_dispatch':
+                new_order.total_amount_usd = 0.0
+                new_order.discount_usd = 0.0
+                new_order.total_amount = 0.0
+
             db.session.add(new_order)
             db.session.flush()
 
@@ -2300,22 +2321,32 @@ def new_order():
                 item = OrderItem(order_id=new_order.id, product_id=p_id, quantity=quantity, price=price_ves, cost_at_sale_ves=cost_ves)
                 db.session.add(item)
                 
-                # Descontar stock del almacén principal (ID 1)
-                main_store_stock = ProductStock.query.filter_by(product_id=product.id, warehouse_id=1).first()
-                if not main_store_stock or main_store_stock.quantity < quantity:
-                     raise ValueError(f"Error de consistencia de stock para {product.name}. Intente de nuevo.")
-                main_store_stock.quantity -= quantity
+                # --- Inventory Movement Logic ---
+                # Only move inventory if it's not a pending special dispatch
+                should_move_inventory = sale_type != 'special_dispatch' or (sale_type == 'special_dispatch' and is_gerente())
+                if should_move_inventory:
+                    # Descontar stock del almacén principal (ID 1)
+                    main_store_stock = ProductStock.query.filter_by(product_id=product.id, warehouse_id=1).first()
+                    if not main_store_stock or main_store_stock.quantity < quantity:
+                         raise ValueError(f"Error de consistencia de stock para {product.name}. Intente de nuevo.")
+                    main_store_stock.quantity -= quantity
 
-                # Registrar movimiento de salida desde el almacén principal
-                movement = Movement(product_id=product.id, type='Salida', warehouse_id=1, quantity=quantity, document_id=new_order.id, document_type='Orden de Venta', description=f"Venta al cliente #{new_order.client_id}", related_party_id=new_order.client_id, related_party_type='Cliente', date=order_date)
-                db.session.add(movement)
+                    # Registrar movimiento de salida desde el almacén principal
+                    document_type = 'Entrega Especial' if sale_type == 'special_dispatch' else 'Orden de Venta'
+                    movement = Movement(product_id=product.id, type='Salida', warehouse_id=1, quantity=quantity, document_id=new_order.id, document_type=document_type, description=f"Venta al cliente #{new_order.client_id}", related_party_id=new_order.client_id, related_party_type='Cliente', date=order_date)
+                    db.session.add(movement)
                 
                 total_amount += price_ves * quantity
 
             new_order.total_amount = total_amount - discount_ves
             db.session.flush()
 
-            if sale_type == 'reservation': new_order.status = 'Apartado'
+            if sale_type == 'special_dispatch':
+                if is_gerente():
+                    new_order.status = 'Completada'
+                else:
+                    new_order.status = 'Pendiente de Aprobación'
+            elif sale_type == 'reservation': new_order.status = 'Apartado'
             elif sale_type == 'credit': new_order.status = 'Crédito'
             else: new_order.status = 'Pagada'
 
@@ -2329,40 +2360,50 @@ def new_order():
             cash_box_map = {c.id: c for c in CashBox.query.filter(CashBox.id.in_(cash_box_ids))}
             # --- End Optimization ---
 
-            for payment_info in payments_data:
-                payment = Payment(
-                    order_id=new_order.id, amount_paid=payment_info['amount_paid'], currency_paid=payment_info['currency_paid'], # type: ignore
-                    amount_ves_equivalent=payment_info['amount_ves_equivalent'], amount_usd_equivalent=payment_info['amount_usd_equivalent'], method=payment_info['method'],
-                    reference=payment_info.get('reference'), issuing_bank=payment_info.get('issuing_bank'),
-                    sender_id=payment_info.get('sender_id'), date=order_date, # Use the order's date for the payment
-                    bank_id=payment_info.get('bank_id'),
-                    pos_id=payment_info.get('pos_id'), cash_box_id=payment_info.get('cash_box_id')
-                )
-                db.session.add(payment)
+            if sale_type != 'special_dispatch':
+                for payment_info in payments_data:
+                    payment = Payment(
+                        order_id=new_order.id, amount_paid=payment_info['amount_paid'], currency_paid=payment_info['currency_paid'], # type: ignore
+                        amount_ves_equivalent=payment_info['amount_ves_equivalent'], amount_usd_equivalent=payment_info['amount_usd_equivalent'], method=payment_info['method'],
+                        reference=payment_info.get('reference'), issuing_bank=payment_info.get('issuing_bank'),
+                        sender_id=payment_info.get('sender_id'), date=order_date, # Use the order's date for the payment
+                        bank_id=payment_info.get('bank_id'),
+                        pos_id=payment_info.get('pos_id'), cash_box_id=payment_info.get('cash_box_id')
+                    )
+                    db.session.add(payment)
 
-                if payment.bank_id and payment.bank_id in banks_map:
-                    banks_map[payment.bank_id].balance += payment.amount_ves_equivalent
-                elif payment.pos_id and payment.pos_id in pos_map:
-                    pos = pos_map[payment.pos_id] # POS terminals are assumed to be in VES
-                    if pos.bank: pos.bank.balance += payment.amount_ves_equivalent
-                elif payment.cash_box_id and payment.cash_box_id in cash_box_map:
-                    cash_box = cash_box_map[payment.cash_box_id]
-                    if payment.currency_paid == 'VES': cash_box.balance_ves += payment.amount_paid
-                    elif payment.currency_paid == 'USD': cash_box.balance_usd += payment.amount_paid
+                    if payment.bank_id and payment.bank_id in banks_map:
+                        banks_map[payment.bank_id].balance += payment.amount_ves_equivalent
+                    elif payment.pos_id and payment.pos_id in pos_map:
+                        pos = pos_map[payment.pos_id] # POS terminals are assumed to be in VES
+                        if pos.bank: pos.bank.balance += payment.amount_ves_equivalent
+                    elif payment.cash_box_id and payment.cash_box_id in cash_box_map:
+                        cash_box = cash_box_map[payment.cash_box_id]
+                        if payment.currency_paid == 'VES': cash_box.balance_ves += payment.amount_paid
+                        elif payment.currency_paid == 'USD': cash_box.balance_usd += payment.amount_paid
 
-            notification_message = f"Nueva Nota de Entrega #{new_order.id:09d} creada."
-            notification_link = url_for('main.order_detail', order_id=new_order.id)
-            create_notification_for_admins(notification_message, notification_link)
+            # --- Notifications ---
+            if sale_type == 'special_dispatch' and not is_gerente():
+                notification_message = f"El usuario {current_user.username} solicita aprobación para una Entrega Especial."
+                notification_link = url_for('main.pending_dispatches')
+                create_notification_for_admins(notification_message, notification_link)
+            else:
+                notification_message = f"Nueva Nota de Entrega #{new_order.id:09d} creada."
+                notification_link = url_for('main.order_detail', order_id=new_order.id)
+                create_notification_for_admins(notification_message, notification_link)
 
             log_user_activity(
                 action="Creó orden de venta",
-                details=f"Orden tipo '{sale_type}' para cliente '{new_order.client.name}' por un total de ${final_order_total_usd:.2f}.",
+                details=f"Orden tipo '{sale_type}' para cliente '{new_order.client.name}' por un total de ${new_order.total_amount_usd:.2f}. Estado: {new_order.status}",
                 target_id=new_order.id,
                 target_type="Order"
             )
 
             db.session.commit()
-            if sale_type == 'reservation':
+            if sale_type == 'special_dispatch':
+                flash('Entrega Especial creada exitosamente. Esperando aprobación del gerente.', 'info')
+                return redirect(url_for('main.order_detail', order_id=new_order.id))
+            elif sale_type == 'reservation':
                 flash('Apartado creado exitosamente! Preparando para imprimir recibo...', 'success')
                 return redirect(url_for('main.print_reservation_receipt', order_id=new_order.id))
             else:
@@ -5012,9 +5053,7 @@ def api_warehouse_stock(warehouse_id):
 @login_required
 def api_product_by_barcode_for_transfer(barcode):
     """API para obtener un producto por código de barras y su stock en un almacén específico."""
-    if not is_gerente():
-        return jsonify({'error': 'Acceso denegado'}), 403
-
+    
     warehouse_id = request.args.get('warehouse_id', type=int)
     if not warehouse_id:
         return jsonify({'error': 'ID de almacén no proporcionado'}), 400
@@ -5149,6 +5188,75 @@ def user_management():
     users = query.order_by(User.username).all()
     
     return render_template('configuracion/usuarios.html', title='Gestión de Usuarios', users=users, show_inactive=show_inactive)
+
+@routes_blueprint.route('/configuracion/entregas_pendientes', methods=['GET'])
+@login_required
+def pending_dispatches():
+    """Muestra las entregas especiales pendientes de aprobación."""
+    if not is_gerente():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    pending_orders = Order.query.filter_by(
+        status='Pendiente de Aprobación',
+        order_type='special_dispatch'
+    ).options(
+        joinedload(Order.client)
+    ).order_by(Order.date_created.desc()).all()
+
+    return render_template('configuracion/entregas_pendientes.html',
+                           title='Entregas Especiales por Aprobar',
+                           orders=pending_orders)
+
+@routes_blueprint.route('/configuracion/entregas/procesar/<int:order_id>/<string:action>', methods=['POST'])
+@login_required
+def process_dispatch(order_id, action):
+    """Procesa la aprobación o rechazo de una entrega especial."""
+    if not is_gerente():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    order = Order.query.get_or_404(order_id)
+    if order.status != 'Pendiente de Aprobación':
+        flash('Esta entrega ya ha sido procesada.', 'warning')
+        return redirect(url_for('main.pending_dispatches'))
+
+    try:
+        if action == 'approve':
+            # 1. Check stock and deduct from inventory
+            for item in order.items:
+                stock_entry = ProductStock.query.filter_by(product_id=item.product_id, warehouse_id=1).first()
+                if not stock_entry or stock_entry.quantity < item.quantity:
+                    raise ValueError(f"Stock insuficiente para '{item.product.name}' para aprobar la entrega.")
+                
+                stock_entry.quantity -= item.quantity
+
+                # 2. Create inventory movement
+                movement = Movement(
+                    product_id=item.product_id, type='Salida', warehouse_id=1,
+                    quantity=item.quantity, document_id=order.id, document_type='Entrega Especial',
+                    description=f"Aprobación de entrega para cliente #{order.client_id}",
+                    related_party_id=order.client_id, related_party_type='Cliente', date=get_current_time_ve()
+                )
+                db.session.add(movement)
+
+            # 3. Update order status
+            order.status = 'Completada'
+            flash(f'Entrega Especial #{order.id} aprobada y stock actualizado.', 'success')
+
+        elif action == 'reject':
+            order.status = 'Anulada'
+            flash(f'Entrega Especial #{order.id} ha sido rechazada.', 'info')
+        
+        else:
+            raise ValueError("Acción no válida.")
+
+        db.session.commit()
+    except (ValueError, IntegrityError) as e:
+        db.session.rollback()
+        flash(f'Error al procesar la entrega: {e}', 'danger')
+
+    return redirect(url_for('main.pending_dispatches'))
 
 @routes_blueprint.route('/configuracion/usuarios/nuevo', methods=['POST'])
 @login_required

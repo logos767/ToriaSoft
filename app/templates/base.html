@@ -107,6 +107,16 @@
                         <a href="{{ url_for('main.return_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-undo-alt mr-2"></i><span class="sidebar-text">Devoluciones</span>
                         </a>
+                        <!-- Asumiendo que tienes una sección de Configuración en tu menú -->
+                        {% if is_gerente() %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('main.pending_dispatches') }}">
+                                <i class="fas fa-fw fa-check-square"></i>
+                                <span>Entregas por Aprobar</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        
                     </div>
                 </details>
 

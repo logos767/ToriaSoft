@@ -59,7 +59,10 @@ def register_commands(app):
                 db.session.execute(text("CREATE SEQUENCE IF NOT EXISTS order_credito_seq START 280000000"))
                 # Sequence for 'apartado' (reservation) sales
                 db.session.execute(text("CREATE SEQUENCE IF NOT EXISTS order_apartado_seq START 580000000"))
+                # Sequence for 'entrega especial' (special dispatch)
+                db.session.execute(text("CREATE SEQUENCE IF NOT EXISTS order_entrega_especial_seq START 780000000"))
                 db.session.commit()
+                
                 logger.info("Successfully created or verified order ID sequences.")
             except Exception as e:
                 db.session.rollback()
