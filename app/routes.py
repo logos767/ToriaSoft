@@ -2408,7 +2408,7 @@ def new_order():
                         created_by_user_id=current_user.id,
                         approved_by_user_id=current_user.id,
                         date_approved=order_date,
-                        order_id=new_order.id
+                        order_return_id=new_order.id # Use order_return_id to link to the order
                     )
                     if change_data['method'] in ['efectivo_ves', 'efectivo_usd']:
                         cash_box = cash_box_map.get(int(change_data['source_id']))
