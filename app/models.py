@@ -233,7 +233,7 @@ class OrderItem(db.Model):
     price = db.Column(db.Float, nullable=False) # Precio en VES en el momento de la venta
     cost_at_sale_ves = db.Column(db.Float, nullable=True) # Costo unitario en VES en el momento de la venta
     returned_quantity = db.Column(db.Integer, nullable=False, default=0)
-    dispatch_reason = Column(Text, nullable=True)
+    dispatch_reason = db.Column(db.Text, nullable=True)
 
     def __repr__(self):
         return f"OrderItem('{self.order_id}', '{self.product_id}', '{self.quantity}')"
