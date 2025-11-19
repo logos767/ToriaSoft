@@ -2300,18 +2300,18 @@ def new_order():
                     if not product or quantity <= 0: # type: ignore
                         continue
                     # La venta siempre es desde el almacén principal (ID 1)
-                    if product.stock_tienda < quantity: # type: ignore
+                    if product.stock_tienda < quantity:
                         raise ValueError(f'Stock insuficiente en Tienda para "{product.name}". Solicitado: {quantity}, Disponible: {product.stock_tienda}.')
 
             new_order = Order(
                 id=next_id, client_id=client_id, status='Pendiente', total_amount=0, 
                 total_amount_usd=final_order_total_usd, discount_usd=discount_usd, 
                 exchange_rate_at_sale=rate_for_order,
-                date_created=order_date, order_type=sale_type,
-                dispatch_reason=dispatch_reason if sale_type == 'special_dispatch' else None
+                date_created=order_date, order_type=sale_type
             )
             # Override totals for special dispatch
             if sale_type == 'special_dispatch':
+                new_order.dispatch_reason = dispatch_reason
                 new_order.total_amount_usd = 0.0
                 new_order.discount_usd = 0.0
                 new_order.total_amount = 0.0
