@@ -1513,10 +1513,6 @@
         }
 
         mainActionBtn.addEventListener('click', function() {
-            handleMainAction();
-        });
-
-        finalizeOrderBtn.addEventListener('click', function() {
             const originalButtonHtml = this.innerHTML;
             const button = this;
 
@@ -1622,91 +1618,8 @@
             document.getElementById('order-form').submit();
         }
 
-        finalizeOrderBtn.addEventListener('click', function() {
-            const originalButtonHtml = this.innerHTML;
-            const button = this;
-
-            // Disable button and show verification message
-            button.disabled = true;
-            button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Verificando...';
-
-            // --- Payment validation logic ---
-            const selectedSaleType = saleTypeSelect.value;
-            const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
-            const remaining = orderTotal - totalPaid;
-
-            if (payments.length === 0) {
-                if (selectedSaleType === 'regular') {
-                    alert('No ha agregado ningún pago. Para una Venta Regular, debe registrar el pago completo.');
-                    button.disabled = false; // Re-enable
-                    button.innerHTML = originalButtonHtml;
-                    return;
-                } else { 
-                    if (!confirm('No ha agregado ningún pago inicial. ¿Desea crear la orden con el saldo total pendiente?')) {
-                        button.disabled = false; // Re-enable
-                        button.innerHTML = originalButtonHtml;
-                        return;
-                    }
-                }
-            } 
-            else if (selectedSaleType === 'regular' && remaining > 0.01) {
-                alert('El monto pagado no cubre el total de la orden. Para una Venta Regular, debe registrar el pago completo.');
-                button.disabled = false; // Re-enable
-                button.innerHTML = originalButtonHtml;
-                return;
-            }
-
-            // --- Real-time stock check ---
-            const productItems = [];
-            document.querySelectorAll('tr.product-item').forEach(row => {
-                const productId = row.querySelector('.product-select').value;
-                const quantity = parseInt(row.querySelector('.quantity-input').value, 10);
-                if (productId && quantity > 0) {
-                    productItems.push({ id: productId, quantity: quantity });
-                }
-            });
-
-            if (productItems.length === 0) {
-                alert('No hay productos en la orden.');
-                button.disabled = false; // Re-enable
-                button.innerHTML = originalButtonHtml;
-                return;
-            }
-
-            fetch('/api/check_stock', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ products: productItems })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Stock is OK, proceed with submission
-                    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Procesando...';
-                    paymentsDataInput.value = JSON.stringify(payments);
-                    document.getElementById('order-form').submit();
-                } else {
-                    // Stock issue found
-                    let errorMessage = 'No se puede procesar la orden por falta de stock:\n\n';
-                    if (data.errors) {
-                        data.errors.forEach(err => {
-                            errorMessage += `• ${err.name}: Solicitado: ${err.requested}, Disponible: ${err.stock}\n`;
-                        });
-                    }
-                    alert(errorMessage);
-                    button.disabled = false; // Re-enable
-                    button.innerHTML = originalButtonHtml;
-                }
-            })
-            .catch(error => {
-                console.error('Error checking stock:', error);
-                alert('Ocurrió un error al verificar el stock. Por favor, intente de nuevo.');
-                button.disabled = false; // Re-enable
-                button.innerHTML = originalButtonHtml;
-            });
-        });
+        mainActionBtn.addEventListener('click', handleMainAction);
+        finalizeOrderBtn.addEventListener('click', finalizeOrder);
 
         // Disparar el evento change al cargar para establecer el estado inicial correcto
         paymentMethodSelect.dispatchEvent(new Event('change'));
