@@ -71,6 +71,7 @@ def log_user_activity(action, details=None, target_id=None, target_type=None):
         try:
             log_entry = UserActivityLog(
                 user_id=current_user.id,
+                created_at=get_current_time_ve(), # Explicitly set the creation time
                 action=action,
                 details=details,
                 target_id=str(target_id) if target_id is not None else None,
@@ -2219,6 +2220,7 @@ def new_order():
         payments_data_json = request.form.get('payments_data')
         sale_type = request.form.get('sale_type', 'regular')
         payments_data = json.loads(payments_data_json) if payments_data_json else []
+        change_data = json.loads(request.form.get('change_data', '{}'))
         dispatch_reason = request.form.get('dispatch_reason', '').strip()
         
         rate_for_order = current_rate
@@ -2392,6 +2394,38 @@ def new_order():
                         cash_box = cash_box_map[payment.cash_box_id]
                         if payment.currency_paid == 'VES': cash_box.balance_ves += payment.amount_paid
                         elif payment.currency_paid == 'USD': cash_box.balance_usd += payment.amount_paid
+
+            # --- Process Change (Vuelto) ---
+            if change_data and change_data.get('method'):
+                change_amount = float(change_data.get('amount', 0))
+                if change_amount > 0:
+                    change_movement = ManualFinancialMovement(
+                        description=f"Vuelto de la orden de venta #{new_order.id}",
+                        amount=change_amount,
+                        currency=change_data['currency'],
+                        movement_type='Egreso',
+                        status='Aprobado',
+                        created_by_user_id=current_user.id,
+                        approved_by_user_id=current_user.id,
+                        date_approved=order_date,
+                        order_id=new_order.id
+                    )
+                    if change_data['method'] in ['efectivo_ves', 'efectivo_usd']:
+                        cash_box = cash_box_map.get(int(change_data['source_id']))
+                        if not cash_box: raise ValueError("La caja para el vuelto no fue encontrada.")
+                        change_movement.cash_box_id = cash_box.id
+                        if change_data['currency'] == 'VES': cash_box.balance_ves -= change_amount
+                        else: cash_box.balance_usd -= change_amount
+                    
+                    elif change_data['method'] == 'transferencia':
+                        bank = banks_map.get(int(change_data['source_id']))
+                        if not bank: raise ValueError("El banco para el vuelto no fue encontrado.")
+                        change_movement.bank_id = bank.id
+                        # Bank movements are always in VES equivalent for accounting
+                        change_ves_equivalent = change_amount * rate_for_order if change_data['currency'] == 'USD' else change_amount
+                        bank.balance -= change_ves_equivalent
+
+                    db.session.add(change_movement)
 
             # --- Notifications ---
             if sale_type == 'special_dispatch' and not is_gerente():

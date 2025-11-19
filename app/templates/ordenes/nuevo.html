@@ -180,6 +180,7 @@
                         </div>
                         <div>
                             <input type="hidden" name="payments_data" id="payments-data-input">
+                            <input type="hidden" name="change_data" id="change-data-input">
                             <button type="button" id="main-action-btn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition-all">
                                 <i class="fas fa-dollar-sign mr-2"></i>Procesar Pago y Crear Orden
                             </button>
@@ -233,9 +234,28 @@
                             </div>
                         </div>
                         <!-- Vuelto Display -->
-                        <div id="modal-change-display" class="mt-2 hidden text-center">
-                            <p class="text-sm text-gray-700">Vuelto a entregar:</p>
-                            <p id="modal-change-amount" class="text-xl font-bold text-yellow-600">0.00</p>
+                        <div id="modal-change-display" class="mt-2 hidden bg-yellow-50 p-3 rounded-lg">
+                            <p class="text-sm text-gray-700 font-bold text-center">Vuelto a entregar:</p>
+                            <p id="modal-change-amount" class="text-xl font-bold text-yellow-600 text-center">0.00</p>
+                            
+                            <div class="mt-2">
+                                <h4 class="text-sm font-medium text-gray-800">Registrar Salida de Vuelto:</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-2 items-end mt-1">
+                                    <div>
+                                        <label for="change-method" class="block text-xs font-medium text-gray-700">Método</label>
+                                        <select id="change-method" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm text-sm">
+                                            <option value="">No registrar salida</option>
+                                            <option value="efectivo_ves">Efectivo (Bs)</option>
+                                            <option value="efectivo_usd">Efectivo (USD)</option>
+                                            <option value="transferencia">Transferencia</option>
+                                        </select>
+                                    </div>
+                                    <div id="change-source-group" class="hidden">
+                                        <label for="change-source" class="block text-xs font-medium text-gray-700">Desde</label>
+                                        <select id="change-source" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm text-sm"></select>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1153,6 +1173,10 @@
         const paymentsListDiv = document.getElementById('payments-list');
         const paymentsDataInput = document.getElementById('payments-data-input');
 
+        const changeDisplay = document.getElementById('modal-change-display');
+        const changeMethodSelect = document.getElementById('change-method');
+        const changeSourceGroup = document.getElementById('change-source-group');
+        const changeSourceSelect = document.getElementById('change-source');
         let payments = [];
         let orderTotal = 0;
         let previousPaymentMethod = paymentMethodSelect.value;
@@ -1264,10 +1288,12 @@
                 const change = Math.abs(remaining);
                 const changeInBs = change.toFixed(2);
                 const changeInForeign = (change / activeRate).toFixed(2);
-                modalChangeAmount.textContent = `Bs ${changeInBs} / {{ currency_symbol }}${changeInForeign}`; // type: ignore
-                modalChangeDisplay.classList.remove('hidden');
+                modalChangeAmount.textContent = `Bs ${changeInBs} / {{ currency_symbol }}${changeInForeign}`;
+                changeDisplay.classList.remove('hidden');
+                changeMethodSelect.dispatchEvent(new Event('change'));
             } else {
-                modalChangeDisplay.classList.add('hidden');
+                changeDisplay.classList.add('hidden');
+                changeMethodSelect.value = '';
             }
 
             // Handle remaining amount display and input field
@@ -1473,6 +1499,40 @@
             }
         });
 
+        changeMethodSelect.addEventListener('change', function() {
+            const method = this.value;
+            changeSourceSelect.innerHTML = '';
+            changeSourceGroup.classList.add('hidden');
+
+            if (method === 'efectivo_ves' || method === 'efectivo_usd') {
+                changeSourceGroup.classList.remove('hidden');
+                changeSourceSelect.add(new Option('Seleccione una caja', ''));
+                {% for box in cash_boxes %}
+                changeSourceSelect.add(new Option("{{ box.name }}", "{{ box.id }}"));
+                {% endfor %}
+            } else if (method === 'transferencia') {
+                changeSourceGroup.classList.remove('hidden');
+                changeSourceSelect.add(new Option('Seleccione un banco', ''));
+                {% for bank in banks %}
+                    // Only show banks that operate in VES for transfers
+                    if ("{{ bank.currency }}" === 'VES') {
+                        changeSourceSelect.add(new Option("{{ bank.name }} ({{ bank.currency }})", "{{ bank.id }}"));
+                    }
+                {% endfor %}
+            }
+        });
+
+        function getChangeData() {
+            const method = changeMethodSelect.value;
+            if (!method) return null;
+
+            const remaining = orderTotal - payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
+            const changeAmountVes = Math.abs(remaining);
+            const currency = (method === 'efectivo_usd' || (method === 'transferencia' && changeSourceSelect.selectedOptions[0]?.dataset.currency === 'USD')) ? 'USD' : 'VES';
+            const amount = currency === 'USD' ? changeAmountVes / activeRate : changeAmountVes;
+
+            return { method, source_id: changeSourceSelect.value, amount: amount.toFixed(2), currency };
+        }
         // --- LOGIC FOR SALE TYPE CHANGE ---
         saleTypeSelect.addEventListener('change', function() {
             const saleType = this.value;
@@ -1617,6 +1677,18 @@
             const button = finalizeOrderBtn;
             button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Procesando...';
             paymentsDataInput.value = JSON.stringify(payments);
+
+            // Capture and stringify change data
+            const changeData = getChangeData();
+            const changeDataInput = document.getElementById('change-data-input');
+            if (changeData && changeData.source_id) {
+                changeDataInput.value = JSON.stringify(changeData);
+            } else if (changeData && !changeData.source_id) {
+                alert('Por favor, seleccione una caja o banco para registrar la salida del vuelto.');
+                button.disabled = false;
+                button.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Finalizar y Crear Orden';
+                return;
+            }
             document.getElementById('order-form').submit();
         }
 

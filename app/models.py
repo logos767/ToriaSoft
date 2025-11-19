@@ -531,7 +531,7 @@ class UserActivityLog(db.Model):
     __tablename__ = 'user_activity_logs'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    timestamp = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
     action = db.Column(db.String(255), nullable=False)
     details = db.Column(db.Text, nullable=True)
     target_id = db.Column(db.String(50), nullable=True) # String to accommodate codes like AIV23...
@@ -540,4 +540,4 @@ class UserActivityLog(db.Model):
     user = db.relationship('User', backref=db.backref('activity_logs', lazy='dynamic'))
 
     def __repr__(self):
-        return f"UserActivityLog('{self.user.username}', '{self.action}', '{self.timestamp}')"
+        return f"UserActivityLog('{self.user.username}', '{self.action}', '{self.created_at}')"
