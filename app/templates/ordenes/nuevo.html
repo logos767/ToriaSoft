@@ -1688,6 +1688,8 @@
                 button.disabled = false;
                 button.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Finalizar y Crear Orden';
                 return;
+            } else {
+                changeDataInput.value = ''; // Ensure it's empty if no change data
             }
             document.getElementById('order-form').submit();
         }

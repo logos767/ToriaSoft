@@ -2220,7 +2220,8 @@ def new_order():
         payments_data_json = request.form.get('payments_data')
         sale_type = request.form.get('sale_type', 'regular')
         payments_data = json.loads(payments_data_json) if payments_data_json else []
-        change_data = json.loads(request.form.get('change_data', '{}'))
+        change_data_str = request.form.get('change_data')
+        change_data = json.loads(change_data_str) if change_data_str else {}
         dispatch_reason = request.form.get('dispatch_reason', '').strip()
         
         rate_for_order = current_rate
@@ -2418,7 +2419,11 @@ def new_order():
                         else: cash_box.balance_usd -= change_amount
                     
                     elif change_data['method'] == 'transferencia':
-                        bank = banks_map.get(int(change_data['source_id']))
+                        # The bank for the change might not be in the pre-fetched banks_map
+                        # if it wasn't used for a payment. So, we fetch it directly if needed.
+                        bank_id_for_change = int(change_data['source_id'])
+                        bank = banks_map.get(bank_id_for_change)
+                        if not bank: bank = Bank.query.get(bank_id_for_change)
                         if not bank: raise ValueError("El banco para el vuelto no fue encontrado.")
                         change_movement.bank_id = bank.id
                         # Bank movements are always in VES equivalent for accounting
