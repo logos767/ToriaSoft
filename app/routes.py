@@ -1602,26 +1602,37 @@ def client_list():
 @login_required
 def new_client():
     if request.method == 'POST':
+        name = request.form.get('name')
+        cedula_rif = request.form.get('cedula_rif')
+        email = request.form.get('email', '').strip()
+        phone = request.form.get('phone')
+        address = request.form.get('address')
+
+        # Treat empty email as None
+        if not email:
+            email = None
+
         try:
-            name = request.form.get('name')
-            cedula_rif = request.form.get('cedula_rif')
-            email = request.form.get('email')
-            phone = request.form.get('phone')
-            address = request.form.get('address')
+            # Check for duplicate email only if it's provided
+            if email and Client.query.filter_by(email=email).first():
+                raise IntegrityError("El email ya está registrado.")
+
             new_cli = Client(name=name, cedula_rif=cedula_rif, email=email, phone=phone, address=address)
             db.session.add(new_cli)
             db.session.commit()
+
             log_user_activity(
                 action="Creó nuevo cliente",
                 details=f"Cliente: {new_cli.name} (CI/RIF: {new_cli.cedula_rif or 'N/A'})",
                 target_id=new_cli.id,
                 target_type="Client"
             )
+
             flash('Cliente creado exitosamente!', 'success')
             return redirect(url_for('main.client_list'))
-        except IntegrityError:
+        except IntegrityError as e:
             db.session.rollback()
-            flash('Error: El email ya está registrado.', 'danger')
+            flash(f'Error: {e}', 'danger')
     return render_template('clientes/nuevo.html', title='Nuevo Cliente')
 
 @routes_blueprint.route('/clientes/detalle/<int:client_id>', methods=['GET', 'POST'])
@@ -3793,15 +3804,19 @@ def api_new_client():
         return jsonify({'error': 'No se proporcionaron datos'}), 400
 
     name = data.get('name')
-    cedula_rif = data.get('cedula_rif')
-    email = data.get('email')
+    cedula_rif = data.get('cedula_rif', '').strip()
+    email = data.get('email', '').strip()
 
     if not name:
         return jsonify({'error': 'El nombre es requerido.'}), 400
 
+    # Treat empty email as None
+    if not email:
+        email = None
+
     try:
         # Check for duplicates
-        if cedula_rif and Client.query.filter_by(cedula_rif=cedula_rif).first():
+        if cedula_rif and cedula_rif.strip() and Client.query.filter_by(cedula_rif=cedula_rif).first():
             return jsonify({'error': f'La Cédula/RIF "{cedula_rif}" ya está registrada.'}), 409
         
         if email and Client.query.filter_by(email=email).first():
