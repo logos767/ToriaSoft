@@ -458,6 +458,7 @@
         const newClientModalError = document.getElementById('new-client-modal-error');
         const newClientModalErrorMessage = document.getElementById('new-client-modal-error-message');
 
+        const IS_GERENTE = {{ is_gerente()|tojson }};
         const defaultRate = {{ current_rate }};
         let activeRate = defaultRate;
 
@@ -1512,7 +1513,7 @@
             }
         }
 
-        mainActionBtn.addEventListener('click', function() {
+        finalizeOrderBtn.addEventListener('click', function() {
             const originalButtonHtml = this.innerHTML;
             const button = this;
 
@@ -1575,7 +1576,7 @@
             }
 
             // For special dispatch by non-managers, we don't check stock here, the backend will handle it upon approval.
-            const shouldCheckStockNow = selectedSaleType !== 'special_dispatch' || {{ 'true' if is_gerente() else 'false' }};
+            const shouldCheckStockNow = selectedSaleType !== 'special_dispatch' || IS_GERENTE;
 
             if (shouldCheckStockNow) {
                 button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Verificando stock...';
@@ -1587,13 +1588,13 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        submitOrderForm(button);
+                        submitOrderForm();
                     } else {
                         let errorMessage = 'No se puede procesar la orden por falta de stock:\n\n';
                         if (data.errors) {
                             data.errors.forEach(err => {
                                 errorMessage += `• ${err.name}: Solicitado: ${err.requested}, Disponible: ${err.stock}\n`;
-                            });
+                            }); 
                         }
                         alert(errorMessage);
                         button.disabled = false;
@@ -1608,18 +1609,16 @@
                 });
             } else {
                 // For special dispatch by sellers, skip frontend stock check and submit directly.
-                submitOrderForm(button);
+                submitOrderForm();
             }
-        }
+        });
 
-        function submitOrderForm(button) {
+        function submitOrderForm() {
+            const button = finalizeOrderBtn;
             button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Procesando...';
             paymentsDataInput.value = JSON.stringify(payments);
             document.getElementById('order-form').submit();
         }
-
-        mainActionBtn.addEventListener('click', handleMainAction);
-        finalizeOrderBtn.addEventListener('click', finalizeOrder);
 
         // Disparar el evento change al cargar para establecer el estado inicial correcto
         paymentMethodSelect.dispatchEvent(new Event('change'));
