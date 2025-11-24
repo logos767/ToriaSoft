@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-4xl">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-edit mr-2"></i>Editar Proveedor</h1>
+        <a href="{{ url_for('main.provider_list') }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver a la lista</a>
+    </div>
+
+    <form method="POST" action="{{ url_for('main.edit_provider', provider_id=provider.id) }}">
+        <div class="bg-white p-8 rounded-lg shadow-md space-y-8">
+
+            <!-- Sección de Información Básica -->
+            <div class="border-b pb-6">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Información Básica</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="name" class="block text-sm font-medium text-gray-700">Nombre o Razón Social</label>
+                        <input type="text" id="name" name="name" required class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm" value="{{ provider.name }}">
+                    </div>
+                    <div>
+                        <label for="tax_id" class="block text-sm font-medium text-gray-700">Cédula Fiscal / RIF</label>
+                        <input type="text" id="tax_id" name="tax_id" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm" value="{{ provider.tax_id or '' }}">
+                    </div>
+                    <div>
+                        <label for="provider_type" class="block text-sm font-medium text-gray-700">Tipo de Proveedor</label>
+                        <select id="provider_type" name="provider_type" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                            <option value="Productos" {% if provider.provider_type == 'Productos' %}selected{% endif %}>Productos (Mercancía)</option>
+                            <optgroup label="Servicios de atención y venta al cliente">
+                                <option value="Servicios - Asesoramiento personalizado" {% if provider.provider_type == 'Servicios - Asesoramiento personalizado' %}selected{% endif %}>Asesoramiento personalizado</option>
+                                <option value="Servicios - Prueba de productos" {% if provider.provider_type == 'Servicios - Prueba de productos' %}selected{% endif %}>Prueba de productos</option>
+                                <option value="Servicios - Procesamiento de pagos" {% if provider.provider_type == 'Servicios - Procesamiento de pagos' %}selected{% endif %}>Procesamiento de pagos</option>
+                                <option value="Servicios - Gestión de ventas" {% if provider.provider_type == 'Servicios - Gestión de ventas' %}selected{% endif %}>Gestión de ventas</option>
+                                <option value="Servicios - Soporte post-venta" {% if provider.provider_type == 'Servicios - Soporte post-venta' %}selected{% endif %}>Soporte post-venta</option>
+                            </optgroup>
+                            <optgroup label="Servicios de valor agregado">
+                                <option value="Servicios - Asesoramiento de imagen" {% if provider.provider_type == 'Servicios - Asesoramiento de imagen' %}selected{% endif %}>Asesoramiento de imagen</option>
+                                <option value="Servicios - Modificaciones" {% if provider.provider_type == 'Servicios - Modificaciones' %}selected{% endif %}>Modificaciones</option>
+                                <option value="Servicios - Entregas" {% if provider.provider_type == 'Servicios - Entregas' %}selected{% endif %}>Entregas</option>
+                                <option value="Servicios - Tarjetas de regalo" {% if provider.provider_type == 'Servicios - Tarjetas de regalo' %}selected{% endif %}>Tarjetas de regalo</option>
+                            </optgroup>
+                            <optgroup label="Servicios de gestión y administración">
+                                <option value="Servicios - Gestión de inventario" {% if provider.provider_type == 'Servicios - Gestión de inventario' %}selected{% endif %}>Gestión de inventario</option>
+                                <option value="Servicios - Marketing" {% if provider.provider_type == 'Servicios - Marketing' %}selected{% endif %}>Marketing</option>
+                                <option value="Servicios - Contabilidad" {% if provider.provider_type == 'Servicios - Contabilidad' %}selected{% endif %}>Contabilidad</option>
+                                <option value="Servicios - Mantenimiento" {% if provider.provider_type == 'Servicios - Mantenimiento' %}selected{% endif %}>Mantenimiento</option>
+                            </optgroup>
+                            <optgroup label="Servicios de infraestructura y equipamiento">
+                                <option value="Servicios - Mobiliario" {% if provider.provider_type == 'Servicios - Mobiliario' %}selected{% endif %}>Mobiliario</option>
+                                <option value="Servicios - Tecnología" {% if provider.provider_type == 'Servicios - Tecnología' %}selected{% endif %}>Tecnología</option>
+                                <option value="Servicios - Seguridad" {% if provider.provider_type == 'Servicios - Seguridad' %}selected{% endif %}>Seguridad</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="address" class="block text-sm font-medium text-gray-700">Dirección Física</label>
+                        <textarea id="address" name="address" rows="2" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">{{ provider.address or '' }}</textarea>
+                    </div>
+                    <div>
+                        <label for="phone" class="block text-sm font-medium text-gray-700">Teléfono</label>
+                        <input type="tel" id="phone" name="phone" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm" value="{{ provider.phone or '' }}">
+                    </div>
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-gray-700">Correo Electrónico</label>
+                        <input type="email" id="email" name="email" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm" value="{{ provider.email or '' }}">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección de Contacto Principal -->
+            <div class="border-b pb-6">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Contacto Principal</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="contact_person_name" class="block text-sm font-medium text-gray-700">Nombre del Contacto</label>
+                        <input type="text" id="contact_person_name" name="contact_person_name" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm" value="{{ provider.contact_person_name or '' }}">
+                    </div>
+                    <div>
+                        <label for="contact_person_phone" class="block text-sm font-medium text-gray-700">Teléfono del Contacto</label>
+                        <input type="tel" id="contact_person_phone" name="contact_person_phone" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm" value="{{ provider.contact_person_phone or '' }}">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="contact_person_email" class="block text-sm font-medium text-gray-700">Email del Contacto</label>
+                        <input type="email" id="contact_person_email" name="contact_person_email" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm" value="{{ provider.contact_person_email or '' }}">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección de Asociación con Cliente -->
+            <div class="border-b pb-6">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Asociación con Cliente (para Intercambios)</h2>
+                <p class="text-sm text-gray-600 mb-4">Si este proveedor también es un cliente, puedes asociarlo aquí para permitir el cruce de cuentas.</p>
+                <div>
+                    <label for="associated_client_id" class="block text-sm font-medium text-gray-700">Asociar a Cliente</label>
+                    <select id="associated_client_id" name="associated_client_id" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                        <option value="">-- Ninguno --</option>
+                        {% for client in clients %}
+                            <option value="{{ client.id }}" {% if associated_client and associated_client.id == client.id %}selected{% endif %}>{{ client.name }} ({{ client.cedula_rif or 'N/A' }})</option>
+                        {% endfor %}
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">Al seleccionar un cliente, se vinculará a este proveedor. Si el cliente ya estaba asociado a otro proveedor, esa asociación se eliminará.</p>
+                </div>
+            </div>
+
+            <!-- Sección de Información Bancaria -->
+            <div class="border-b pb-6">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Información Bancaria</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <input type="text" name="bank_name" placeholder="Nombre del Banco" class="py-2 px-3 border border-gray-300 rounded-md" value="{{ provider.bank_name or '' }}">
+                    <input type="text" name="bank_account_number" placeholder="Número de Cuenta" class="py-2 px-3 border border-gray-300 rounded-md" value="{{ provider.bank_account_number or '' }}">
+                    <input type="text" name="bank_swift_bic" placeholder="SWIFT/BIC" class="py-2 px-3 border border-gray-300 rounded-md" value="{{ provider.bank_swift_bic or '' }}">
+                    <input type="text" name="bank_iban" placeholder="IBAN" class="py-2 px-3 border border-gray-300 rounded-md" value="{{ provider.bank_iban or '' }}">
+                </div>
+            </div>
+
+            <!-- Sección de Detalles del Negocio -->
+            <div>
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Detalles Adicionales</h2>
+                <div class="grid grid-cols-1 gap-6">
+                    <textarea name="business_description" rows="3" placeholder="Descripción del negocio, productos y servicios que ofrece..." class="py-2 px-3 border border-gray-300 rounded-md">{{ provider.business_description or '' }}</textarea>
+                    <textarea name="payment_terms" rows="2" placeholder="Términos de pago (ej. Neto 30 días, 50% por adelantado...)" class="py-2 px-3 border border-gray-300 rounded-md">{{ provider.payment_terms or '' }}</textarea>
+                    <textarea name="shipping_terms" rows="2" placeholder="Términos de envío (ej. FOB, CIF, entrega en tienda...)" class="py-2 px-3 border border-gray-300 rounded-md">{{ provider.shipping_terms or '' }}</textarea>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end mt-8">
+                <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
+                    <i class="fas fa-save mr-2"></i>Guardar Cambios
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

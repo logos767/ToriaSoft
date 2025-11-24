@@ -13,6 +13,9 @@
             font-size: 9pt;
             color: #333;
         }
+        .page-break {
+            page-break-before: always;
+        }
         .header {
             text-align: center;
             margin-bottom: 5px;
@@ -72,37 +75,42 @@
     </div>
     <div class="info">
         <p><strong>Fecha de Generación:</strong> {{ generation_date }}</p>
-        <p><strong>Almacén:</strong> {{ warehouse_name }}</p>
+        <p><strong>Grupo de Productos:</strong> {{ group_filter or 'Todos' }}</p>
     </div>
-    <table>
-        <thead>
-            <tr>
-                <th style="width: 15%;">Código:</th>
-                <th style="width: 65%;">Descripción (Nombre, Marca, Color, Talla)</th>
-                <th style="width: 10%;">Existencia Teórica</th>
-                <th class="count-col">Conteo Físico</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for data in products_data %}
-            <tr>
-                <td>
-                    {{ data.product.barcode }}
-                </td>
-                <td style="font-size: 8pt;">
-                    <strong>{{ data.product.codigo_producto or 'N/A' }} - {{ data.product.name }}</strong>
-                    | {{ data.product.marca or '' }}
-                    | {{ data.product.color or '' }}
-                    | s{{ data.product.size or '' }}
-                </td>
-                <td style="text-align: center; font-weight: bold;">
-                    {{ data.stock }}
-                </td>
-                <td class="count-col"></td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+
+    {% for warehouse_data in report_data %}
+        {% if not loop.first %}
+            <div class="page-break"></div>
+            <div class="header">
+                <h1>{{ company_info.name if company_info else 'Reporte de Inventario' }}</h1>
+                <h2>Conteo Físico de Inventario</h2>
+            </div>
+        {% endif %}
+        <h3 style="font-size: 10pt; margin-top: 10px; margin-bottom: 5px;"><strong>Almacén:</strong> {{ warehouse_data.warehouse_name }}</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 15%;">Código:</th>
+                    <th style="width: 65%;">Descripción (Nombre, Marca, Color, Talla)</th>
+                    <th style="width: 10%;">Existencia Teórica</th>
+                    <th class="count-col">Conteo Físico</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for data in warehouse_data.products %}
+                <tr>
+                    <td>{{ data.product.barcode }}</td>
+                    <td style="font-size: 8pt;"><strong>{{ data.product.codigo_producto or 'N/A' }} - {{ data.product.name }}</strong> | {{ data.product.marca or '' }} | {{ data.product.color or '' }} | s{{ data.product.size or '' }}</td>
+                    <td style="text-align: center; font-weight: bold;">{{ data.stock }}</td>
+                    <td class="count-col"></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="text-align: center;">No hay productos que coincidan con los filtros en este almacén.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endfor %}
+
     <div class="footer">
         Página <span class="page-number"></span> de <span class="page-count"></span>
     </div>

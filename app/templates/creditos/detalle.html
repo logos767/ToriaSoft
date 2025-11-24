@@ -164,9 +164,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let payments = [];
     let orderTotal = 0;
-    let currentRate = {{ current_rate }};
+    let currentRate = parseFloat("{{ current_rate }}");
     let previousTransferCurrency;
     let previousPaymentMethod;
+
+    {% set provider_info_dict = {} %}
+    {% if order.client.associated_provider %}
+        {% set _ = provider_info_dict.update({
+            'id': order.client.associated_provider.id, 
+            'name': order.client.associated_provider.name, 
+            'balance_usd': provider_balance_usd | float }) %}
+    {% endif %}
+    const associatedProviderInfo = {{ provider_info_dict | tojson | safe if provider_info_dict else 'null' }};
 
     function openPaymentModalForAbono(orderId, dueAmount) {
         // Define elements here, when the modal is about to be opened
@@ -290,10 +299,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         let amount_ves_equivalent = amount;
         let currency_paid = 'VES';
-        if (method === 'efectivo_usd' || (method === 'transferencia' && transfer_currency === 'USD')) {
+        if (method === 'efectivo_usd' || method === 'intercambio_comercial' || (method === 'transferencia' && transfer_currency === 'USD')) {
             amount_ves_equivalent = amount * currentRate;
             currency_paid = 'USD';
         }
+
 
         const payment = {
             method: method, amount_paid: amount, currency_paid: currency_paid,
@@ -370,6 +380,27 @@ document.addEventListener('DOMContentLoaded', function() {
             [paymentReferenceGroup, paymentIssuingBankGroup, paymentSenderIdGroup, paymentBankGroup, paymentCurrencyGroup].forEach(el => el.classList.toggle('hidden', !isTransfer));
             paymentPosGroup.classList.toggle('hidden', method !== 'punto_de_venta');
             paymentCashboxGroup.classList.toggle('hidden', !method.startsWith('efectivo'));
+            
+            // --- NEW: Handle Commercial Exchange UI ---
+            const isExchange = method === 'intercambio_comercial';
+            document.getElementById('payment-provider-group').classList.toggle('hidden', !isExchange);
+
+            const currencySymbol = '{{ currency_symbol }}';
+            if (isExchange) {
+                const providerInfoDiv = document.getElementById('provider-info-display');
+                const noProviderMsg = document.getElementById('no-provider-message');
+                if (associatedProviderInfo && associatedProviderInfo.balance_usd > 0) {
+                    document.getElementById('provider-name-display').textContent = associatedProviderInfo.name;
+                    // type: ignore
+                    document.getElementById('provider-balance-display').textContent = `${currencySymbol}${associatedProviderInfo.balance_usd.toFixed(2)}`;
+                    providerInfoDiv.classList.remove('hidden');
+                    noProviderMsg.classList.add('hidden');
+                } else {
+                    noProviderMsg.textContent = 'Este cliente no tiene un proveedor de servicios asociado o no tiene saldo a favor.';
+                    providerInfoDiv.classList.add('hidden');
+                    noProviderMsg.classList.remove('hidden');
+                }
+            }
 
             if (isTransfer) {
                 document.getElementById('payment-sender-id').value = '{{ order.client.phone or '' }}';
@@ -381,8 +412,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const newTransferCurrency = paymentCurrencySelect.value;
 
             if (amount && amount > 0 && currentRate > 0) {
-                const wasUsd = previousPaymentMethod === 'efectivo_usd' || (previousPaymentMethod === 'transferencia' && previousTransferCurrency === 'USD');
-                const isUsd = method === 'efectivo_usd' || (isTransfer && newTransferCurrency === 'USD');
+                const wasUsd = ['efectivo_usd', 'intercambio_comercial'].includes(previousPaymentMethod) || (previousPaymentMethod === 'transferencia' && previousTransferCurrency === 'USD');
+                const isUsd = ['efectivo_usd', 'intercambio_comercial'].includes(method) || (isTransfer && newTransferCurrency === 'USD');
 
                 if (wasUsd && !isUsd) { // USD -> VES
                     paymentAmountInput.value = (amount * currentRate).toFixed(2);

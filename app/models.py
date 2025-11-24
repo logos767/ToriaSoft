@@ -15,6 +15,19 @@ from .extensions import db
 from sqlalchemy import func
 from flask_login import UserMixin
 
+class Store(db.Model):
+    __tablename__ = 'stores'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+
+    def __repr__(self):
+        return f"Store('{self.name}')"
+
+user_stores = db.Table('user_stores',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
+    db.Column('store_id', db.Integer, db.ForeignKey('stores.id'), primary_key=True)
+)
+
 class User(db.Model, UserMixin):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
@@ -37,6 +50,9 @@ class User(db.Model, UserMixin):
     bank_name = db.Column(db.String(100), nullable=True)
     bank_account_number = db.Column(db.String(25), nullable=True)
     
+    # Relación con Sucursales
+    stores = db.relationship('Store', secondary=user_stores, lazy='subquery',
+                             backref=db.backref('users', lazy=True))
     @property
     def is_active(self):
         """Sobrescribe la propiedad de Flask-Login para usar nuestro campo de la BD."""
@@ -124,6 +140,10 @@ class Warehouse(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     is_sellable = db.Column(db.Boolean, default=False, nullable=False, index=True) # Indica si se puede vender desde este almacén
+    store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=False, index=True)
+
+    # Relación con Sucursal
+    store = db.relationship('Store', backref=db.backref('warehouses', lazy='dynamic'))
 
 class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -133,9 +153,12 @@ class Client(db.Model):
     phone = db.Column(db.String(40), nullable=True)
     address = db.Column(db.String(200), nullable=True)
     
+    # Columna para asociar este cliente con un registro de proveedor
+    provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'), nullable=True, unique=True)
+
     # Relaciones
     orders = db.relationship('Order', backref='client', lazy=True)
-
+    
     def __repr__(self):
         return f"Client('{self.name}', '{self.email}')"
 
@@ -143,6 +166,7 @@ class Provider(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     # Información básica
     name = db.Column(db.String(150), nullable=False, unique=True)
+    provider_type = db.Column(db.String(50), nullable=False, default='Bienes', index=True) # Bienes, Servicios
     tax_id = db.Column(db.String(20), unique=True, nullable=True) # Cédula fiscal / RIF
     address = db.Column(db.Text, nullable=True)
     phone = db.Column(db.String(50), nullable=True)
@@ -167,9 +191,48 @@ class Provider(db.Model):
     
     # Relaciones
     purchases = db.relationship('Purchase', backref='provider', lazy=True)
-    
+    service_orders = db.relationship('MarketingServiceOrder', backref='provider', lazy='dynamic')
+    client_association = db.relationship('Client', backref=db.backref('associated_provider', uselist=False), foreign_keys=[Client.provider_id])
+
     def __repr__(self):
         return f"Provider('{self.name}')"
+
+    def get_balance_usd(self):
+        """
+        Calcula el saldo actual del proveedor.
+        Saldo a favor (positivo): Crédito que la tienda tiene con el proveedor.
+        Saldo en contra (negativo): Deuda que la tienda tiene con el proveedor.
+        """
+        # Suma de todos los servicios que el proveedor ha prestado (crédito para la tienda)
+        total_services_value = db.session.query(func.sum(MarketingServiceOrder.service_value_usd)) \
+            .filter_by(provider_id=self.id, status='Completado').scalar() or 0.0
+
+        # CORRECCIÓN: Sumar todos los pagos que consumen el saldo del proveedor.
+        # Esto incluye tanto 'cruce_de_cuentas' (método antiguo/otro) como 'intercambio_comercial' (usado en el modal de pagos).
+        # El 'provider_id' se guarda en el campo 'reference' para estos tipos de pago.
+        total_settlements_value = db.session.query(func.sum(Payment.amount_usd_equivalent)) \
+            .filter(Payment.reference == str(self.id)) \
+            .filter(Payment.method.in_(['cruce_de_cuentas', 'intercambio_comercial'])) \
+            .scalar() or 0.0
+
+        return total_services_value - total_settlements_value
+    
+class MarketingServiceOrder(db.Model):
+    __tablename__ = 'marketing_service_orders'
+    id = db.Column(db.Integer, primary_key=True)
+    service_code = db.Column(db.String(50), unique=True, nullable=False)
+    provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
+    service_description = db.Column(db.Text, nullable=False)
+    service_value_usd = db.Column(db.Float, nullable=False, default=0.0) # Valor del servicio que genera crédito
+    status = db.Column(db.String(50), nullable=False, default='Pendiente', index=True) # Pendiente, Completado, Cancelado
+
+    # Relationships
+    user = db.relationship('User', backref='service_orders_created')
+
+    def __repr__(self):
+        return f"MarketingServiceOrder('{self.service_code}', '{self.status}')"
 
 class Order(db.Model):
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=False)
@@ -181,11 +244,13 @@ class Order(db.Model):
     total_amount_usd = db.Column(db.Float, nullable=False, default=0.0) # Total en USD al momento de la venta
     discount_usd = db.Column(db.Float, nullable=True, default=0.0)
     exchange_rate_at_sale = db.Column(db.Float, nullable=True)
+    store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=True, index=True) # Puede ser nulo para órdenes antiguas
     dispatch_reason = db.Column(db.Text, nullable=True)
 
     # Relaciones
     items = db.relationship('OrderItem', backref='order', lazy=True, cascade="all, delete-orphan")
     payments = db.relationship('Payment', backref='order', lazy=True, cascade="all, delete-orphan")
+    
 
     @property
     def paid_amount_usd(self):
@@ -299,9 +364,13 @@ class CashBox(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     balance_ves = db.Column(db.Float, nullable=False, default=0.0)
     balance_usd = db.Column(db.Float, nullable=False, default=0.0)
+    store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=False, index=True)
     
     payments = db.relationship('Payment', backref='cash_box', lazy=True)
 
+    # Relación con Sucursal
+    store = db.relationship('Store', backref=db.backref('cash_boxes', lazy='dynamic'))
+    
     def __repr__(self):
         return f"CashBox('{self.name}')"
 
@@ -313,7 +382,7 @@ class Payment(db.Model):
     currency_paid = db.Column(db.String(3), nullable=False) # 'VES', 'USD'
     amount_ves_equivalent = db.Column(db.Float, nullable=False) # The equivalent in VES for the order total
     amount_usd_equivalent = db.Column(db.Float, nullable=False, default=0.0) # El equivalente en USD para el total de la orden
-    method = db.Column(db.String(50), nullable=False) # 'transferencia', 'pago_movil', 'punto_de_venta', 'efectivo_usd', 'efectivo_ves'
+    method = db.Column(db.String(50), nullable=False) # 'transferencia', 'pago_movil', 'punto_de_venta', 'efectivo_usd', 'efectivo_ves', 'cruce_de_cuentas'
     reference = db.Column(db.String(100), nullable=True)
     issuing_bank = db.Column(db.String(100), nullable=True) # Banco emisor
     sender_id = db.Column(db.String(50), nullable=True) # Cédula o teléfono del emisor

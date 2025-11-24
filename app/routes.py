@@ -30,7 +30,7 @@ from firebase_admin import messaging
 from sqlalchemy.orm import joinedload, subqueryload
 from .extensions import db, bcrypt, socketio
 from .models import (User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, 
-                    CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, UserActivityLog,
+                    CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, UserActivityLog, Store, MarketingServiceOrder,
                     CashBox, Payment, ManualFinancialMovement, InventoryAdjustment, InventoryAdjustmentItem, VE_TIMEZONE, OrderReturn, OrderReturnItem,
                     UserDevice, Warehouse, ProductStock, WarehouseTransfer, BulkLoadLog)
 from reportlab.lib.pagesizes import A4
@@ -254,8 +254,11 @@ def create_notification_for_admins(message, link):
     Crea una notificación en la BD para Superusuario y Gerente,
     y envía una notificación push a través de FCM a sus dispositivos registrados.
     """
+    # Asegúrate de que esta clave VAPID privada esté configurada en tus variables de entorno.
     VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY")
-    VAPID_CLAIMS = {"sub": "mailto:your-email@example.com"} # Cambia esto a tu email
+    # IMPORTANTE: Reemplaza 'admin@tudominio.com' con un email real asociado a tu aplicación.
+    # Este es un identificador para los servicios de push.
+    VAPID_CLAIMS = {"sub": "mailto:tiendastoria@gmail.com"}
     current_app.logger.info(f"Attempting to create notification for admins: {message}")
     try:
         admins = User.query.filter(User.role.in_(['Superusuario', 'Gerente'])).all()
@@ -333,8 +336,15 @@ def create_notification_for_admins(message, link):
                         vapid_private_key=VAPID_PRIVATE_KEY,
                         vapid_claims=VAPID_CLAIMS.copy()
                     )
-                except (WebPushException, json.JSONDecodeError, TypeError) as e:
-                    current_app.logger.error(f"Error enviando web push a {sub_device.id}: {e}. Podría ser una suscripción inválida.")
+                except WebPushException as e:
+                    # Este error a menudo significa que la suscripción ha expirado o es inválida.
+                    # El servicio de push la rechazó. Es buena idea registrar esto.
+                    current_app.logger.warning(f"WebPushException al enviar a device {sub_device.id}: {e.response.text}. La suscripción puede haber expirado.")
+                    # Opcional: Podrías eliminar la suscripción inválida aquí.
+                    # db.session.delete(sub_device)
+                except (json.JSONDecodeError, TypeError) as e:
+                    # Este error significa que el token guardado en la BD no es un JSON válido.
+                    current_app.logger.error(f"Error de formato en la suscripción web push para device {sub_device.id}: {e}")
 
     except Exception as e:
         current_app.logger.error(f"Error al crear notificaciones para administradores: {e}")
@@ -430,7 +440,7 @@ def notification_list():
     """Muestra una página con todas las notificaciones del usuario."""
     if not is_gerente():
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
     
     # Marcar todas como leídas al visitar la página
     Notification.query.filter_by(user_id=current_user.id, is_read=False).update({'is_read': True})
@@ -463,36 +473,55 @@ def handle_connect():
 @routes_blueprint.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        if current_user.role != 'Vendedor':
-            return redirect(url_for('main.dashboard'))
-        else:
-            return redirect(url_for('main.new_order'))
+        # Si ya está autenticado, redirigir a la página principal correspondiente a su rol
+        redirect_url = url_for('main.dashboard') if current_user.role != 'Vendedor' else url_for('main.new_order')
+        if request.is_json:
+            return jsonify({'redirect_url': redirect_url})
+        return redirect(redirect_url)
+
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        user = User.query.filter_by(username=username).first()
+        store_id = request.form.get('store_id') # Nuevo campo del formulario
+        user = User.query.options(subqueryload(User.stores)).filter_by(username=username).first()
+
         if user and bcrypt.check_password_hash(user.password, password):
             if not user.is_active:
                 flash('Tu cuenta de usuario ha sido desactivada. Por favor, contacta al administrador.', 'danger')
-                return redirect(url_for('main.login'))
+                return jsonify({'error': 'Cuenta inactiva', 'reload': True}), 401
 
+            # Lógica de selección de sucursal
+            if len(user.stores) > 1 and not store_id:
+                # El usuario tiene múltiples sucursales y no ha elegido una. Mostrar el modal.
+                stores_data = [{'id': s.id, 'name': s.name} for s in user.stores]
+                return jsonify({'redirect_to_store_selection': True, 'stores': stores_data})
+            
+            elif len(user.stores) == 1:
+                # Si solo tiene una, se asigna automáticamente.
+                session['active_store_id'] = user.stores[0].id
+            
+            elif store_id:
+                # El usuario ha seleccionado una sucursal desde el modal.
+                if int(store_id) in [s.id for s in user.stores]:
+                    session['active_store_id'] = int(store_id)
+                else:
+                    flash('Intento de acceso a sucursal no autorizada.', 'danger')
+                    return jsonify({'error': 'Sucursal no autorizada', 'reload': True}), 403
+            
             login_user(user)
             
             # Actualizar la tasa de cambio al iniciar sesión
             current_app.logger.info(f"Usuario '{username}' ha iniciado sesión. Actualizando tasas de cambio...")
             rates = fetch_and_update_exchange_rate()
-            if not rates:
-                flash('Advertencia: No se pudo actualizar la tasa de cambio. Se usarán los últimos valores guardados.', 'warning')
 
-            next_page = request.args.get('next') # type: ignore
-            if next_page:
-                return redirect(next_page)
-            if user.role != 'Vendedor':
-                return redirect(url_for('main.dashboard'))
-            else:
-                return redirect(url_for('main.new_order'))
+            next_page = request.args.get('next')
+            redirect_url = next_page or (url_for('main.dashboard') if user.role != 'Vendedor' else url_for('main.new_order'))
+            return jsonify({'redirect_url': redirect_url})
         else:
             flash('Inicio de sesión fallido. Por favor, verifica tu nombre de usuario y contraseña.', 'danger')
+            # Devolvemos un error para que el JS pueda recargar la página y mostrar el flash.
+            return jsonify({'error': 'Credenciales inválidas', 'reload': True}), 401
+
     return render_template('login.html', title='Iniciar Sesión')
 
 
@@ -501,6 +530,24 @@ def logout():
     logout_user()
     return redirect(url_for('main.login'))
 
+@routes_blueprint.route('/set-active-store', methods=['POST'])
+@login_required
+def set_active_store():
+    store_id_str = request.form.get('store_id')
+    
+    # Validar que el usuario tenga acceso a esta sucursal
+    if store_id_str == 'all' and is_administrador():
+         session['active_store_id'] = 'all'
+         flash('Mostrando datos de todas las sucursales.', 'info')
+    elif store_id_str and store_id_str.isdigit() and int(store_id_str) in [s.id for s in current_user.stores]:
+        store_id = int(store_id_str)
+        session['active_store_id'] = store_id
+        store = Store.query.get(store_id)
+        flash(f'Sucursal activa cambiada a: {store.name}', 'success')
+    else:
+        flash('Intento de acceso a sucursal no autorizada.', 'danger')
+
+    return redirect(request.referrer or url_for('main.dashboard'))
 # Rutas principales
 @routes_blueprint.route('/')
 @routes_blueprint.route('/dashboard')
@@ -510,15 +557,26 @@ def dashboard():
     if current_user.role == 'Vendedor':
         return redirect(url_for('main.new_order'))
 
+    active_store_id = session.get('active_store_id')
+
     # --- General Metrics ---
     # Excluir el grupo 'Ganchos' (insumos) de los conteos del dashboard.
-    total_products = Product.query.filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).count() # type: ignore
-    total_stock_query = db.session.query(
+    product_query = Product.query.filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None)))
+    
+    stock_query = db.session.query(
         func.sum(ProductStock.quantity),
         func.sum(ProductStock.quantity * Product.price_usd)
-    ).join(Product).filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).first() # type: ignore
-    total_stock = total_stock_query[0] or 0
-    total_stock_value_usd = total_stock_query[1] or 0.0
+    ).join(Product, ProductStock.product_id == Product.id).join(Warehouse).filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None)))
+
+    if active_store_id and active_store_id != 'all':
+        product_query = product_query.join(ProductStock).join(Warehouse).filter(Warehouse.store_id == active_store_id)
+        stock_query = stock_query.filter(Warehouse.store_id == active_store_id)
+
+    total_products = product_query.count()
+    
+    total_stock_result = stock_query.first()
+    total_stock = total_stock_result[0] or 0
+    total_stock_value_usd = total_stock_result[1] or 0.0
 
     total_clients = Client.query.count()
 
@@ -534,7 +592,12 @@ def dashboard():
     debt_data_query = db.session.query(
         Order.client_id,
         (Order.total_amount_usd - func.coalesce(paid_sq.c.total_paid_usd, 0)).label('due_amount_usd')
-    ).outerjoin(paid_sq, Order.id == paid_sq.c.order_id).subquery()
+    ).outerjoin(paid_sq, Order.id == paid_sq.c.order_id)
+
+    if active_store_id and active_store_id != 'all':
+        debt_data_query = debt_data_query.filter(Order.store_id == active_store_id)
+
+    debt_data_query = debt_data_query.subquery()
 
     final_debt_query = db.session.query(
         func.count(func.distinct(debt_data_query.c.client_id)),
@@ -561,6 +624,8 @@ def dashboard():
             Order.exchange_rate_at_sale.isnot(None),
             Order.exchange_rate_at_sale > 0
         )
+        if active_store_id and active_store_id != 'all':
+            query = query.filter(Order.store_id == active_store_id)
         if end_date:
             query = query.filter(Order.date_created.between(start_date, end_date))
         else:
@@ -579,6 +644,8 @@ def dashboard():
         Order.exchange_rate_at_sale.isnot(None),
         Order.exchange_rate_at_sale > 0
     )
+    if active_store_id and active_store_id != 'all':
+        all_stats_query = all_stats_query.filter(Order.store_id == active_store_id)
     all_orders_count, all_orders_amount_usd = all_stats_query.first()
     all_orders_count = all_orders_count or 0
     all_orders_amount_usd = float(all_orders_amount_usd or 0.0)
@@ -592,7 +659,12 @@ def dashboard():
         joinedload(Payment.bank),
         joinedload(Payment.pos).joinedload(PointOfSale.bank),
         joinedload(Payment.cash_box)
-    ).filter(Payment.date.between(start_of_day, end_of_day)).all()
+    ).filter(Payment.date.between(start_of_day, end_of_day))
+
+    if active_store_id and active_store_id != 'all':
+        payments_today = payments_today.join(Order).filter(Order.store_id == active_store_id)
+
+    payments_today = payments_today.all()
 
     for payment in payments_today:
         target_account_name = None
@@ -613,7 +685,12 @@ def dashboard():
     manual_movements_today = ManualFinancialMovement.query.options(
         joinedload(ManualFinancialMovement.bank),
         joinedload(ManualFinancialMovement.cash_box)
-    ).filter(ManualFinancialMovement.date.between(start_of_day, end_of_day), ManualFinancialMovement.status == 'Aprobado').all()
+    ).filter(ManualFinancialMovement.date.between(start_of_day, end_of_day), ManualFinancialMovement.status == 'Aprobado')
+
+    if active_store_id and active_store_id != 'all':
+        manual_movements_today = manual_movements_today.join(CashBox).filter(CashBox.store_id == active_store_id)
+
+    manual_movements_today = manual_movements_today.all()
 
     for m in manual_movements_today:
         account_name = None
@@ -648,6 +725,8 @@ def dashboard():
         ).filter(
             Order.exchange_rate_at_sale.isnot(None), Order.exchange_rate_at_sale > 0
         )
+        if active_store_id and active_store_id != 'all':
+            sales_query = sales_query.filter(Order.store_id == active_store_id)
         if end_date: sales_query = sales_query.filter(Order.date_created.between(start_date, end_date))
         else: sales_query = sales_query.filter(Order.date_created >= start_date)
         
@@ -668,6 +747,9 @@ def dashboard():
             (OrderItem.quantity * (OrderItem.cost_at_sale_ves or 0)) + 
             ((OrderItem.quantity * OrderItem.price) * (var_sales_exp_pct + var_marketing_pct))
         )).join(Order).join(Product).filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None)))
+
+        if active_store_id and active_store_id != 'all':
+            expenses_query = expenses_query.filter(Order.store_id == active_store_id)
 
         if end_date: expenses_query = expenses_query.filter(Order.date_created.between(start_date, end_date))
         else: expenses_query = expenses_query.filter(Order.date_created >= start_date)
@@ -700,8 +782,16 @@ def dashboard():
     current_month_name = f"{month_names[today.month - 1]} {today.year}"
 
     # --- Recent Activity ---
-    recent_products = Product.query.filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).order_by(Product.id.desc()).limit(5).all()
-    recent_orders = Order.query.options(joinedload(Order.client)).order_by(Order.date_created.desc()).limit(5).all()
+    recent_products_query = Product.query.filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None)))
+    recent_orders_query = Order.query.options(joinedload(Order.client))
+
+    if active_store_id and active_store_id != 'all':
+        recent_products_query = recent_products_query.join(ProductStock).join(Warehouse).filter(Warehouse.store_id == active_store_id)
+        recent_orders_query = recent_orders_query.filter(Order.store_id == active_store_id)
+
+    recent_products = recent_products_query.order_by(Product.id.desc()).limit(5).all()
+    recent_orders = recent_orders_query.order_by(Order.date_created.desc()).limit(5).all()
+
 
     return render_template('index.html', title='Dashboard',
                            total_products=total_products,
@@ -792,10 +882,17 @@ def inventory_list():
     sort_by = request.args.get('sort_by', 'name')
     sort_order = request.args.get('sort_order', 'asc')
 
+    active_store_id = session.get('active_store_id')
+
     query = Product.query
 
     if group_filter:
         query = query.filter(Product.grupo == group_filter)
+
+    # Filtrar por sucursal activa
+    if active_store_id and active_store_id != 'all':
+        query = query.join(ProductStock).join(Warehouse).filter(Warehouse.store_id == active_store_id)
+
 
     if search_term:
         search_pattern = f'%{search_term}%'
@@ -817,7 +914,7 @@ def inventory_list():
 
     products = query.order_by(
         sort_column.desc() if sort_order == 'desc' else sort_column.asc()
-    ).all()
+    ).distinct().all()
     
     # Obtener todos los grupos únicos para el menú desplegable de filtro
     groups = db.session.query(Product.grupo).distinct().order_by(Product.grupo).all()
@@ -838,7 +935,7 @@ def inventory_list():
 def codigos_barra():
     if not is_gerente(): # Superusuario and Gerente can access
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     preselected_ids_str = request.args.get('product_ids', '')
     preselected_ids = preselected_ids_str.split(',') if preselected_ids_str else []
@@ -1065,7 +1162,7 @@ def generate_barcode_pdf_reportlab(products, company_info, currency_symbol):
 def imprimir_codigos_barra():
     if not is_gerente(): # Superusuario and Gerente can access
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     product_ids = request.form.getlist('product_ids')
     if not product_ids:
@@ -1212,7 +1309,12 @@ def inventory_stock():
     selected_warehouse_id = request.args.get('warehouse_id', type=int)
     show_zero_stock = request.args.get('show_zero_stock') == 'on'
 
-    warehouses = Warehouse.query.order_by(Warehouse.id).all()
+    active_store_id = session.get('active_store_id')
+    warehouses_query = Warehouse.query.order_by(Warehouse.id)
+    if active_store_id and active_store_id != 'all':
+        warehouses_query = warehouses_query.filter(Warehouse.store_id == active_store_id)
+    warehouses = warehouses_query.all()
+
     products_data = [] # This will hold {'product': Product_obj, 'stock': quantity}
     selected_warehouse_name = None
 
@@ -1234,7 +1336,10 @@ def inventory_stock():
         products_data = [{'product': p, 'stock': q} for p, q in products_with_stock_tuples]
 
     else:
-        # If no specific warehouse is selected, show all products with their total stock.
+        # If no specific warehouse is selected, show all products with their total stock
+        # within the active store, or globally if 'all' is selected.
+        stock_filter = (Warehouse.store_id == active_store_id) if (active_store_id and active_store_id != 'all') else (1==1)
+
         # We need to calculate the total stock within the query itself.
         
         # Subquery to sum quantities for each product across all warehouses
@@ -1242,13 +1347,17 @@ def inventory_stock():
             ProductStock.product_id,
             func.sum(ProductStock.quantity).label('total_quantity')
         ).group_by(ProductStock.product_id).subquery()
-
+        
         # Main query: select Product and its total_quantity from the subquery
         query = db.session.query(
             Product,
             func.coalesce(total_stock_subquery.c.total_quantity, 0).label('total_stock')
         ).outerjoin(total_stock_subquery, Product.id == total_stock_subquery.c.product_id) \
         .filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None)))
+
+        if active_store_id and active_store_id != 'all':
+            # We need to join to filter by store, but only if we are filtering
+            query = query.join(ProductStock, Product.id == ProductStock.product_id).join(Warehouse).filter(Warehouse.store_id == active_store_id)
 
         if not show_zero_stock:
             query = query.filter(func.coalesce(total_stock_subquery.c.total_quantity, 0) > 0)
@@ -1264,55 +1373,79 @@ def inventory_stock():
                            selected_warehouse_name=selected_warehouse_name,
                            show_zero_stock=show_zero_stock)
 
+@routes_blueprint.route('/inventario/conteo_fisico/reporte')
+@login_required
+def inventory_physical_count_report_page():
+    """Renders the page to generate the physical count report."""
+
+    active_store_id = session.get('active_store_id')
+    warehouses_query = Warehouse.query.order_by(Warehouse.name)
+    if active_store_id and active_store_id != 'all':
+        warehouses_query = warehouses_query.filter(Warehouse.store_id == active_store_id)
+    warehouses = warehouses_query.all()
+
+    groups = db.session.query(Product.grupo).distinct().order_by(Product.grupo).all()
+    product_groups = [g[0] for g in groups if g[0]]
+
+    return render_template('inventario/reporte_conteo_fisico.html',
+                           title='Reporte para Conteo Físico',
+                           warehouses=warehouses,
+                           product_groups=product_groups)
+
 @routes_blueprint.route('/inventario/existencias/reporte_pdf')
 @login_required
 def inventory_stock_report_pdf():
-    """Genera un reporte PDF para el conteo físico del inventario. Accesible por Gerente y Superusuario."""
-    if not is_administrador():
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.inventory_stock'))
+    """Genera un reporte PDF para el conteo físico del inventario."""
     
-    selected_warehouse_id = request.args.get('warehouse_id', type=int)
-    show_zero_stock = request.args.get('show_zero_stock') == 'True' # The boolean is passed as a string
+    warehouse_id_param = request.args.get('warehouse_id')
+    show_zero_stock = request.args.get('show_zero_stock') == 'on'
+    group_filter = request.args.get('group_filter', '').strip()
 
-    products_data = []
-    selected_warehouse_name = "Todos los Almacenes"
+    report_data = [] # This will be a list of dicts: [{'warehouse_name': name, 'products': [...]}]
 
-    if selected_warehouse_id:
-        warehouse = Warehouse.query.get(selected_warehouse_id)
-        if warehouse:
-            selected_warehouse_name = warehouse.name
+    active_store_id = session.get('active_store_id')
+    warehouses_to_process_query = Warehouse.query.order_by(Warehouse.name)
+    if active_store_id and active_store_id != 'all':
+        warehouses_to_process_query = warehouses_to_process_query.filter(Warehouse.store_id == active_store_id)
 
-        # Query for products with stock in the selected warehouse
-        query = db.session.query(Product, ProductStock.quantity) \
-                          .join(ProductStock, Product.id == ProductStock.product_id) \
-                          .filter(ProductStock.warehouse_id == selected_warehouse_id) \
-                          .filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None)))
+    if warehouse_id_param and warehouse_id_param != 'all':
+        warehouses_to_process = warehouses_to_process_query.filter(Warehouse.id == int(warehouse_id_param)).all()
+    else: # "all" warehouses
+        warehouses_to_process = warehouses_to_process_query.all()
 
+    for warehouse in warehouses_to_process:
+        # Base query for products in the current warehouse
+        # We use an outerjoin to be able to include products with zero stock.
+        query = db.session.query(Product, func.coalesce(ProductStock.quantity, 0)) \
+            .outerjoin(ProductStock, (Product.id == ProductStock.product_id) & (ProductStock.warehouse_id == warehouse.id)) \
+            .filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None)))
+
+        # Apply group filter if provided
+        if group_filter:
+            query = query.filter(Product.grupo == group_filter)
+
+        # Apply zero stock filter
         if not show_zero_stock:
             query = query.filter(ProductStock.quantity > 0)
+
+        products_with_stock_tuples = query.order_by(Product.name).all()
         
-        products_with_stock_tuples = query.order_by(Product.name).all()
-        products_data = [{'product': p, 'stock': q} for p, q in products_with_stock_tuples]
-    else:
-        # If no specific warehouse is selected, show all products with their total stock
-        total_stock_subquery = db.session.query(ProductStock.product_id, func.sum(ProductStock.quantity).label('total_quantity')).group_by(ProductStock.product_id).subquery()
-        query = db.session.query(Product, func.coalesce(total_stock_subquery.c.total_quantity, 0).label('total_stock')) \
-                          .outerjoin(total_stock_subquery, Product.id == total_stock_subquery.c.product_id) \
-                          .filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None)))
-        if not show_zero_stock:
-            query = query.filter(func.coalesce(total_stock_subquery.c.total_quantity, 0) > 0)
-        products_with_stock_tuples = query.order_by(Product.name).all()
-        products_data = [{'product': p, 'stock': q} for p, q in products_with_stock_tuples]
+        # Only add warehouse to report if it has products matching the filter
+        if products_with_stock_tuples:
+            products_data = [{'product': p, 'stock': q} for p, q in products_with_stock_tuples]
+            report_data.append({
+                'warehouse_name': warehouse.name,
+                'products': products_data
+            })
 
     company_info = CompanyInfo.query.first()
     generation_date = get_current_time_ve().strftime('%d/%m/%Y %H:%M:%S')
 
     html_string = render_template('pdf/inventory_stock_report.html',
-                                  products_data=products_data,
+                                  report_data=report_data,
                                   company_info=company_info,
                                   generation_date=generation_date,
-                                  warehouse_name=selected_warehouse_name)
+                                  group_filter=group_filter)
 
     pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
 
@@ -1325,7 +1458,7 @@ def inventory_adjustment():
     """Página para el ajuste digital del inventario. Accesible por Gerente y Superusuario."""
     if not is_administrador():
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     warehouse_id = request.args.get('warehouse_id', 1, type=int) # Por defecto, ajustar la tienda
 
@@ -1433,7 +1566,11 @@ def inventory_adjustment():
     # Cargar productos con su stock en el almacén seleccionado
     products_with_stock = db.session.query(Product, ProductStock.quantity).outerjoin(ProductStock, (Product.id == ProductStock.product_id) & (ProductStock.warehouse_id == warehouse_id)).filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).order_by(Product.name).all()
     
-    warehouses = Warehouse.query.order_by(Warehouse.id).all()
+    active_store_id = session.get('active_store_id')
+    warehouses_query = Warehouse.query.order_by(Warehouse.id)
+    if active_store_id and active_store_id != 'all':
+        warehouses_query = warehouses_query.filter(Warehouse.store_id == active_store_id)
+    warehouses = warehouses_query.all()
     selected_warehouse = Warehouse.query.get(warehouse_id)
 
     return render_template('inventario/ajuste_inventario.html', title='Ajuste de Inventario', products_data=products_with_stock, warehouses=warehouses, selected_warehouse=selected_warehouse)
@@ -1444,11 +1581,16 @@ def adjustment_list():
     """Displays a list of all inventory adjustments made."""
     if not is_administrador():
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
-    adjustments = InventoryAdjustment.query.options(
+    active_store_id = session.get('active_store_id')
+    adjustments_query = InventoryAdjustment.query.options(
         joinedload(InventoryAdjustment.user)
-    ).order_by(InventoryAdjustment.date.desc()).all()
+    )
+    if active_store_id and active_store_id != 'all':
+        # This is tricky as adjustments are not directly linked to a store. We can infer it from the items.
+        adjustments_query = adjustments_query.join(InventoryAdjustmentItem).join(Movement, Movement.document_id == InventoryAdjustment.id).join(Warehouse).filter(Warehouse.store_id == active_store_id)
+    adjustments = adjustments_query.order_by(InventoryAdjustment.date.desc()).distinct().all()
 
     return render_template('inventario/list_ajustes.html',
                            title='Historial de Ajustes de Inventario',
@@ -1460,7 +1602,7 @@ def adjustment_result(adjustment_id):
     """Muestra la página de resultados de un ajuste de inventario específico."""
     if not is_administrador():
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     adjustment = InventoryAdjustment.query.options(
         joinedload(InventoryAdjustment.items).joinedload(InventoryAdjustmentItem.product),
@@ -1505,7 +1647,7 @@ def product_detail(product_id):
 def new_product():
     if not is_administrador(): # Superusuario and Gerente can create products
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     if request.method == 'POST':
         try:
@@ -1596,7 +1738,12 @@ def edit_product(product_id):
 @routes_blueprint.route('/clientes/lista')
 @login_required
 def client_list():
-    clients = Client.query.all()
+    active_store_id = session.get('active_store_id')
+    clients_query = Client.query
+    if active_store_id and active_store_id != 'all':
+        # Mostrar solo clientes que han comprado en la sucursal activa
+        clients_query = clients_query.join(Order).filter(Order.store_id == active_store_id).distinct()
+    clients = clients_query.order_by(Client.name).all()
     return render_template('clientes/lista.html', title='Lista de Clientes', clients=clients)
 
 @routes_blueprint.route('/clientes/nuevo', methods=['GET', 'POST'])
@@ -1636,6 +1783,49 @@ def new_client():
             flash(f'Error: {e}', 'danger')
     return render_template('clientes/nuevo.html', title='Nuevo Cliente')
 
+@routes_blueprint.route('/clientes/editar/<int:client_id>', methods=['GET', 'POST'])
+@login_required
+def edit_client(client_id):
+    if not is_administrador():
+        flash('Acceso denegado. Solo los administradores pueden editar clientes.', 'danger')
+        return redirect(url_for('main.client_list'))
+
+    # Cargar proveedores de servicios para el dropdown de asociación
+    service_providers = Provider.query.filter(Provider.provider_type.like('Servicios%')).order_by(Provider.name).all()
+
+    client = Client.query.get_or_404(client_id)
+
+    if request.method == 'POST':
+        try:
+            client.name = request.form.get('name')
+            client.cedula_rif = request.form.get('cedula_rif')
+            email = request.form.get('email', '').strip()
+            client.email = email if email else None
+            client.phone = request.form.get('phone')
+            client.address = request.form.get('address')
+            provider_id = request.form.get('provider_id')
+            client.provider_id = int(provider_id) if provider_id else None
+
+            db.session.commit()
+
+            log_user_activity(
+                action="Editó cliente",
+                details=f"Cliente: {client.name} (ID: {client.id})",
+                target_id=client.id,
+                target_type="Client"
+            )
+
+            flash('Cliente actualizado exitosamente.', 'success')
+            return redirect(url_for('main.client_detail', client_id=client.id))
+        except IntegrityError as e:
+            db.session.rollback()
+            flash(f'Error de integridad: Ya existe un cliente con ese email o Cédula/RIF. {e}', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error inesperado: {e}', 'danger')
+
+    return render_template('clientes/editar_cliente.html', title=f'Editar Cliente: {client.name}', client=client, service_providers=service_providers)
+
 @routes_blueprint.route('/clientes/detalle/<int:client_id>', methods=['GET', 'POST'])
 @login_required
 def client_detail(client_id):
@@ -1645,6 +1835,13 @@ def client_detail(client_id):
     # Calculate total due before any potential new payment
     total_due_pre_payment = sum(order.due_amount_usd for order in orders_query.all() if order.due_amount_usd > 0)
     
+    # NEW: Check for associated provider balance for commercial exchange
+    provider_balance_usd = 0
+    associated_provider = client.associated_provider
+    if associated_provider:
+        provider_balance_usd = associated_provider.get_balance_usd()
+
+
     if request.method == 'POST':
         # This handles adding a payment to an order from the client detail page
         order_id = request.form.get('order_id')
@@ -1655,8 +1852,46 @@ def client_detail(client_id):
             current_rate = get_cached_exchange_rate('USD') or 1.0
             payment_data_json = request.form.get('payments_data')
             payment_info = json.loads(payment_data_json)[0]
-            payment_info['amount_usd_equivalent'] = float(payment_info['amount_ves_equivalent']) / current_rate if current_rate > 0 else 0
 
+            # --- NEW: Handle Commercial Exchange ---
+            if payment_info['method'] == 'intercambio_comercial':
+                if not associated_provider:
+                    raise ValueError("Este cliente no tiene un proveedor de servicios asociado.")
+
+                payment_info['amount_usd_equivalent'] = float(payment_info['amount_ves_equivalent']) / current_rate if current_rate > 0 else 0
+                exchange_amount_usd = payment_info.get('amount_usd_equivalent', 0.0)
+                if exchange_amount_usd > provider_balance_usd:
+                    raise ValueError(f"El saldo por intercambio (${provider_balance_usd:.2f}) es insuficiente para cubrir el monto del abono (${exchange_amount_usd:.2f}).")
+
+                # Create a negative service order to consume the provider's balance
+                today_str = get_current_time_ve().strftime('%y%m%d')
+                count_today = MarketingServiceOrder.query.filter(MarketingServiceOrder.service_code.like(f"SERV{today_str}%")).count()
+                service_code = f"SERV{today_str}-{count_today + 1}"
+
+                exchange_service = MarketingServiceOrder(
+                    service_code=service_code,
+                    provider_id=associated_provider.id,
+                    user_id=current_user.id,
+                    date=get_current_time_ve(),
+                    service_description=f"Uso de crédito para abono en Nota de Entrega #{order.id:09d}",
+                    service_value_usd=-exchange_amount_usd, # Negative value to decrease balance
+                    status='Completado'
+                )
+                db.session.add(exchange_service)
+
+                log_user_activity(
+                    action="Aplicó Intercambio Comercial",
+                    details=f"Usó ${exchange_amount_usd:.2f} del saldo del proveedor '{associated_provider.name}' para abonar a la orden #{order.id:09d}",
+                    target_id=order.id,
+                    target_type="Order"
+                )
+            # --- END: Handle Commercial Exchange ---
+
+
+
+            # Calculate USD equivalent for all other payment methods
+            if 'amount_usd_equivalent' not in payment_info:
+                payment_info['amount_usd_equivalent'] = float(payment_info['amount_ves_equivalent']) / current_rate if current_rate > 0 else 0
             payment_date = get_current_time_ve()
             if payment_info.get('date'):
                 try:
@@ -1725,14 +1960,21 @@ def client_detail(client_id):
 
     # For the payment modal
     banks = Bank.query.order_by(Bank.name).all()
-    points_of_sale = PointOfSale.query.order_by(PointOfSale.name).all()
-    cash_boxes = CashBox.query.order_by(CashBox.name).all()
-
+    
+    active_store_id = session.get('active_store_id')
+    pos_query = PointOfSale.query.order_by(PointOfSale.name)
+    cashbox_query = CashBox.query.order_by(CashBox.name)
+    if active_store_id and active_store_id != 'all':
+        # POS no está ligado a tienda, pero CashBox sí
+        cashbox_query = cashbox_query.filter(CashBox.store_id == active_store_id)
+    points_of_sale = pos_query.all()
+    cash_boxes = cashbox_query.all()
     return render_template('clientes/detalle_cliente.html',
                            title=f'Detalle de Cliente: {client.name}',
                            client=client,
                            orders=orders, # This now contains the updated order states
                            total_due=total_due_pre_payment, # This is now the updated total due
+                           provider_balance_usd=provider_balance_usd, # Pass the balance to the template
                            banks=banks,
                            points_of_sale=points_of_sale,
                            cash_boxes=cash_boxes)
@@ -1743,9 +1985,11 @@ def client_detail(client_id):
 def provider_list():
     if not is_administrador(): # Superusuario and Gerente can view providers
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
-        return redirect(url_for('main.new_order'))
-
-    providers = Provider.query.all()
+        return redirect(request.referrer or url_for('main.dashboard'))
+    
+    # Añadido: Cargar el cliente asociado para cada proveedor de forma eficiente
+    # Corregido: Se elimina el joinedload que causaba el error. La asociación se resolverá en la plantilla.
+    providers = Provider.query.order_by(Provider.name).all()
     return render_template('proveedores/lista.html', title='Lista de Proveedores', providers=providers)
 
 @routes_blueprint.route('/proveedores/nuevo', methods=['GET', 'POST'])
@@ -1753,15 +1997,20 @@ def provider_list():
 def new_provider():
     if not is_administrador(): # Superusuario and Gerente can create providers
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     if request.method == 'POST':
         try:
+            # Datos para asociación de cliente
+            associated_client_id = request.form.get('associated_client_id')
+            create_client_from_provider = 'create_client_from_provider' in request.form
+
             new_prov = Provider(
                 # Información básica
                 name=request.form.get('name'),
                 tax_id=request.form.get('tax_id'),
                 address=request.form.get('address'),
+                provider_type=request.form.get('provider_type', 'Bienes'),
                 phone=request.form.get('phone'),
                 fax=request.form.get('fax'),
                 email=request.form.get('email'),
@@ -1782,12 +2031,35 @@ def new_provider():
                 shipping_terms=request.form.get('shipping_terms')
             )
             db.session.add(new_prov)
+            db.session.commit() # Commit para obtener el ID del proveedor
+
+            # Lógica de asociación con cliente
+            if create_client_from_provider:
+                # Crear un nuevo cliente con los datos del proveedor
+                new_client = Client(
+                    name=new_prov.name,
+                    cedula_rif=new_prov.tax_id,
+                    email=new_prov.email,
+                    phone=new_prov.phone,
+                    address=new_prov.address,
+                    provider_id=new_prov.id # Asociar inmediatamente
+                )
+                db.session.add(new_client)
+                flash('Se ha creado un nuevo cliente y se ha asociado a este proveedor.', 'info')
+            elif associated_client_id:
+                # Asociar a un cliente existente
+                client_to_associate = Client.query.get(associated_client_id)
+                if client_to_associate:
+                    client_to_associate.provider_id = new_prov.id
+                    flash(f'Proveedor asociado al cliente "{client_to_associate.name}".', 'info')
+
             log_user_activity(
                 action="Creó nuevo proveedor",
                 details=f"Proveedor: {new_prov.name}",
                 target_id=new_prov.id,
                 target_type="Provider"
             )
+
             db.session.commit()
             flash('Proveedor creado exitosamente!', 'success')
             return redirect(url_for('main.provider_list'))
@@ -1800,16 +2072,91 @@ def new_provider():
             current_app.logger.error(f"Error inesperado al crear proveedor: {e}")
             flash(f'Ocurrió un error inesperado: {e}', 'danger')
 
-    return render_template('proveedores/nuevo.html', title='Nuevo Proveedor')
+    # Cargar clientes para el dropdown de asociación
+    clients = Client.query.order_by(Client.name).all()
+    return render_template('proveedores/nuevo.html', title='Nuevo Proveedor', clients=clients)
 
 @routes_blueprint.route('/proveedores/detalle/<int:provider_id>')
 @login_required
 def provider_detail(provider_id):
     if not is_administrador():
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
     provider = Provider.query.get_or_404(provider_id)
-    return render_template('proveedores/detalle_proveedor.html', title=f'Detalle de {provider.name}', provider=provider)
+    # Buscar si hay un cliente asociado a este proveedor
+    associated_client = Client.query.filter_by(provider_id=provider.id).first()
+    
+    # Calcular el saldo de servicios prestados por este proveedor
+    provider_balance_usd = provider.get_balance_usd()
+
+    return render_template('proveedores/detalle_proveedor.html', title=f'Detalle de {provider.name}', 
+                           provider=provider, associated_client=associated_client,
+                           provider_balance_usd=provider_balance_usd)
+
+@routes_blueprint.route('/proveedores/editar/<int:provider_id>', methods=['GET', 'POST'])
+@login_required
+def edit_provider(provider_id):
+    if not is_administrador():
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.provider_list'))
+
+    # Cargar clientes para el dropdown de asociación
+    clients = Client.query.order_by(Client.name).all()
+    associated_client = Client.query.filter_by(provider_id=provider_id).first()
+
+    provider = Provider.query.get_or_404(provider_id)
+
+    if request.method == 'POST':
+        try:
+            # Actualizar campos del proveedor
+            provider.name = request.form.get('name')
+            provider.tax_id = request.form.get('tax_id')
+            provider.address = request.form.get('address')
+            provider.provider_type = request.form.get('provider_type')
+            provider.phone = request.form.get('phone')
+            provider.email = request.form.get('email')
+            provider.contact_person_name = request.form.get('contact_person_name')
+            provider.contact_person_phone = request.form.get('contact_person_phone')
+            provider.contact_person_email = request.form.get('contact_person_email')
+            provider.bank_name = request.form.get('bank_name')
+            provider.bank_account_number = request.form.get('bank_account_number')
+            provider.bank_swift_bic = request.form.get('bank_swift_bic')
+            provider.bank_iban = request.form.get('bank_iban')
+            provider.business_description = request.form.get('business_description')
+            provider.payment_terms = request.form.get('payment_terms')
+            provider.shipping_terms = request.form.get('shipping_terms')
+
+            # Lógica de asociación con cliente
+            new_associated_client_id = request.form.get('associated_client_id')
+
+            # Desasociar al cliente antiguo si ha cambiado
+            if associated_client and str(associated_client.id) != new_associated_client_id:
+                associated_client.provider_id = None
+                flash(f'Se ha desasociado al cliente anterior: "{associated_client.name}".', 'info')
+
+            # Asociar al nuevo cliente si se seleccionó uno
+            if new_associated_client_id:
+                client_to_associate = Client.query.get(new_associated_client_id)
+                if client_to_associate:
+                    client_to_associate.provider_id = provider.id
+
+            log_user_activity(
+                action="Editó proveedor",
+                details=f"Proveedor: {provider.name}",
+                target_id=provider.id,
+                target_type="Provider"
+            )
+            db.session.commit()
+            flash('Proveedor actualizado exitosamente!', 'success')
+            return redirect(url_for('main.provider_detail', provider_id=provider.id))
+        except IntegrityError as e:
+            db.session.rollback()
+            flash('Error: Ya existe otro proveedor con ese nombre o RIF.', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error inesperado al actualizar: {e}', 'danger')
+
+    return render_template('proveedores/editar_proveedor.html', title=f'Editar {provider.name}', provider=provider, clients=clients, associated_client=associated_client)
 
 # Rutas de compras
 @routes_blueprint.route('/compras/lista')
@@ -1817,7 +2164,7 @@ def provider_detail(provider_id):
 def purchase_list():
     if not is_administrador(): # Superusuario and Gerente can view purchases
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     purchases = Purchase.query.all()
     return render_template('compras/lista.html', title='Lista de Compras', purchases=purchases)
@@ -1827,7 +2174,7 @@ def purchase_list():
 def purchase_detail(purchase_id):
     if not is_administrador(): # Superusuario and Gerente can view purchase details
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     purchase = Purchase.query.get_or_404(purchase_id)
     return render_template('compras/detalle_compra.html', title=f'Compra #{purchase.id}', purchase=purchase)
@@ -1837,7 +2184,7 @@ def purchase_detail(purchase_id):
 def new_purchase():
     if not is_administrador(): # Superusuario and Gerente can create purchases
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     # Convertir proveedores a una lista de diccionarios para que sea serializable a JSON y usable en JS
     providers_query = Provider.query.order_by(Provider.name).all()
@@ -1860,9 +2207,14 @@ def new_purchase():
         for p in products_query
     ]
 
+    active_store_id = session.get('active_store_id')
     banks = Bank.query.order_by(Bank.name).all()
-    cash_boxes = CashBox.query.order_by(CashBox.name).all()
-
+    
+    cash_boxes_query = CashBox.query.order_by(CashBox.name)
+    if active_store_id and active_store_id != 'all':
+        cash_boxes_query = cash_boxes_query.filter(CashBox.store_id == active_store_id)
+    cash_boxes = cash_boxes_query.all()
+    
     calculation_currency, _ = get_main_calculation_currency_info()
     current_rate = get_cached_exchange_rate(calculation_currency)
 
@@ -1975,9 +2327,14 @@ def new_purchase():
 def reception_list():
     if not is_administrador(): # Superusuario and Gerente can view receptions
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
-    receptions = Reception.query.order_by(Reception.date_received.desc()).all()
+    active_store_id = session.get('active_store_id')
+    receptions_query = Reception.query
+    if active_store_id and active_store_id != 'all':
+        # Filtrar recepciones por la sucursal de la compra asociada
+        receptions_query = receptions_query.join(Purchase).join(Provider) # Asumiendo que las compras no están ligadas a sucursal
+    receptions = receptions_query.order_by(Reception.date_received.desc()).all()
     return render_template('recepciones/lista.html', title='Lista de Recepciones', receptions=receptions)
 
 @routes_blueprint.route('/api/purchase_details/<int:purchase_id>')
@@ -2010,7 +2367,7 @@ def api_purchase_details(purchase_id):
 def new_reception():
     if not is_administrador(): # Superusuario, Gerente y administrador can create receptions
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     if request.method == 'POST':
         try:
@@ -2107,7 +2464,12 @@ def new_reception():
     pending_purchases = Purchase.query.filter(
         Purchase.status.in_(['Pendiente', 'Recibida Parcialmente'])
     ).order_by(Purchase.id.desc()).all()
-    warehouses = Warehouse.query.order_by(Warehouse.id).all()
+    
+    active_store_id = session.get('active_store_id')
+    warehouses_query = Warehouse.query.order_by(Warehouse.id)
+    if active_store_id and active_store_id != 'all':
+        warehouses_query = warehouses_query.filter(Warehouse.store_id == active_store_id)
+    warehouses = warehouses_query.all()
 
     return render_template('recepciones/nueva.html', 
                            title='Nueva Recepción', 
@@ -2124,6 +2486,7 @@ def order_list():
     status_filter = request.args.get('status', '').strip()
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
+    active_store_id = session.get('active_store_id')
 
     # Set default date range (current month)
     today = get_current_time_ve().date()
@@ -2137,6 +2500,10 @@ def order_list():
         joinedload(Order.client),
         subqueryload(Order.payments)
     ).join(Client).order_by(Order.date_created.desc())
+
+    # Apply store filter
+    if active_store_id and active_store_id != 'all':
+        query = query.filter(Order.store_id == active_store_id)
 
     # Apply search filter (Order ID or Client Name)
     if search_term:
@@ -2199,11 +2566,16 @@ def order_detail(order_id):
 def new_order():
     clients = Client.query.all()
     products = Product.query.all()
+    active_store_id = session.get('active_store_id')
     calculation_currency, _ = get_main_calculation_currency_info()
     banks = Bank.query.order_by(Bank.name).all()
     points_of_sale = PointOfSale.query.order_by(PointOfSale.name).all()
-    cash_boxes = CashBox.query.order_by(CashBox.name).all()
-
+    
+    cash_boxes_query = CashBox.query.order_by(CashBox.name)
+    if active_store_id and active_store_id != 'all':
+        cash_boxes_query = cash_boxes_query.filter(CashBox.store_id == active_store_id)
+    cash_boxes = cash_boxes_query.all()
+    
     current_rate = get_cached_exchange_rate(calculation_currency)
     
     if current_rate is None:
@@ -2310,7 +2682,7 @@ def new_order():
                 id=next_id, client_id=client_id, status='Pendiente', total_amount=0, 
                 total_amount_usd=final_order_total_usd, discount_usd=discount_usd, 
                 exchange_rate_at_sale=rate_for_order,
-                date_created=order_date, order_type=sale_type
+                date_created=order_date, order_type=sale_type, store_id=active_store_id
             )
             # Override totals for special dispatch
             if sale_type == 'special_dispatch':
@@ -2487,7 +2859,11 @@ def new_order():
 @login_required
 def credit_list():
     """Muestra la lista de ventas a crédito."""
-    credits = Order.query.filter_by(order_type='credit').order_by(Order.date_created.desc()).all()
+    active_store_id = session.get('active_store_id')
+    credits_query = Order.query.filter_by(order_type='credit')
+    if active_store_id and active_store_id != 'all':
+        credits_query = credits_query.filter(Order.store_id == active_store_id)
+    credits = credits_query.order_by(Order.date_created.desc()).all()
     return render_template('creditos/lista.html', title='Historial de Créditos', credits=credits)
 
 @routes_blueprint.route('/creditos/detalle/<int:order_id>', methods=['GET', 'POST'])
@@ -2499,6 +2875,12 @@ def credit_detail(order_id):
         flash('Esta orden no es un crédito válido.', 'warning')
         return redirect(url_for('main.credit_list'))
 
+    # NEW: Check for associated provider balance for commercial exchange
+    provider_balance_usd = 0
+    associated_provider = order.client.associated_provider
+    if associated_provider:
+        provider_balance_usd = associated_provider.get_balance_usd()
+
     if request.method == 'POST':
         payment_data_json = request.form.get('payments_data')
         if payment_data_json:
@@ -2506,6 +2888,37 @@ def credit_detail(order_id):
                 payment_info = json.loads(payment_data_json)[0]
                 current_rate = get_cached_exchange_rate('USD') or 1.0
                 amount_usd_equivalent = float(payment_info['amount_ves_equivalent']) / current_rate if current_rate > 0 else 0
+
+                # --- NEW: Handle Commercial Exchange ---
+                if payment_info['method'] == 'intercambio_comercial':
+                    if not associated_provider:
+                        raise ValueError("Este cliente no tiene un proveedor de servicios asociado.")
+                    
+                    exchange_amount_usd = payment_info.get('amount_usd_equivalent', 0.0)
+                    if exchange_amount_usd > provider_balance_usd:
+                        raise ValueError(f"El saldo por intercambio (${provider_balance_usd:.2f}) es insuficiente para cubrir el monto del abono (${exchange_amount_usd:.2f}).")
+
+                    # Create a negative service order to consume the provider's balance
+                    today_str = get_current_time_ve().strftime('%y%m%d')
+                    count_today = MarketingServiceOrder.query.filter(MarketingServiceOrder.service_code.like(f"SERV{today_str}%")).count()
+                    service_code = f"SERV{today_str}-{count_today + 1}"
+
+                    exchange_service = MarketingServiceOrder(
+                        service_code=service_code,
+                        provider_id=associated_provider.id,
+                        user_id=current_user.id,
+                        date=get_current_time_ve(),
+                        service_description=f"Uso de crédito para abono en Crédito #{order.id:09d}",
+                        service_value_usd=-exchange_amount_usd, # Negative value to decrease balance
+                        status='Completado'
+                    )
+                    db.session.add(exchange_service)
+
+                    log_user_activity(
+                        action="Aplicó Intercambio Comercial a Crédito",
+                        details=f"Usó ${exchange_amount_usd:.2f} del saldo del proveedor '{associated_provider.name}' para abonar al crédito #{order.id:09d}",
+                        target_id=order.id, target_type="Order")
+                # --- END: Handle Commercial Exchange ---
 
                 payment_date = get_current_time_ve()
                 if payment_info.get('date'):
@@ -2553,10 +2966,16 @@ def credit_detail(order_id):
                 flash(f'Error al registrar el abono: {e}', 'danger')
             return redirect(url_for('main.credit_detail', order_id=order.id))
 
+    active_store_id = session.get('active_store_id')
     banks = Bank.query.order_by(Bank.name).all()
     points_of_sale = PointOfSale.query.order_by(PointOfSale.name).all()
-    cash_boxes = CashBox.query.order_by(CashBox.name).all()
-    return render_template('creditos/detalle.html', title=f'Detalle de Crédito #{order.id:09d}', order=order, banks=banks, points_of_sale=points_of_sale, cash_boxes=cash_boxes)
+    
+    cash_boxes_query = CashBox.query.order_by(CashBox.name)
+    if active_store_id and active_store_id != 'all':
+        cash_boxes_query = cash_boxes_query.filter(CashBox.store_id == active_store_id)
+    cash_boxes = cash_boxes_query.all()
+
+    return render_template('creditos/detalle.html', title=f'Detalle de Crédito #{order.id:09d}', order=order, banks=banks, points_of_sale=points_of_sale, cash_boxes=cash_boxes, provider_balance_usd=provider_balance_usd)
 
 # --- Rutas de Apartados ---
 
@@ -2567,7 +2986,11 @@ def reservation_list():
     # Muestra un historial de todas las órdenes que se crearon como 'apartado',
     # independientemente de su estado actual (Apartado, Pagada, Completada).
     # Esto permite ver tanto los apartados activos como los ya finalizados.
-    reservations = Order.query.filter_by(order_type='reservation').order_by(Order.date_created.desc()).all()
+    active_store_id = session.get('active_store_id')
+    reservations_query = Order.query.filter_by(order_type='reservation')
+    if active_store_id and active_store_id != 'all':
+        reservations_query = reservations_query.filter(Order.store_id == active_store_id)
+    reservations = reservations_query.order_by(Order.date_created.desc()).all()
     return render_template('apartados/lista.html', title='Historial de Apartados', reservations=reservations)
 
 @routes_blueprint.route('/apartados/detalle/<int:order_id>', methods=['GET', 'POST'])
@@ -2578,6 +3001,12 @@ def reservation_detail(order_id):
     if not order:
         flash('Esta orden no es un apartado válido.', 'warning')
         return redirect(url_for('main.reservation_list'))
+
+    # NEW: Check for associated provider balance for commercial exchange
+    provider_balance_usd = 0
+    associated_provider = order.client.associated_provider
+    if associated_provider:
+        provider_balance_usd = associated_provider.get_balance_usd()
 
     if request.method == 'POST':
         action = request.form.get('action')
@@ -2602,6 +3031,37 @@ def reservation_detail(order_id):
                 # Para abonos, siempre usar la tasa de cambio actual para calcular el equivalente en USD.
                 current_rate = get_cached_exchange_rate('USD') or 1.0
                 
+                # --- NEW: Handle Commercial Exchange ---
+                if payment_info['method'] == 'intercambio_comercial':
+                    if not associated_provider:
+                        raise ValueError("Este cliente no tiene un proveedor de servicios asociado.")
+                    
+                    exchange_amount_usd = float(payment_info['amount_usd_equivalent']) / current_rate if current_rate > 0 else 0
+                    if exchange_amount_usd > provider_balance_usd:
+                        raise ValueError(f"El saldo por intercambio (${provider_balance_usd:.2f}) es insuficiente para cubrir el monto del abono (${exchange_amount_usd:.2f}).")
+
+                    # Create a negative service order to consume the provider's balance
+                    today_str = get_current_time_ve().strftime('%y%m%d')
+                    count_today = MarketingServiceOrder.query.filter(MarketingServiceOrder.service_code.like(f"SERV{today_str}%")).count()
+                    service_code = f"SERV{today_str}-{count_today + 1}"
+
+                    exchange_service = MarketingServiceOrder(
+                        service_code=service_code,
+                        provider_id=associated_provider.id,
+                        user_id=current_user.id,
+                        date=get_current_time_ve(),
+                        service_description=f"Uso de crédito para abono en Apartado #{order.id:09d}",
+                        service_value_usd=-exchange_amount_usd, # Negative value to decrease balance
+                        status='Completado'
+                    )
+                    db.session.add(exchange_service)
+
+                    log_user_activity(
+                        action="Aplicó Intercambio Comercial a Apartado",
+                        details=f"Usó ${exchange_amount_usd:.2f} del saldo del proveedor '{associated_provider.name}' para abonar al apartado #{order.id:09d}",
+                        target_id=order.id, target_type="Order")
+                # --- END: Handle Commercial Exchange ---
+
                 amount_usd_equivalent = float(payment_info['amount_ves_equivalent']) / current_rate if current_rate > 0 else 0
 
                 payment_date = get_current_time_ve()
@@ -2656,10 +3116,16 @@ def reservation_detail(order_id):
                 flash(f'Error al registrar el abono: {e}', 'danger')
             return redirect(url_for('main.reservation_detail', order_id=order.id))
 
+    active_store_id = session.get('active_store_id')
     banks = Bank.query.order_by(Bank.name).all()
     points_of_sale = PointOfSale.query.order_by(PointOfSale.name).all()
-    cash_boxes = CashBox.query.order_by(CashBox.name).all()
-    return render_template('apartados/detalle.html', title=f'Detalle de Apartado #{order.id:09d}', order=order, banks=banks, points_of_sale=points_of_sale, cash_boxes=cash_boxes)
+    
+    cash_boxes_query = CashBox.query.order_by(CashBox.name)
+    if active_store_id and active_store_id != 'all':
+        cash_boxes_query = cash_boxes_query.filter(CashBox.store_id == active_store_id)
+    cash_boxes = cash_boxes_query.all()
+
+    return render_template('apartados/detalle.html', title=f'Detalle de Apartado #{order.id:09d}', order=order, banks=banks, points_of_sale=points_of_sale, cash_boxes=cash_boxes, provider_balance_usd=provider_balance_usd)
 
 
 @routes_blueprint.route('/actividad_usuarios')
@@ -2667,8 +3133,8 @@ def reservation_detail(order_id):
 def user_activity_log():
     if not is_superuser():
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.dashboard'))
-    logs = UserActivityLog.query.options(joinedload(UserActivityLog.user)).order_by(UserActivityLog.timestamp.desc()).all()
+        return redirect(request.referrer or url_for('main.dashboard'))
+    logs = UserActivityLog.query.options(joinedload(UserActivityLog.user)).order_by(UserActivityLog.created_at.desc()).all()
     return render_template('actividad_usuarios.html', title='Actividad de Usuarios', logs=logs)
 
 
@@ -2678,10 +3144,15 @@ def user_activity_log():
 def movement_list():
     if not is_administrador(): # Superusuario, Gerente, administrador can view movements
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
     product_id = request.args.get('product_id', default=None, type=int) # type: ignore
     start_date_str = request.args.get('start_date', default=None)
     end_date_str = request.args.get('end_date', default=None)
+
+    active_store_id = session.get('active_store_id')
+    if active_store_id and active_store_id != 'all':
+        query = query.join(Warehouse).filter(Warehouse.store_id == active_store_id)
+
 
     query = Movement.query
 
@@ -2719,11 +3190,12 @@ def movement_list():
 def estadisticas():
     if not is_gerente(): # Superusuario and Gerente can view statistics
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     # --- Date Filtering ---
     today = get_current_time_ve().date()
     period = request.args.get('period', 'monthly') # 'monthly', 'daily', 'custom'
+    active_store_id = session.get('active_store_id')
     
     if period == 'daily':
         start_date_str = request.args.get('date', today.strftime('%Y-%m-%d'))
@@ -2758,6 +3230,9 @@ def estadisticas():
         Order.date_created <= datetime.combine(end_date, datetime.max.time()),
         or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))
     )
+    
+    if active_store_id and active_store_id != 'all':
+        order_items_query = order_items_query.filter(Order.store_id == active_store_id)
 
     cost_structure = CostStructure.query.first()
     if not cost_structure:
@@ -2843,7 +3318,10 @@ def estadisticas():
         Order.date_created >= datetime.combine(start_date, datetime.min.time()),
         Order.date_created <= datetime.combine(end_date, datetime.max.time()),
         or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))
-    ).group_by(Product.id).order_by(func.sum(OrderItem.quantity).desc()).limit(5).all()
+    )
+    if active_store_id and active_store_id != 'all':
+        top_products_query = top_products_query.filter(Order.store_id == active_store_id)
+    top_products = top_products_query.group_by(Product.id).order_by(func.sum(OrderItem.quantity).desc()).limit(5).all()
 
     frequent_clients = db.session.query(
         Client.name,
@@ -2851,7 +3329,11 @@ def estadisticas():
     ).join(Order, Client.id == Order.client_id).filter(
         Order.date_created >= datetime.combine(start_date, datetime.min.time()),
         Order.date_created <= datetime.combine(end_date, datetime.max.time())
-    ).group_by(Client.id).order_by(func.count(Order.id).desc()).limit(5).all()
+    )
+    if active_store_id and active_store_id != 'all':
+        frequent_clients_query = frequent_clients_query.filter(Order.store_id == active_store_id)
+    frequent_clients = frequent_clients_query.group_by(Client.id).order_by(func.count(Order.id).desc()).limit(5).all()
+
 
     top_products_data = {'labels': [p[0] for p in top_products], 'values': [float(p[1] or 0) for p in top_products]}
     frequent_clients_data = {'labels': [c[0] for c in frequent_clients], 'values': [c[1] for c in frequent_clients]}
@@ -3083,7 +3565,7 @@ def generar_reporte_mensual_pdf():
 def cargar_excel():
     if not is_gerente(): # Superusuario and Gerente can upload excel
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('main.inventory_list'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     if request.method == 'POST':
         if 'file' not in request.files:
@@ -3251,7 +3733,7 @@ def add_stock_and_movement(product_id, warehouse_id, quantity, document_id, docu
 def cargar_excel_confirmar():
     if not is_gerente(): # Superusuario and Gerente can confirm excel upload
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('main.inventory_list'))
+        return redirect(request.referrer or url_for('main.dashboard'))
         
     upload_data = session.get('excel_upload_data', {})
     if not upload_data:
@@ -3307,7 +3789,7 @@ def bulk_load_detail(log_id):
     """Muestra los detalles de una carga masiva específica."""
     if not is_gerente():
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.inventory_list'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     log_entry = BulkLoadLog.query.options(
         joinedload(BulkLoadLog.user),
@@ -3379,7 +3861,7 @@ def company_settings():
 def cost_list():
     if not is_gerente(): # Superusuario and Gerente can view cost list
         flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
-        return redirect(url_for('main.dashboard'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     cost_structure = CostStructure.query.first()
     if not cost_structure:
@@ -3437,7 +3919,7 @@ def cost_list():
 def cost_structure_config():
     if not is_superuser(): # Only Superuser can configure cost structure
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('main.dashboard'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     cost_structure = CostStructure.query.first()
     if not cost_structure:
@@ -3489,7 +3971,7 @@ def update_exchange_rate():
         is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.form.get('is_ajax')
         if is_ajax:
             return jsonify(success=False, message='Acceso denegado.'), 403
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     try:
         currency = request.form.get('currency')
@@ -3530,7 +4012,7 @@ def update_exchange_rate():
 def edit_product_cost(product_id):
     if not is_gerente(): # Superusuario and Gerente can edit product costs
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('main.dashboard'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     product = Product.query.get_or_404(product_id)
     cost_structure = CostStructure.query.first()
@@ -4070,7 +4552,11 @@ def register_fcm_token():
 @routes_blueprint.route('/finanzas/bancos/lista')
 @login_required
 def bank_list():
-    banks = Bank.query.order_by(Bank.name).all()
+    # Bancos no están ligados a sucursales, se muestran todos.
+    # Si en el futuro se ligan, aquí iría el filtro.
+    # active_store_id = session.get('active_store_id') # type: ignore
+    # ...
+    banks = Bank.query.order_by(Bank.name).all() # Sin filtro por ahora
     return render_template('finanzas/bancos_lista.html', title='Lista de Bancos', banks=banks)
 
 @routes_blueprint.route('/finanzas/bancos/nuevo', methods=['GET', 'POST'])
@@ -4078,7 +4564,7 @@ def bank_list():
 def new_bank():
     if not is_superuser(): # Only Superuser can create new banks
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     if request.method == 'POST':
         try:
@@ -4103,7 +4589,7 @@ def new_bank():
 def bank_movements():
     if not is_administrador(): # Superusuario, Gerente, administrador can view bank movements
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     banks = Bank.query.order_by(Bank.name).all()
     return render_template('finanzas/seleccionar_cuenta.html', 
@@ -4117,7 +4603,7 @@ def bank_movements():
 def bank_movement_detail(bank_id):
     if not is_administrador(): # Superusuario, Gerente, administrador can view bank movement details
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     bank = Bank.query.get_or_404(bank_id)
     
@@ -4172,7 +4658,11 @@ def bank_movement_detail(bank_id):
 @routes_blueprint.route('/finanzas/puntos-venta/lista')
 @login_required
 def pos_list():
-    points_of_sale = PointOfSale.query.order_by(PointOfSale.name).all()
+    # POS no están ligados a sucursales, se muestran todos.
+    # Si en el futuro se ligan, aquí iría el filtro.
+    # active_store_id = session.get('active_store_id') # type: ignore
+    # ...
+    points_of_sale = PointOfSale.query.order_by(PointOfSale.name).all() # Sin filtro por ahora
     return render_template('finanzas/pos_lista.html', title='Puntos de Venta', points_of_sale=points_of_sale)
 
 @routes_blueprint.route('/finanzas/puntos-venta/nuevo', methods=['GET', 'POST'])
@@ -4180,8 +4670,9 @@ def pos_list():
 def new_pos():
     if not is_superuser(): # Only Superuser can create new POS
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
+    # Los bancos no están ligados a sucursal, se muestran todos para asociar el POS.
     banks = Bank.query.order_by(Bank.name).all()
     if request.method == 'POST':
         try:
@@ -4206,7 +4697,11 @@ def new_pos():
 @routes_blueprint.route('/finanzas/caja/lista')
 @login_required
 def cashbox_list():
-    cash_boxes = CashBox.query.order_by(CashBox.name).all()
+    active_store_id = session.get('active_store_id')
+    cash_boxes_query = CashBox.query.order_by(CashBox.name)
+    if active_store_id and active_store_id != 'all':
+        cash_boxes_query = cash_boxes_query.filter(CashBox.store_id == active_store_id)
+    cash_boxes = cash_boxes_query.all()
     return render_template('finanzas/caja_lista.html', title='Cajas', cash_boxes=cash_boxes)
 
 @routes_blueprint.route('/finanzas/caja/nueva', methods=['GET', 'POST'])
@@ -4214,14 +4709,19 @@ def cashbox_list():
 def new_cashbox():
     if not is_superuser(): # Only Superuser can create new cashboxes
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
+
+    active_store_id = session.get('active_store_id')
+    if not active_store_id or active_store_id == 'all':
+        flash('Debe seleccionar una sucursal específica para crear una caja.', 'danger')
+        return redirect(url_for('main.cashbox_list'))
 
     if request.method == 'POST':
         try:
             name = request.form.get('name')
             balance_ves = float(request.form.get('balance_ves', 0))
             balance_usd = float(request.form.get('balance_usd', 0))
-            new_box = CashBox(name=name, balance_ves=balance_ves, balance_usd=balance_usd)
+            new_box = CashBox(name=name, balance_ves=balance_ves, balance_usd=balance_usd, store_id=active_store_id)
             db.session.add(new_box)
             db.session.commit()
             flash('Caja creada exitosamente!', 'success')
@@ -4239,9 +4739,13 @@ def new_cashbox():
 def cashbox_movements():
     if not is_administrador(): # Superusuario, Gerente, administrador can view cashbox movements
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
-    cash_boxes = CashBox.query.order_by(CashBox.name).all()
+    active_store_id = session.get('active_store_id')
+    cash_boxes_query = CashBox.query.order_by(CashBox.name)
+    if active_store_id and active_store_id != 'all':
+        cash_boxes_query = cash_boxes_query.filter(CashBox.store_id == active_store_id)
+    cash_boxes = cash_boxes_query.all()
     return render_template('finanzas/seleccionar_cuenta.html', 
                            title='Movimientos de Caja',
                            accounts=cash_boxes,
@@ -4253,7 +4757,7 @@ def cashbox_movements():
 def cashbox_movement_detail(cash_box_id):
     if not is_administrador(): # Superusuario, Gerente, administrador can view cashbox movement details
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     cash_box = CashBox.query.get_or_404(cash_box_id)
     
@@ -4308,7 +4812,7 @@ def cashbox_movement_detail(cash_box_id):
 def new_financial_movement():
     if not is_administrador(): # Superusuario, Gerente, administrador can create manual financial movements
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     account_type = request.args.get('account_type')
     account_id = request.args.get('account_id', type=int)
@@ -4399,7 +4903,11 @@ def new_financial_movement():
 @routes_blueprint.route('/finanzas/caja/retiro', methods=['GET', 'POST'])
 @login_required
 def new_cash_withdrawal():
-    cash_boxes = CashBox.query.order_by(CashBox.name).all()
+    active_store_id = session.get('active_store_id')
+    cash_boxes_query = CashBox.query.order_by(CashBox.name)
+    if active_store_id and active_store_id != 'all':
+        cash_boxes_query = cash_boxes_query.filter(CashBox.store_id == active_store_id)
+    cash_boxes = cash_boxes_query.all()
 
     if request.method == 'POST':
         try:
@@ -4491,7 +4999,7 @@ def print_withdrawal_receipt(movement_id):
     company_info = CompanyInfo.query.first()
     if movement.movement_type != 'Egreso' or not movement.cash_box_id:
         flash('Movimiento no válido para generar recibo de retiro.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
     
     # New check for approval
     if movement.status != 'Aprobado':
@@ -4499,7 +5007,7 @@ def print_withdrawal_receipt(movement_id):
         if current_user.role == 'Administrador':
             return redirect(url_for('main.pending_withdrawals'))
         else:
-            return redirect(url_for('main.new_order'))
+            return redirect(request.referrer or url_for('main.dashboard'))
 
     return render_template('finanzas/imprimir_recibo_retiro.html', movement=movement, company_info=company_info)
 
@@ -4519,9 +5027,14 @@ def my_withdrawals():
 def pending_withdrawals():
     if not is_administrador(): # Superusuario, Gerente, administrador can view pending withdrawals
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
     
-    pending = ManualFinancialMovement.query.filter_by(status='Pendiente', movement_type='Egreso').order_by(ManualFinancialMovement.date.desc()).all()
+    active_store_id = session.get('active_store_id')
+    pending_query = ManualFinancialMovement.query.filter_by(status='Pendiente', movement_type='Egreso')
+    if active_store_id and active_store_id != 'all':
+        pending_query = pending_query.join(CashBox).filter(CashBox.store_id == active_store_id)
+
+    pending = pending_query.order_by(ManualFinancialMovement.date.desc()).all()
     
     return render_template('finanzas/retiros_pendientes.html', title='Retiros Pendientes de Aprobación', movements=pending)
 
@@ -4530,7 +5043,7 @@ def pending_withdrawals():
 def process_withdrawal(movement_id, action):
     if not is_administrador(): # Superusuario, Gerente, administrador can process withdrawals
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.pending_withdrawals'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     movement = ManualFinancialMovement.query.get_or_404(movement_id)
     if movement.status != 'Pendiente':
@@ -4599,13 +5112,19 @@ def daily_closing():
     """Shows the page for generating the daily closing report. Accessible by administrador, Gerente, Superusuario."""
     if not is_vendedor():
         flash('No tienes permiso para acceder a esta página.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
     date_str = request.args.get('date', get_current_time_ve().date().strftime('%Y-%m-%d'))
     try:
         report_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     except (ValueError, TypeError):
         report_date = get_current_time_ve().date()
         flash('Fecha inválida. Usando la fecha de hoy.', 'warning')
+    
+    active_store_id = session.get('active_store_id')
+    store_name = "Global"
+    if active_store_id and active_store_id != 'all':
+        store = Store.query.get(active_store_id)
+        store_name = store.name if store else "Desconocida"
 
     return render_template('finanzas/cierre_diario.html', title='Cierre Diario', report_date=report_date)
 
@@ -4615,13 +5134,19 @@ def reporte_mensual():
     """Muestra la página dedicada a generar el reporte mensual en PDF."""
     if not is_vendedor():
         flash('No tienes permiso para acceder a esta página.', 'danger')
-        return redirect(url_for('main.new_order'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     # Pasamos la fecha de hoy para que el JavaScript en la plantilla
     # pueda pre-seleccionar el mes anterior de forma fiable.
     today = get_current_time_ve().date()
+    active_store_id = session.get('active_store_id')
+    store_name = "Global"
+    if active_store_id and active_store_id != 'all':
+        store = Store.query.get(active_store_id)
+        store_name = store.name if store else "Desconocida"
+
     
-    return render_template('finanzas/reporte_mensual.html', title='Reporte Mensual', today=today)
+    return render_template('finanzas/reporte_mensual.html', title='Reporte Mensual', today=today, store_name=store_name)
 
 
 @routes_blueprint.route('/finanzas/cierre-diario/imprimir', methods=['GET'])
@@ -4629,6 +5154,7 @@ def reporte_mensual():
 def print_daily_closing_report():
     
     date_str = request.args.get('date')
+    active_store_id = session.get('active_store_id')
     try:
         report_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else get_current_time_ve().date()
     except (ValueError, TypeError):
@@ -4642,7 +5168,10 @@ def print_daily_closing_report():
 
     # --- 1. Sales Summary ---
     # Se incluyen todas las órdenes (contado, crédito, apartado) para el total de ventas y CMV.
-    orders_today = Order.query.filter(Order.date_created.between(start_of_day, end_of_day)).options(joinedload(Order.items)).all()
+    orders_today_query = Order.query.filter(Order.date_created.between(start_of_day, end_of_day)).options(joinedload(Order.items))
+    if active_store_id and active_store_id != 'all':
+        orders_today_query = orders_today_query.filter(Order.store_id == active_store_id)
+    orders_today = orders_today_query.all()
     
     sales_summary = {
         'contado': {'count': 0, 'amount_ves': 0.0, 'amount_usd': 0.0},
@@ -4684,7 +5213,10 @@ def print_daily_closing_report():
             sales_summary['apartado']['amount_usd'] += order.total_amount_usd
 
     # --- 2. Payments Summary by Method ---
-    payments_today = Payment.query.filter(Payment.date.between(start_of_day, end_of_day)).all()
+    payments_today_query = Payment.query.filter(Payment.date.between(start_of_day, end_of_day))
+    if active_store_id and active_store_id != 'all':
+        payments_today_query = payments_today_query.join(Order).filter(Order.store_id == active_store_id)
+    payments_today = payments_today_query.all()
     
     payments_summary = {
         'efectivo_ves': {'amount': 0.0},
@@ -4705,7 +5237,10 @@ def print_daily_closing_report():
                 payments_summary[payment.method]['amount'] += payment.amount_ves_equivalent # Usar el equivalente en VES para métodos en VES
 
     # --- 3. Cash Box Movements ---
-    cash_boxes = CashBox.query.all()
+    cash_boxes_query = CashBox.query
+    if active_store_id and active_store_id != 'all':
+        cash_boxes_query = cash_boxes_query.filter(CashBox.store_id == active_store_id)
+    cash_boxes = cash_boxes_query.all()
     cash_box_movements = {}
     for box in cash_boxes:
         cash_box_movements[box.name] = {
@@ -4716,14 +5251,21 @@ def print_daily_closing_report():
         }
 
     # Payments into cash boxes
-    cash_payments = Payment.query.filter(Payment.date.between(start_of_day, end_of_day), Payment.cash_box_id.isnot(None)).all()
+    cash_payments_query = Payment.query.filter(Payment.date.between(start_of_day, end_of_day), Payment.cash_box_id.isnot(None))
+    if active_store_id and active_store_id != 'all':
+        cash_payments_query = cash_payments_query.join(Order).filter(Order.store_id == active_store_id)
+    cash_payments = cash_payments_query.all()
+
     for p in cash_payments:
         if p.cash_box:
             if p.currency_paid == 'VES': cash_box_movements[p.cash_box.name]['income_ves'] += p.amount_paid
             elif p.currency_paid == 'USD': cash_box_movements[p.cash_box.name]['income_usd'] += p.amount_paid
 
     # Manual movements for cash boxes
-    manual_cash_movements = ManualFinancialMovement.query.filter(ManualFinancialMovement.date.between(start_of_day, end_of_day), ManualFinancialMovement.cash_box_id.isnot(None)).all()
+    manual_cash_movements_query = ManualFinancialMovement.query.filter(ManualFinancialMovement.date.between(start_of_day, end_of_day), ManualFinancialMovement.cash_box_id.isnot(None))
+    if active_store_id and active_store_id != 'all':
+        manual_cash_movements_query = manual_cash_movements_query.join(CashBox).filter(CashBox.store_id == active_store_id)
+    manual_cash_movements = manual_cash_movements_query.all()
     for m in manual_cash_movements:
         if m.cash_box:
             if m.currency == 'VES':
@@ -4738,17 +5280,25 @@ def print_daily_closing_report():
         data['initial_balance_usd'] = data['final_balance_usd'] - data['income_usd'] + data['expense_usd']
 
     # --- 4. Bank Account Movements ---
-    banks = Bank.query.all()
+    # Bancos no están ligados a sucursal, se muestran todos.
+    banks = Bank.query.all() 
     bank_movements = {}
     for bank in banks:
         bank_movements[bank.name] = {'income_ves': 0.0, 'expense_ves': 0.0, 'initial_balance_ves': 0.0, 'final_balance_ves': bank.balance}
 
-    bank_payments = Payment.query.filter(Payment.date.between(start_of_day, end_of_day), or_(Payment.bank_id.isnot(None), Payment.pos_id.isnot(None))).all()
+    bank_payments_query = Payment.query.filter(Payment.date.between(start_of_day, end_of_day), or_(Payment.bank_id.isnot(None), Payment.pos_id.isnot(None)))
+    if active_store_id and active_store_id != 'all':
+        bank_payments_query = bank_payments_query.join(Order).filter(Order.store_id == active_store_id)
+    bank_payments = bank_payments_query.all()
+
     for p in bank_payments:
         target_bank = p.bank or (p.pos.bank if p.pos else None)
         if target_bank and target_bank.name in bank_movements: bank_movements[target_bank.name]['income_ves'] += p.amount_ves_equivalent
 
-    manual_bank_movements = ManualFinancialMovement.query.filter(ManualFinancialMovement.date.between(start_of_day, end_of_day), ManualFinancialMovement.bank_id.isnot(None)).all()
+    manual_bank_movements_query = ManualFinancialMovement.query.filter(ManualFinancialMovement.date.between(start_of_day, end_of_day), ManualFinancialMovement.bank_id.isnot(None))
+    # No se puede filtrar por sucursal aquí porque los bancos son globales
+    manual_bank_movements = manual_bank_movements_query.all()
+
     for m in manual_bank_movements:
         if m.bank and m.currency == 'VES':
             if m.movement_type == 'Ingreso': bank_movements[m.bank.name]['income_ves'] += m.amount
@@ -4758,7 +5308,11 @@ def print_daily_closing_report():
         data['initial_balance_ves'] = data['final_balance_ves'] - data['income_ves'] + data['expense_ves']
 
     # --- 5. Cash Withdrawals ---
-    cash_withdrawals_today = ManualFinancialMovement.query.filter(ManualFinancialMovement.date.between(start_of_day, end_of_day), ManualFinancialMovement.movement_type == 'Egreso', ManualFinancialMovement.cash_box_id.isnot(None), ManualFinancialMovement.status == 'Aprobado').options(joinedload(ManualFinancialMovement.created_by_user), joinedload(ManualFinancialMovement.cash_box)).all()
+    cash_withdrawals_query = ManualFinancialMovement.query.filter(ManualFinancialMovement.date.between(start_of_day, end_of_day), ManualFinancialMovement.movement_type == 'Egreso', ManualFinancialMovement.cash_box_id.isnot(None), ManualFinancialMovement.status == 'Aprobado').options(joinedload(ManualFinancialMovement.created_by_user), joinedload(ManualFinancialMovement.cash_box))
+    if active_store_id and active_store_id != 'all':
+        cash_withdrawals_query = cash_withdrawals_query.join(CashBox).filter(CashBox.store_id == active_store_id)
+    cash_withdrawals_today = cash_withdrawals_query.all()
+
 
     return render_template('finanzas/imprimir_cierre_diario.html', title=f'Cierre Diario - {report_date.strftime("%d/%m/%Y")}', today=report_date, company_info=company_info, sales_summary=sales_summary, payments_summary=payments_summary, cash_box_movements=cash_box_movements, bank_movements=bank_movements, cash_withdrawals_today=cash_withdrawals_today, current_rate_usd=current_rate_usd, user=current_user)
 
@@ -4772,6 +5326,7 @@ def print_daily_closing_report_pdf():
     from flask import make_response
 
     date_str = request.args.get('date')
+    active_store_id = session.get('active_store_id')
     try:
         report_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else get_current_time_ve().date()
     except (ValueError, TypeError):
@@ -4788,7 +5343,11 @@ def print_daily_closing_report_pdf():
     current_rate_usd = get_cached_exchange_rate('USD') or 1.0
 
     # 1. Resumen de Ventas y CMV (Cost of Merchandise Vended)
-    orders_today = Order.query.filter(Order.date_created.between(start_dt, end_dt)).options(joinedload(Order.items).joinedload(OrderItem.product)).all()
+    orders_today_query = Order.query.filter(Order.date_created.between(start_dt, end_dt)).options(joinedload(Order.items).joinedload(OrderItem.product))
+    if active_store_id and active_store_id != 'all':
+        orders_today_query = orders_today_query.filter(Order.store_id == active_store_id)
+    orders_today = orders_today_query.all()
+
     
     # Modificación: Crear un desglose de ventas por tipo, similar al reporte de ticket.
     sales_summary = {
@@ -4846,24 +5405,42 @@ def print_daily_closing_report_pdf():
     pnl_summary['net_profit'] = pnl_summary['gross_profit'] - pnl_summary['variable_expenses'] - pnl_summary['fixed_expenses']
 
     # --- Cash Flow Summary (calculado hacia atrás para mejor rendimiento) ---
-    banks = Bank.query.all()
+    banks = Bank.query.all() # Bancos son globales
     bank_balances = []
     for bank in banks:
-        inflows_ves = (db.session.query(func.sum(Payment.amount_ves_equivalent)).filter(or_(Payment.bank_id == bank.id, Payment.pos.has(bank_id=bank.id)), Payment.date.between(start_dt, end_dt)).scalar() or 0.0) + (db.session.query(func.sum(ManualFinancialMovement.amount)).filter(ManualFinancialMovement.bank_id == bank.id, ManualFinancialMovement.date.between(start_dt, end_dt), ManualFinancialMovement.movement_type == 'Ingreso', ManualFinancialMovement.currency == 'VES', ManualFinancialMovement.status == 'Aprobado').scalar() or 0.0)
-        outflows_ves = db.session.query(func.sum(ManualFinancialMovement.amount)).filter(ManualFinancialMovement.bank_id == bank.id, ManualFinancialMovement.date.between(start_dt, end_dt), ManualFinancialMovement.movement_type == 'Egreso', ManualFinancialMovement.status == 'Aprobado', ManualFinancialMovement.currency == 'VES').scalar() or 0.0
+        inflows_query = db.session.query(func.sum(Payment.amount_ves_equivalent)).join(Order).filter(or_(Payment.bank_id == bank.id, Payment.pos.has(bank_id=bank.id)), Payment.date.between(start_dt, end_dt))
+        manual_inflows_query = db.session.query(func.sum(ManualFinancialMovement.amount)).filter(ManualFinancialMovement.bank_id == bank.id, ManualFinancialMovement.date.between(start_dt, end_dt), ManualFinancialMovement.movement_type == 'Ingreso', ManualFinancialMovement.currency == 'VES', ManualFinancialMovement.status == 'Aprobado')
+        manual_outflows_query = db.session.query(func.sum(ManualFinancialMovement.amount)).filter(ManualFinancialMovement.bank_id == bank.id, ManualFinancialMovement.date.between(start_dt, end_dt), ManualFinancialMovement.movement_type == 'Egreso', ManualFinancialMovement.status == 'Aprobado', ManualFinancialMovement.currency == 'VES')
+        
+        if active_store_id and active_store_id != 'all':
+            inflows_query = inflows_query.filter(Order.store_id == active_store_id)
+            # Movimientos manuales no se pueden filtrar por sucursal si son de banco
+
+        inflows_ves = (inflows_query.scalar() or 0.0) + (manual_inflows_query.scalar() or 0.0)
+        outflows_ves = manual_outflows_query.scalar() or 0.0
         final_balance_ves = bank.balance
         initial_balance_ves = final_balance_ves - inflows_ves + outflows_ves
         bank_balances.append({'name': bank.name, 'initial_balance_ves': initial_balance_ves, 'inflows_ves': inflows_ves, 'outflows_ves': outflows_ves, 'final_balance_ves': final_balance_ves})
 
-    cash_boxes = CashBox.query.all()
+    cash_boxes_query = CashBox.query
+    if active_store_id and active_store_id != 'all':
+        cash_boxes_query = cash_boxes_query.filter(CashBox.store_id == active_store_id)
+    cash_boxes = cash_boxes_query.all()
+
     cash_box_balances = []
     for box in cash_boxes:
-        inflows_ves = (db.session.query(func.sum(Payment.amount_paid)).filter(Payment.cash_box_id == box.id, Payment.date.between(start_dt, end_dt), Payment.currency_paid == 'VES').scalar() or 0.0) + (db.session.query(func.sum(ManualFinancialMovement.amount)).filter(ManualFinancialMovement.cash_box_id == box.id, ManualFinancialMovement.date.between(start_dt, end_dt), ManualFinancialMovement.movement_type == 'Ingreso', ManualFinancialMovement.currency == 'VES', ManualFinancialMovement.status == 'Aprobado').scalar() or 0.0)
+        inflows_ves_payments = db.session.query(func.sum(Payment.amount_paid)).join(Order).filter(Payment.cash_box_id == box.id, Payment.date.between(start_dt, end_dt), Payment.currency_paid == 'VES')
+        inflows_usd_payments = db.session.query(func.sum(Payment.amount_paid)).join(Order).filter(Payment.cash_box_id == box.id, Payment.date.between(start_dt, end_dt), Payment.currency_paid == 'USD')
+        if active_store_id and active_store_id != 'all':
+            inflows_ves_payments = inflows_ves_payments.filter(Order.store_id == active_store_id)
+            inflows_usd_payments = inflows_usd_payments.filter(Order.store_id == active_store_id)
+
+        inflows_ves = (inflows_ves_payments.scalar() or 0.0) + (db.session.query(func.sum(ManualFinancialMovement.amount)).filter(ManualFinancialMovement.cash_box_id == box.id, ManualFinancialMovement.date.between(start_dt, end_dt), ManualFinancialMovement.movement_type == 'Ingreso', ManualFinancialMovement.currency == 'VES', ManualFinancialMovement.status == 'Aprobado').scalar() or 0.0)
         outflows_ves = db.session.query(func.sum(ManualFinancialMovement.amount)).filter(ManualFinancialMovement.cash_box_id == box.id, ManualFinancialMovement.date.between(start_dt, end_dt), ManualFinancialMovement.movement_type == 'Egreso', ManualFinancialMovement.status == 'Aprobado', ManualFinancialMovement.currency == 'VES').scalar() or 0.0
         final_balance_ves = box.balance_ves
         initial_balance_ves = final_balance_ves - inflows_ves + outflows_ves
 
-        inflows_usd = (db.session.query(func.sum(Payment.amount_paid)).filter(Payment.cash_box_id == box.id, Payment.date.between(start_dt, end_dt), Payment.currency_paid == 'USD').scalar() or 0.0) + (db.session.query(func.sum(ManualFinancialMovement.amount)).filter(ManualFinancialMovement.cash_box_id == box.id, ManualFinancialMovement.date.between(start_dt, end_dt), ManualFinancialMovement.movement_type == 'Ingreso', ManualFinancialMovement.currency == 'USD', ManualFinancialMovement.status == 'Aprobado').scalar() or 0.0)
+        inflows_usd = (inflows_usd_payments.scalar() or 0.0) + (db.session.query(func.sum(ManualFinancialMovement.amount)).filter(ManualFinancialMovement.cash_box_id == box.id, ManualFinancialMovement.date.between(start_dt, end_dt), ManualFinancialMovement.movement_type == 'Ingreso', ManualFinancialMovement.currency == 'USD', ManualFinancialMovement.status == 'Aprobado').scalar() or 0.0)
         outflows_usd = db.session.query(func.sum(ManualFinancialMovement.amount)).filter(ManualFinancialMovement.cash_box_id == box.id, ManualFinancialMovement.date.between(start_dt, end_dt), ManualFinancialMovement.movement_type == 'Egreso', ManualFinancialMovement.status == 'Aprobado', ManualFinancialMovement.currency == 'USD').scalar() or 0.0
         final_balance_usd = box.balance_usd
         initial_balance_usd = final_balance_usd - inflows_usd + outflows_usd
@@ -4904,18 +5481,24 @@ def print_daily_closing_report_pdf():
 def warehouse_list():
     """Muestra la lista de almacenes y permite crear nuevos."""
     if not is_gerente():
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.dashboard'))
+        flash('Acceso denegado.', 'danger') # type: ignore
+        return redirect(request.referrer or url_for('main.dashboard'))
+
+    active_store_id = session.get('active_store_id')
+    if not active_store_id or active_store_id == 'all':
+        flash('Debe seleccionar una sucursal específica para crear un almacén.', 'danger')
+        return redirect(url_for('main.warehouse_list'))
 
     if request.method == 'POST':
         try:
             name = request.form.get('name')
             is_sellable = 'is_sellable' in request.form
+            store_id_form = int(request.form.get('store_id')) # Asegurarse de que el almacén se cree en la tienda activa
 
             if not name:
                 raise ValueError("El nombre del almacén es obligatorio.")
 
-            new_warehouse = Warehouse(name=name, is_sellable=is_sellable)
+            new_warehouse = Warehouse(name=name, is_sellable=is_sellable, store_id=store_id_form)
             db.session.add(new_warehouse)
             db.session.commit()
             flash(f'Almacén "{name}" creado exitosamente.', 'success')
@@ -4924,7 +5507,11 @@ def warehouse_list():
             flash(f'Error al crear el almacén: {e}', 'danger')
         return redirect(url_for('main.warehouse_list'))
 
-    warehouses = Warehouse.query.order_by(Warehouse.id).all()
+    warehouses_query = Warehouse.query.order_by(Warehouse.id)
+    if active_store_id and active_store_id != 'all':
+        warehouses_query = warehouses_query.filter(Warehouse.store_id == active_store_id)
+    warehouses = warehouses_query.all()
+
     return render_template('almacenes/lista.html', title='Gestión de Almacenes', warehouses=warehouses)
 
 @routes_blueprint.route('/almacenes/traslados', methods=['GET', 'POST'])
@@ -5003,7 +5590,12 @@ def warehouse_transfer():
             flash(f'Error al procesar el traslado: {e}', 'danger')
         return redirect(url_for('main.warehouse_transfer'))
 
-    warehouses = Warehouse.query.order_by(Warehouse.id).all()
+    active_store_id = session.get('active_store_id')
+    warehouses_query = Warehouse.query.order_by(Warehouse.id)
+    if active_store_id and active_store_id != 'all':
+        warehouses_query = warehouses_query.filter(Warehouse.store_id == active_store_id)
+    warehouses = warehouses_query.all()
+
     products = Product.query.order_by(Product.name).all()
     return render_template('almacenes/traslados.html', title='Traslado entre Almacenes', warehouses=warehouses, products=products)
 
@@ -5085,10 +5677,14 @@ def print_transfer_report(transfer_id):
 @login_required
 def transfer_history():
     """Muestra una lista de todos los traslados de almacén realizados."""
-
-    transfers = WarehouseTransfer.query.options(
+    active_store_id = session.get('active_store_id')
+    transfers_query = WarehouseTransfer.query.options(
         joinedload(WarehouseTransfer.user)
-    ).order_by(WarehouseTransfer.date.desc()).all()
+    )
+    if active_store_id and active_store_id != 'all':
+        # Filtrar traslados donde el almacén de origen o destino pertenezca a la sucursal activa
+        transfers_query = transfers_query.join(Movement, Movement.document_id == WarehouseTransfer.id).join(Warehouse).filter(Warehouse.store_id == active_store_id)
+    transfers = transfers_query.order_by(WarehouseTransfer.date.desc()).distinct().all()
 
     return render_template('almacenes/historial_traslados.html',
                            title='Historial de Traslados de Almacén',
@@ -5098,7 +5694,11 @@ def transfer_history():
 @login_required
 def api_warehouse_stock(warehouse_id):
     """API para obtener el stock de todos los productos en un almacén específico."""
-    
+    active_store_id = session.get('active_store_id')
+    warehouse = Warehouse.query.get_or_404(warehouse_id)
+    if active_store_id and active_store_id != 'all' and warehouse.store_id != active_store_id:
+        return jsonify({'error': 'Acceso denegado al almacén'}), 403
+
     stocks = ProductStock.query.filter_by(warehouse_id=warehouse_id).all()
     stock_map = {stock.product_id: stock.quantity for stock in stocks}
     return jsonify(stocks=stock_map)
@@ -5111,6 +5711,11 @@ def api_product_by_barcode_for_transfer(barcode):
     warehouse_id = request.args.get('warehouse_id', type=int)
     if not warehouse_id:
         return jsonify({'error': 'ID de almacén no proporcionado'}), 400
+    
+    active_store_id = session.get('active_store_id')
+    warehouse = Warehouse.query.get_or_404(warehouse_id)
+    if active_store_id and active_store_id != 'all' and warehouse.store_id != active_store_id:
+        return jsonify({'error': 'Acceso denegado al almacén'}), 403
 
     product = Product.query.filter_by(barcode=barcode).first()
     if not product:
@@ -5194,13 +5799,20 @@ def api_search_products_for_sale():
     API para buscar productos por nombre, código de barras o código de producto para la venta.
     Solo devuelve productos con stock en el almacén principal (Tienda, ID=1).
     """
+    active_store_id = session.get('active_store_id')
     query_str = request.args.get('q', '').strip()
 
     if len(query_str) < 2:
         return jsonify(products=[])
 
     search_pattern = f'%{query_str}%'
-    
+
+    # Filtrar por almacenes vendibles de la sucursal activa
+    sellable_warehouses_query = Warehouse.query.filter_by(is_sellable=True)
+    if active_store_id and active_store_id != 'all':
+        sellable_warehouses_query = sellable_warehouses_query.filter(Warehouse.store_id == active_store_id)
+    sellable_warehouse_ids = [wh.id for wh in sellable_warehouses_query.all()]
+
     # Subconsulta para obtener el stock del almacén de tienda (ID=1)
     stock_subquery = db.session.query(ProductStock.quantity).filter(ProductStock.product_id == Product.id, ProductStock.warehouse_id == 1).as_scalar()
 
@@ -5210,7 +5822,7 @@ def api_search_products_for_sale():
             Product.barcode.ilike(search_pattern),
             Product.codigo_producto.ilike(search_pattern)
         ),
-        func.coalesce(stock_subquery, 0) > 0  # Solo productos con stock en tienda
+        ProductStock.warehouse_id.in_(sellable_warehouse_ids), ProductStock.quantity > 0
     ).limit(10).all()
 
     results = [{'id': p.id, 'name': p.name, 'barcode': p.barcode, 'codigo_producto': p.codigo_producto, 'price_usd': p.price_usd, 'stock': stock} for p, stock in products_with_stock]
@@ -5222,6 +5834,294 @@ def user_manual():
     """Muestra la página del manual de usuario."""
     return render_template('manual_usuario.html')
 
+# --- Rutas de Mercadeo y Publicidad ---
+
+@routes_blueprint.route('/mercadeo/lista')
+@login_required
+def marketing_provider_list():
+    """Muestra la lista de proveedores de servicios de mercadeo."""
+    
+    providers = Provider.query.filter(Provider.provider_type.like('Servicios%')).order_by(Provider.name).all()
+    return render_template('mercadeo_publicidad/lista_proveedores.html', title='Proveedores de Servicios', providers=providers)
+
+@routes_blueprint.route('/mercadeo/servicios_prestados/lista')
+@login_required
+def marketing_service_list():
+    """Muestra un historial de todos los servicios prestados."""
+    if not is_administrador():
+        flash('Acceso denegado.', 'danger') # type: ignore
+        return redirect(request.referrer or url_for('main.dashboard'))
+
+    services = MarketingServiceOrder.query.options(
+        joinedload(MarketingServiceOrder.provider)
+    ).order_by(MarketingServiceOrder.date.desc()).all()
+
+    return render_template('mercadeo_publicidad/lista_servicios.html', title='Historial de Servicios Prestados', services=services)
+
+@routes_blueprint.route('/mercadeo/servicios_prestados/nuevo', methods=['GET', 'POST'])
+@login_required
+def new_marketing_service():
+    """Página para registrar un nuevo servicio prestado por un proveedor."""
+    if not is_administrador():
+        flash('Acceso denegado.', 'danger') # type: ignore
+        return redirect(request.referrer or url_for('main.dashboard'))
+
+    # Proveedores de servicios
+    providers = Provider.query.filter(Provider.provider_type.like('Servicios%')).order_by(Provider.name).all()
+
+    if request.method == 'POST':
+        try:
+            provider_id = request.form.get('provider_id', type=int)
+            service_description = request.form.get('service_description')
+            service_value_usd = float(request.form.get('service_value_usd', 0.0))
+            service_date_str = request.form.get('service_date')
+
+            if not all([provider_id, service_description, service_value_usd > 0, service_date_str]):
+                raise ValueError("Todos los campos son obligatorios: proveedor, fecha, descripción y valor.")
+
+            # Convertir la fecha del formulario a un objeto datetime con timezone
+            try:
+                naive_dt = datetime.strptime(service_date_str, '%Y-%m-%dT%H:%M')
+                service_date = VE_TIMEZONE.localize(naive_dt)
+            except (ValueError, TypeError):
+                current_app.logger.warning(f"Formato de fecha de servicio inválido: '{service_date_str}'. Usando fecha actual.")
+                service_date = get_current_time_ve()
+
+
+            # Generar código único para el servicio
+            today_str = get_current_time_ve().strftime('%y%m%d')
+            count_today = MarketingServiceOrder.query.filter(MarketingServiceOrder.service_code.like(f"SERV{today_str}%")).count()
+            service_code = f"SERV{today_str}-{count_today + 1}"
+
+            # Crear el registro principal del servicio
+            service_order = MarketingServiceOrder(
+                service_code=service_code,
+                provider_id=provider_id,
+                user_id=current_user.id,
+                date=service_date,
+                service_description=service_description,
+                service_value_usd=service_value_usd,
+                status='Completado' # Los servicios se registran como completados
+            )
+            db.session.add(service_order)
+            db.session.flush() # Flush to load the provider relationship
+
+            log_user_activity(
+                action="Registró Servicio Prestado",
+                details=f"Servicio {service_order.service_code} con proveedor '{service_order.provider.name}'. Valor: ${service_value_usd:.2f}",
+                target_id=service_order.id,
+                target_type="MarketingServiceOrder"
+            )
+
+            db.session.commit()
+            flash(f'Servicio {service_order.service_code} registrado exitosamente. Se ha generado un crédito de ${service_value_usd:.2f} para el proveedor.', 'success')
+            return redirect(url_for('main.marketing_service_detail', service_id=service_order.id))
+
+        except (ValueError, IntegrityError) as e:
+            db.session.rollback()
+            flash(f'Error al registrar el servicio: {e}', 'danger')
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error inesperado en nuevo intercambio: {e}", exc_info=True)
+            flash(f'Ocurrió un error inesperado: {e}', 'danger')
+
+    return render_template('mercadeo_publicidad/nuevo_servicio.html',
+                           title='Registrar Nuevo Servicio',
+                           providers=providers)
+
+@routes_blueprint.route('/mercadeo/servicios_prestados/detalle/<int:service_id>')
+@login_required
+def marketing_service_detail(service_id):
+    """Muestra los detalles de un servicio prestado específico."""
+    if not is_administrador():
+        flash('Acceso denegado.', 'danger') # type: ignore
+        return redirect(request.referrer or url_for('main.dashboard'))
+
+    service_order = MarketingServiceOrder.query.options(
+        joinedload(MarketingServiceOrder.provider),
+        joinedload(MarketingServiceOrder.user),
+    ).get_or_404(service_id)
+
+    return render_template('mercadeo_publicidad/detalle_servicio.html',
+                           title=f'Detalle de Servicio {service_order.service_code}',
+                           service_order=service_order)
+
+@login_required
+@routes_blueprint.route('/mercadeo/proveedor/detalle/<int:provider_id>', methods=['GET'])
+def marketing_provider_detail_view(provider_id):
+    """
+    Muestra un estado de cuenta para un proveedor de servicios, incluyendo
+    servicios prestados (créditos), intercambios comerciales (débitos) y pagos.
+    """
+    
+    provider = Provider.query.get_or_404(provider_id)
+    
+    # 1. Obtener todos los servicios (créditos y débitos por intercambio)
+    services = MarketingServiceOrder.query.filter_by(provider_id=provider.id).all()
+
+    # 2. Obtener todos los pagos realizados a este proveedor
+    # Asumimos que los pagos se registran con una descripción que incluye el service_code
+    service_codes = [s.service_code for s in services]
+    
+    # Construir un patrón de búsqueda para los pagos
+    search_patterns = [f"%{code}%" for code in service_codes]
+    payments = ManualFinancialMovement.query.filter(
+        ManualFinancialMovement.movement_type == 'Egreso',
+        or_(*[ManualFinancialMovement.description.like(p) for p in search_patterns])
+    ).all()
+
+    # 3. Combinar y ordenar todos los movimientos
+    all_movements = []
+    current_balance = 0.0  # Inicializar el saldo
+    for service in services:
+        all_movements.append({
+            'date': service.date,
+            'description': service.service_description,
+            'credit': service.service_value_usd if service.service_value_usd > 0 else 0,
+            'debit': -service.service_value_usd if service.service_value_usd < 0 else 0,
+            'type': 'Servicio' if service.service_value_usd > 0 else 'Intercambio'
+        })
+        current_balance += service.service_value_usd
+
+    for payment in payments:
+        all_movements.append({
+            'date': payment.date,
+            'description': payment.description,
+            'credit': 0,
+            'debit': payment.amount if payment.currency == 'USD' else (payment.amount / (get_cached_exchange_rate('USD') or 1.0)),
+            'type': 'Pago Realizado'
+        })
+        current_balance -= debit_amount_usd
+
+    # Ordenar por fecha ascendente para calcular el saldo acumulado
+    all_movements.sort(key=lambda x: x['date'])
+
+    # Calcular saldo acumulado
+    running_balance = 0
+    for movement in all_movements:
+        running_balance += movement['credit'] - movement['debit']
+        movement['balance'] = running_balance
+
+
+    # Invertir la lista para mostrar los más recientes primero en la plantilla
+    all_movements.reverse()
+
+    return render_template('mercadeo_publicidad/detalle_proveedor_servicios.html',
+                           title=f'Estado de Cuenta: {provider.name}',
+                           provider=provider,
+                           movements=all_movements,
+                           final_balance=current_balance)
+
+@routes_blueprint.route('/mercadeo/servicios_prestados/pagar', methods=['GET', 'POST'])
+@login_required
+def pay_marketing_service():
+    """Página para registrar el pago de un servicio prestado a un proveedor."""
+    if not is_administrador():
+        flash('Acceso denegado.', 'danger') # type: ignore
+        return redirect(request.referrer or url_for('main.dashboard'))
+
+    preselected_service_id = request.args.get('service_id', type=int)
+
+    # Obtener servicios pendientes de pago
+    pending_services = MarketingServiceOrder.query.filter(
+        MarketingServiceOrder.status.in_(['Completado']),
+        MarketingServiceOrder.service_value_usd > 0
+    ).options(joinedload(MarketingServiceOrder.provider)).order_by(MarketingServiceOrder.date.desc()).all()
+
+    active_store_id = session.get('active_store_id')
+    
+    # Convert bank objects to a list of dictionaries to be JSON serializable
+    banks_query = Bank.query.order_by(Bank.name).all()
+    banks = [{'id': b.id, 'name': b.name, 'currency': b.currency, 'balance': b.balance} for b in banks_query]
+
+    cash_boxes_query = CashBox.query.order_by(CashBox.name)
+    if active_store_id and active_store_id != 'all':
+        cash_boxes_query = cash_boxes_query.filter(CashBox.store_id == active_store_id)
+    
+    # Convert cashbox objects to a list of dictionaries
+    cash_boxes_query_result = cash_boxes_query.all()
+    cash_boxes = [{'id': c.id, 'name': c.name, 'balance_ves': c.balance_ves, 'balance_usd': c.balance_usd} for c in cash_boxes_query_result]
+
+    if request.method == 'POST':
+        try:
+            service_id = request.form.get('service_id', type=int)
+            payment_method = request.form.get('payment_method')
+            account_id = request.form.get('account_id', type=int)
+            payment_date_str = request.form.get('payment_date')
+
+            service_to_pay = MarketingServiceOrder.query.get_or_404(service_id)
+
+            if not all([service_id, payment_method, account_id, payment_date_str]):
+                raise ValueError("Todos los campos son obligatorios.")
+
+            payment_date = VE_TIMEZONE.localize(datetime.strptime(payment_date_str, '%Y-%m-%dT%H:%M'))
+
+            # Crear el movimiento financiero de egreso
+            amount_to_pay = service_to_pay.service_value_usd
+            currency = 'USD' if payment_method == 'cash_usd' else 'VES'
+            
+            if currency == 'VES':
+                current_rate = get_cached_exchange_rate('USD') or 1.0
+                amount_to_pay = service_to_pay.service_value_usd * current_rate
+
+            refund_movement = ManualFinancialMovement(
+                description=f"Pago por servicio prestado: {service_to_pay.service_code} - {service_to_pay.provider.name}",
+                amount=amount_to_pay,
+                currency=currency,
+                movement_type='Egreso',
+                status='Aprobado',
+                created_by_user_id=current_user.id,
+                approved_by_user_id=current_user.id,
+                date=payment_date, # type: ignore
+                provider_id=service_to_pay.provider_id, # Asociar el pago con el proveedor
+                date_approved=get_current_time_ve()
+            )
+
+            # Asociar a cuenta y actualizar saldo
+            if payment_method == 'bank':
+                refund_movement.bank_id = account_id
+                bank = Bank.query.get(account_id)
+                if bank: bank.balance -= amount_to_pay
+            else: # cash_usd o cash_ves
+                refund_movement.cash_box_id = account_id
+                cash_box = CashBox.query.get(account_id)
+                if cash_box:
+                    if currency == 'VES': cash_box.balance_ves -= amount_to_pay
+                    else: cash_box.balance_usd -= amount_to_pay
+
+            # Actualizar estado del servicio
+            service_to_pay.status = 'Pagado'
+
+            db.session.add(refund_movement)
+            db.session.commit()
+            flash(f'Pago del servicio {service_to_pay.service_code} registrado exitosamente.', 'success')
+            return redirect(url_for('main.marketing_service_list'))
+
+        except (ValueError, IntegrityError) as e:
+            db.session.rollback()
+            flash(f'Error al registrar el pago: {e}', 'danger')
+
+    return render_template('mercadeo_publicidad/pagar_servicio.html',
+                           title='Pagar Servicio Prestado',
+                           pending_services=pending_services,
+                           banks=banks, cash_boxes=cash_boxes,
+                           preselected_service_id=preselected_service_id)
+
+@routes_blueprint.route('/api/client_provider_info/<int:client_id>')
+@login_required
+def api_client_provider_info(client_id):
+    """API endpoint to get the associated service provider for a client."""
+    client = Client.query.get(client_id)
+    if client and client.associated_provider:
+        provider = client.associated_provider
+        return jsonify({
+            'has_provider': True,
+            'provider_id': provider.id,
+            'provider_name': provider.name,
+            'balance_usd': provider.get_balance_usd()
+        })
+    return jsonify({'has_provider': False})
+
 # --- Rutas de Gestión de Usuarios (Solo Superusuario) ---
 
 @routes_blueprint.route('/configuracion/usuarios', methods=['GET'])
@@ -5229,13 +6129,17 @@ def user_manual():
 def user_management():
     if not is_superuser():
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.dashboard'))
-    
+        return redirect(request.referrer or url_for('main.dashboard'))
+
     show_inactive = request.args.get('show_inactive') == 'true'
 
     # Query users except the current superuser
-    query = User.query.filter(User.id != current_user.id)
+    query = User.query.options(subqueryload(User.stores)).filter(User.id != current_user.id)
 
+    active_store_id = session.get('active_store_id')
+    if active_store_id and active_store_id != 'all':
+        query = query.join(User.stores).filter(Store.id == active_store_id)
+    
     if not show_inactive:
         query = query.filter(User.is_active_status == True)
     
@@ -5248,15 +6152,19 @@ def user_management():
 def pending_dispatches():
     """Muestra las entregas especiales pendientes de aprobación."""
     if not is_gerente():
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.dashboard'))
+        flash('Acceso denegado.', 'danger') # type: ignore
+        return redirect(request.referrer or url_for('main.dashboard'))
 
-    pending_orders = Order.query.filter_by(
+    active_store_id = session.get('active_store_id')
+    pending_orders_query = Order.query.filter_by(
         status='Pendiente de Aprobación',
         order_type='special_dispatch'
     ).options(
         joinedload(Order.client)
-    ).order_by(Order.date_created.desc()).all()
+    )
+    if active_store_id and active_store_id != 'all':
+        pending_orders_query = pending_orders_query.filter(Order.store_id == active_store_id)
+    pending_orders = pending_orders_query.order_by(Order.date_created.desc()).all()
 
     return render_template('configuracion/entregas_pendientes.html',
                            title='Entregas Especiales por Aprobar',
@@ -5267,10 +6175,15 @@ def pending_dispatches():
 def process_dispatch(order_id, action):
     """Procesa la aprobación o rechazo de una entrega especial."""
     if not is_gerente():
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.dashboard'))
+        flash('Acceso denegado.', 'danger') # type: ignore
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     order = Order.query.get_or_404(order_id)
+    active_store_id = session.get('active_store_id')
+    if active_store_id and active_store_id != 'all' and order.store_id != active_store_id:
+        flash('No tienes permiso para procesar esta entrega de otra sucursal.', 'danger')
+        return redirect(url_for('main.pending_dispatches'))
+
     if order.status != 'Pendiente de Aprobación':
         flash('Esta entrega ya ha sido procesada.', 'warning')
         return redirect(url_for('main.pending_dispatches'))
@@ -5279,7 +6192,12 @@ def process_dispatch(order_id, action):
         if action == 'approve':
             # 1. Check stock and deduct from inventory
             for item in order.items:
-                stock_entry = ProductStock.query.filter_by(product_id=item.product_id, warehouse_id=1).first()
+                # Deducir del almacén vendible de la sucursal de la orden
+                sellable_warehouse = Warehouse.query.filter_by(store_id=order.store_id, is_sellable=True).first()
+                if not sellable_warehouse:
+                    raise ValueError(f"No hay un almacén de venta configurado para la sucursal de la orden.")
+
+                stock_entry = ProductStock.query.filter_by(product_id=item.product_id, warehouse_id=sellable_warehouse.id).first()
                 if not stock_entry or stock_entry.quantity < item.quantity:
                     raise ValueError(f"Stock insuficiente para '{item.product.name}' para aprobar la entrega.")
                 
@@ -5287,7 +6205,7 @@ def process_dispatch(order_id, action):
 
                 # 2. Create inventory movement
                 movement = Movement(
-                    product_id=item.product_id, type='Salida', warehouse_id=1,
+                    product_id=item.product_id, type='Salida', warehouse_id=sellable_warehouse.id,
                     quantity=item.quantity, document_id=order.id, document_type='Entrega Especial',
                     description=f"Aprobación de entrega para cliente #{order.client_id}",
                     related_party_id=order.client_id, related_party_type='Cliente', date=get_current_time_ve()
@@ -5317,22 +6235,30 @@ def process_dispatch(order_id, action):
 def add_user():
     if not is_superuser():
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.user_management'))
+        return redirect(request.referrer or url_for('main.dashboard'))
     
+    stores = Store.query.all()
     username = request.form.get('username')
     password = request.form.get('password')
     role = request.form.get('role')
+    store_ids = request.form.getlist('stores')
 
     if not all([username, password, role]):
         flash('Todos los campos son requeridos.', 'danger')
-        return redirect(url_for('main.user_management'))
+        return render_template('configuracion/usuarios.html', users=User.query.all(), stores=stores)
 
     if User.query.filter_by(username=username).first():
         flash(f'El nombre de usuario "{username}" ya existe.', 'danger')
-        return redirect(url_for('main.user_management'))
+        return render_template('configuracion/usuarios.html', users=User.query.all(), stores=stores)
 
     hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
     new_user = User(username=username, password=hashed_password, role=role)
+    
+    # Asignar sucursales
+    if store_ids:
+        user_stores = Store.query.filter(Store.id.in_(store_ids)).all()
+        new_user.stores = user_stores
+
     db.session.add(new_user)
     db.session.commit()
 
@@ -5344,15 +6270,23 @@ def add_user():
 def edit_user(user_id):
     if not is_superuser():
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.user_management'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
+    stores = Store.query.all()
     user_to_edit = User.query.get_or_404(user_id)
     
     user_to_edit.role = request.form.get('role')
     new_password = request.form.get('password')
+    store_ids = request.form.getlist('stores')
 
     if new_password:
         user_to_edit.password = bcrypt.generate_password_hash(new_password).decode('utf-8')
+    
+    # Actualizar sucursales
+    if store_ids:
+        user_stores = Store.query.filter(Store.id.in_(store_ids)).all()
+        user_to_edit.stores = user_stores
+
     
     db.session.commit()
     flash(f'Usuario "{user_to_edit.username}" actualizado exitosamente.', 'success')
@@ -5364,7 +6298,7 @@ def toggle_user_status(user_id):
     """Toggles the is_active status of a user."""
     if not is_superuser():
         flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.user_management'))
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     user_to_toggle = User.query.get_or_404(user_id)
     
@@ -5382,13 +6316,17 @@ def toggle_user_status(user_id):
 def return_list():
     """Displays a history of all returns and cancellations."""
     if not is_administrador():
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.dashboard'))
+        flash('Acceso denegado.', 'danger') # type: ignore
+        return redirect(request.referrer or url_for('main.dashboard'))
 
-    returns = OrderReturn.query.options(
+    active_store_id = session.get('active_store_id')
+    returns_query = OrderReturn.query.options(
         joinedload(OrderReturn.user),
         joinedload(OrderReturn.order)
-    ).order_by(OrderReturn.date.desc()).all()
+    )
+    if active_store_id and active_store_id != 'all':
+        returns_query = returns_query.join(Order).filter(Order.store_id == active_store_id)
+    returns = returns_query.order_by(OrderReturn.date.desc()).all()
 
     return render_template('ordenes/lista_devoluciones.html', title='Historial de Devoluciones', returns=returns)
 
@@ -5397,8 +6335,8 @@ def return_list():
 def return_detail(return_id):
     """Shows the details of a specific return."""
     if not is_administrador():
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.dashboard'))
+        flash('Acceso denegado.', 'danger') # type: ignore
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     # Usamos subqueryload para cargar los items y sus productos relacionados de forma eficiente.
     # Es una alternativa a joinedload que puede ser más performante para colecciones.
@@ -5416,21 +6354,30 @@ def return_order():
     Handles the cancellation (anulación) or return (devolución) of products from a sales order.
     """
     if not is_administrador():
-        flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(url_for('main.dashboard'))
+        flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger') # type: ignore
+        return redirect(request.referrer or url_for('main.dashboard'))
 
     order = None
+    active_store_id = session.get('active_store_id')
     banks = Bank.query.order_by(Bank.name).all()
-    cash_boxes = CashBox.query.order_by(CashBox.name).all()
-
+    
+    cash_boxes_query = CashBox.query.order_by(CashBox.name)
+    if active_store_id and active_store_id != 'all':
+        cash_boxes_query = cash_boxes_query.filter(CashBox.store_id == active_store_id)
+    cash_boxes = cash_boxes_query.all()
 
     if request.method == 'POST':
         order_id = request.form.get('order_id')
+        order_store_id = Order.query.with_entities(Order.store_id).filter_by(id=order_id).scalar()
         action = request.form.get('action')
         order = Order.query.get_or_404(order_id)
 
         if order.status in ['Anulada']:
             flash(f'La orden #{order.id} ya ha sido procesada para anulación o devolución.', 'warning')
+            return redirect(url_for('main.return_order'))
+
+        if active_store_id and active_store_id != 'all' and order_store_id != active_store_id:
+            flash('No puedes procesar una devolución para una orden de otra sucursal.', 'danger')
             return redirect(url_for('main.return_order'))
 
         try:
@@ -5457,13 +6404,17 @@ def return_order():
                 for item in order.items:
                     # Create return item record
                     OrderReturnItem.create(order_return_id=return_record.id, order_item_id=item.id, product_id=item.product_id, quantity=item.quantity, price_at_return_ves=item.price)
-                    warehouse_id_origen = 1 # Las ventas siempre salen de la tienda principal
+                    
+                    # Devolver al almacén vendible de la sucursal de la orden
+                    sellable_warehouse = Warehouse.query.filter_by(store_id=order.store_id, is_sellable=True).first()
+                    if not sellable_warehouse:
+                        raise ValueError(f"No hay un almacén de venta configurado para la sucursal de la orden.")
 
-                    stock_entry = ProductStock.query.filter_by(product_id=item.product_id, warehouse_id=warehouse_id_origen).first()
+                    stock_entry = ProductStock.query.filter_by(product_id=item.product_id, warehouse_id=sellable_warehouse.id).first()
                     if stock_entry:
                         stock_entry.quantity += item.quantity
                     else:
-                        stock_entry = ProductStock(product_id=item.product_id, warehouse_id=warehouse_id_origen, quantity=item.quantity)
+                        stock_entry = ProductStock(product_id=item.product_id, warehouse_id=sellable_warehouse.id, quantity=item.quantity)
                         db.session.add(stock_entry)
                     
                     # Create OrderReturnItem
@@ -5478,7 +6429,7 @@ def return_order():
 
                     # 2. Crear movimiento de inventario de entrada
                     movement = Movement(
-                        product_id=item.product_id, type='Entrada', warehouse_id=warehouse_id_origen,
+                        product_id=item.product_id, type='Entrada', warehouse_id=sellable_warehouse.id,
                         quantity=item.quantity, document_id=order.id, document_type='Anulación de Venta',
                         description=f"Anulación total de la orden de venta #{order.id}",
                         related_party_id=order.client_id, related_party_type='Cliente'
@@ -5577,13 +6528,17 @@ def return_order():
                     if quantity_to_return <= 0: continue
                     order_item = OrderItem.query.get(item_id)
                     warehouse_id_origen = 1 # Las ventas siempre salen de la tienda principal
+                    
+                    # Devolver al almacén vendible de la sucursal de la orden
+                    sellable_warehouse = Warehouse.query.filter_by(store_id=order.store_id, is_sellable=True).first()
+                    if not sellable_warehouse:
+                        raise ValueError(f"No hay un almacén de venta configurado para la sucursal de la orden.")
 
-
-                    stock_entry = ProductStock.query.filter_by(product_id=order_item.product_id, warehouse_id=warehouse_id_origen).first()
+                    stock_entry = ProductStock.query.filter_by(product_id=order_item.product_id, warehouse_id=sellable_warehouse.id).first()
                     if stock_entry:
                         stock_entry.quantity += quantity_to_return
                     else:
-                        stock_entry = ProductStock(product_id=order_item.product_id, warehouse_id=warehouse_id_origen, quantity=quantity_to_return)
+                        stock_entry = ProductStock(product_id=order_item.product_id, warehouse_id=sellable_warehouse.id, quantity=quantity_to_return)
                         db.session.add(stock_entry)
                     
                     # Update the returned quantity on the original order item
@@ -5597,7 +6552,7 @@ def return_order():
                     db.session.add(return_item_record)
 
                     movement = Movement(
-                        product_id=order_item.product_id, type='Entrada', warehouse_id=warehouse_id_origen,
+                        product_id=order_item.product_id, type='Entrada', warehouse_id=sellable_warehouse.id,
                         quantity=quantity_to_return, document_id=order.id, document_type='Devolución de Venta',
                         description=f"Devolución de la orden #{order.id}. Motivo: {return_reason}",
                         related_party_id=order.client_id, related_party_type='Cliente'

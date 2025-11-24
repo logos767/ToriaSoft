@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-4xl">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-file-pdf mr-2"></i>{{ title }}</h1>
+    </div>
+
+    <!-- Filtros para el Reporte -->
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <form method="GET" action="{{ url_for('main.inventory_stock_report_pdf') }}" target="_blank">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Filtro por Almacén -->
+                <div>
+                    <label for="warehouse_id" class="block text-sm font-medium text-gray-700">Almacén</label>
+                    <select name="warehouse_id" id="warehouse_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        <option value="all">Todos los Almacenes (Reporte Separado)</option>
+                        {% for warehouse in warehouses %}
+                        <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Filtro por Grupo de Producto -->
+                <div>
+                    <label for="group_filter" class="block text-sm font-medium text-gray-700">Grupo de Producto</label>
+                    <select name="group_filter" id="group_filter" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        <option value="">Todos los Grupos</option>
+                        {% for group in product_groups %}
+                        <option value="{{ group }}">{{ group }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Checkbox para mostrar sin existencia -->
+                <div class="flex items-center pt-4">
+                    <input id="show_zero_stock" name="show_zero_stock" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                    <label for="show_zero_stock" class="ml-2 block text-sm text-gray-900">Incluir productos sin existencia</label>
+                </div>
+            </div>
+            <div class="mt-6">
+                <button type="submit" class="w-full bg-red-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-600 transition-colors text-center">
+                    <i class="fas fa-cogs mr-2"></i>Generar Reporte PDF
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

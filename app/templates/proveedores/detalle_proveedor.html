@@ -50,6 +50,27 @@
             {% endif %}
         </div>
 
+        <!-- Sección de Estado de Cuenta y Cliente Asociado -->
+        {% if provider.provider_type == 'Servicios' %}
+        <div class="border-b pb-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Estado de Cuenta de Servicios</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                <div>
+                    <strong class="text-gray-500">Saldo a Favor por Servicios Prestados:</strong>
+                    <p class="text-lg font-bold {% if provider_balance_usd > 0 %}text-green-600{% else %}text-gray-800{% endif %}">{{ currency_symbol }} {{ "%.2f"|format(provider_balance_usd) }}</p>
+                </div>
+                <div>
+                    <strong class="text-gray-500">Cliente Asociado:</strong>
+                    {% if associated_client %}
+                        <p class="text-gray-800"><a href="{{ url_for('main.client_detail', client_id=associated_client.id) }}" class="text-blue-600 hover:underline">{{ associated_client.name }}</a></p>
+                    {% else %}
+                        <p class="text-gray-500">Este proveedor no está asociado a ninguna ficha de cliente.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Sección de Detalles del Negocio -->
         <div>
             <h2 class="text-xl font-semibold text-gray-700 mb-4">Detalles Adicionales</h2>
@@ -70,7 +91,7 @@
         </div>
 
         <div class="flex items-center justify-end mt-8 border-t pt-6">
-            <a href="#" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
+            <a href="{{ url_for('main.edit_provider', provider_id=provider.id) }}" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
                 <i class="fas fa-edit mr-2"></i>Editar Proveedor
             </a>
         </div>

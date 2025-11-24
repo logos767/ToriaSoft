@@ -25,6 +25,16 @@
                 <label for="address" class="block text-gray-700 font-bold mb-2">Dirección (opcional)</label>
                 <input type="text" id="address" name="address" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
+            <div class="mb-6">
+                <label for="provider_id" class="block text-gray-700 font-bold mb-2">Asociar a Proveedor de Servicios (opcional)</label>
+                <select id="provider_id" name="provider_id" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">-- Ninguno --</option>
+                    {% for provider in service_providers %}
+                    <option value="{{ provider.id }}">{{ provider.name }}</option>
+                    {% endfor %}
+                </select>
+                <p class="text-xs text-gray-500 mt-1">Asocia este cliente a un proveedor de servicios para usar su saldo en intercambios comerciales.</p>
+            </div>
             <div class="flex items-center justify-end">
                 <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
                     <i class="fas fa-save mr-2"></i>Guardar Cliente

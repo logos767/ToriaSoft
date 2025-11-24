@@ -54,6 +54,23 @@
                 {% endif %}
             </div>
 
+            <!-- Selector de Sucursal -->
+            {% if current_user.is_authenticated and current_user.stores|length > 1 %}
+            <div class="px-4 py-2 text-center bg-gray-700 rounded-lg mx-2 mt-4 flex-shrink-0 sidebar-text">
+                <p class="text-xs font-semibold uppercase">Sucursal Activa</p>
+                <form action="{{ url_for('main.set_active_store') }}" method="POST" class="mt-2" id="store-form">
+                    <select name="store_id" onchange="document.getElementById('store-form').submit()" class="bg-gray-800 text-white text-sm rounded p-1 w-full text-center appearance-none cursor-pointer">
+                        {% if is_administrador() %}
+                        <option value="all" {% if session.get('active_store_id') == 'all' %}selected{% endif %}>-- Todas (Global) --</option>
+                        {% endif %}
+                        {% for store in current_user.stores %}
+                        <option value="{{ store.id }}" {% if session.get('active_store_id') == store.id %}selected{% endif %}>{{ store.name }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+            {% endif %}
+
             <!-- Navegación -->
             <nav class="mt-6 flex-grow overflow-y-auto space-y-2">
                 {% if is_administrador() %}
@@ -210,9 +227,12 @@
                         </a>
                         {% if is_administrador() %}
                         <a href="{{ url_for('main.adjustment_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
-                            <i class="fas fa-clipboard-check mr-2"></i><span class="sidebar-text">Reporte de Inventario</span>
+                            <i class="fas fa-clipboard-check mr-2"></i><span class="sidebar-text">Ajuste de Inventario</span>
                         </a>
                         {% endif %}
+                        <a href="{{ url_for('main.inventory_physical_count_report_page') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-pallet mr-2"></i><span class="sidebar-text">Reporte de Inventario</span>
+                        </a>
                         {% if is_gerente() %}
                         <a href="{{ url_for('main.estadisticas') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-chart-line mr-2"></i><span class="sidebar-text">Estadísticas</span>
@@ -220,7 +240,17 @@
                         {% endif %}
                     </div>
                 </details>
-
+                <details class="group">
+                    <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
+                        <i class="fas fa-bullhorn mr-2"></i><span class="sidebar-text">Marketing</span>
+                    </summary>
+                    <div class="ml-4 mt-2 space-y-1">
+                        <a href="{{ url_for('main.marketing_provider_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-hands-helping mr-2"></i><span class="sidebar-text">Proveedores de Servicios</span>
+                        </a>
+                        
+                    </div>
+                </details>
                 {% if is_gerente() %}
                 <details class="group">
                     <summary class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white cursor-pointer list-none">
@@ -230,11 +260,9 @@
                         <a href="{{ url_for('main.cost_list') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-list mr-2"></i><span class="sidebar-text">Resumen</span>
                         </a>
-                        {% if is_superuser() %}
                         <a href="{{ url_for('main.cost_structure_config') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-cogs mr-2"></i><span class="sidebar-text">Configuración de Costos</span>
                         </a>
-                        {% endif %}
                     </div>
                 </details>
                 {% endif %}
@@ -249,6 +277,9 @@
                         </a>
                         <a href="{{ url_for('main.user_management') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-users-cog mr-2"></i><span class="sidebar-text">Usuarios</span>
+                        </a>
+                        <a href="{{ url_for('main.user_activity_log') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-history mr-2"></i><span class="sidebar-text">Actividad de Usuarios</span>
                         </a>
                     </div>
                 </details>
@@ -281,6 +312,14 @@
                                 <span id="notification-badge" class="absolute -top-1 -right-1 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">{{ unread_notification_count }}</span>
                                 {% endif %}
                             </button>
+                            <!-- Notifications Dropdown (Moved here for correct positioning) -->
+                            <div id="notifications-dropdown" class="hidden absolute top-full right-0 mt-2 w-80 bg-white rounded-lg shadow-xl overflow-hidden z-20">
+                                <div class="py-2 px-4 text-sm font-semibold text-gray-700 border-b">Notificaciones</div>
+                                <div id="notifications-list" class="divide-y divide-gray-100 max-h-80 overflow-y-auto">
+                                    {% for notification in unread_notifications %}<a href="{{ notification.link or '#' }}" class="block py-2 px-4 text-sm text-gray-800 hover:bg-gray-100"><p class="font-semibold">{{ notification.message }}</p><p class="text-xs text-gray-500">{{ notification.created_at|ve_datetime('%d/%m/%Y %H:%M') }}</p></a>{% else %}<p class="py-4 px-4 text-sm text-center text-gray-500">No tienes notificaciones nuevas.</p>{% endfor %}
+                                </div>
+                                <a href="{{ url_for('main.notification_list') }}" class="block bg-gray-50 text-center py-2 px-4 text-sm font-semibold text-blue-600 hover:bg-gray-100 border-t">Ver todas las notificaciones</a>
+                            </div>
                         </div>
                         {% endif %}
                         <!-- Nuevo Menú de Usuario con Avatar -->
@@ -303,6 +342,11 @@
                                     <a href="{{ url_for('main.user_profile') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                                         <i class="fas fa-edit w-6 text-center mr-2"></i>Actualizar Datos
                                     </a>
+                                    {% if is_superuser() %}
+                                    <a href="{{ url_for('main.user_activity_log') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                        <i class="fas fa-history w-6 text-center mr-2"></i>Actividad de Usuarios
+                                    </a>
+                                    {% endif %}
                                     <li>
                                         <a href="{{ url_for('main.user_manual') }}" target="_blank" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                                             <i class="fas fa-book w-4 mr-2"></i>Manual de Usuario
@@ -349,15 +393,6 @@
                                 </a>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Notifications Dropdown (Shared by both menus) -->
-                    <div id="notifications-dropdown" class="hidden absolute top-14 right-0 mt-2 w-80 bg-white rounded-lg shadow-xl overflow-hidden z-20">
-                        <div class="py-2 px-4 text-sm font-semibold text-gray-700 border-b">Notificaciones</div>
-                        <div id="notifications-list" class="divide-y divide-gray-100 max-h-80 overflow-y-auto">
-                            {% for notification in unread_notifications %}<a href="{{ notification.link or '#' }}" class="block py-2 px-4 text-sm text-gray-800 hover:bg-gray-100"><p class="font-semibold">{{ notification.message }}</p><p class="text-xs text-gray-500">{{ notification.created_at|ve_datetime('%d/%m/%Y %H:%M') }}</p></a>{% else %}<p class="py-4 px-4 text-sm text-center text-gray-500">No tienes notificaciones nuevas.</p>{% endfor %}
-                        </div>
-                        <a href="{{ url_for('main.notification_list') }}" class="block bg-gray-50 text-center py-2 px-4 text-sm font-semibold text-blue-600 hover:bg-gray-100 border-t">Ver todas las notificaciones</a>
                     </div>
                 {% endif %}
             </header>

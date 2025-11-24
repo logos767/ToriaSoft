@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-4xl">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-user-edit mr-2"></i>{{ title }}</h1>
+        <a href="{{ url_for('main.client_detail', client_id=client.id) }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver al Detalle</a>
+    </div>
+
+    <div class="bg-white p-8 rounded-lg shadow-md">
+        <form method="POST" action="{{ url_for('main.edit_client', client_id=client.id) }}">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Nombre del Cliente -->
+                <div class="md:col-span-2">
+                    <label for="name" class="block text-sm font-medium text-gray-700">Nombre Completo o Razón Social</label>
+                    <input type="text" name="name" id="name" value="{{ client.name }}" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                </div>
+
+                <!-- Cédula/RIF -->
+                <div>
+                    <label for="cedula_rif" class="block text-sm font-medium text-gray-700">Cédula / RIF</label>
+                    <input type="text" name="cedula_rif" id="cedula_rif" value="{{ client.cedula_rif or '' }}" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                </div>
+
+                <!-- Email -->
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700">Correo Electrónico</label>
+                    <input type="email" name="email" id="email" value="{{ client.email or '' }}" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                </div>
+
+                <!-- Teléfono -->
+                <div>
+                    <label for="phone" class="block text-sm font-medium text-gray-700">Teléfono</label>
+                    <input type="tel" name="phone" id="phone" value="{{ client.phone or '' }}" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                </div>
+
+                <!-- Dirección -->
+                <div class="md:col-span-2">
+                    <label for="address" class="block text-sm font-medium text-gray-700">Dirección</label>
+                    <textarea name="address" id="address" rows="3" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">{{ client.address or '' }}</textarea>
+                </div>
+
+                <!-- Asociar a Proveedor -->
+                <div class="md:col-span-2">
+                    <label for="provider_id" class="block text-sm font-medium text-gray-700">Asociar a Proveedor de Servicios (opcional)</label>
+                    <select id="provider_id" name="provider_id" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        <option value="">-- Ninguno --</option>
+                        {% for provider in service_providers %}
+                        <option value="{{ provider.id }}" {% if client.provider_id == provider.id %}selected{% endif %}>{{ provider.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end">
+                <a href="{{ url_for('main.client_detail', client_id=client.id) }}" class="bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors mr-4">Cancelar</a>
+                <button type="submit" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
+                    <i class="fas fa-save mr-2"></i>Guardar Cambios
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mx-auto p-2 max-w-full">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-4">
+        <div class="flex items-center flex-shrink-0">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-800 mr-2"><i class="fas fa-truck-loading mr-2"></i>{{ title }}</h1>
+            <!-- Botones de cambio de vista -->
+            <div class="flex items-center">
+                <button id="list-view-btn" class="p-2 rounded-lg bg-blue-500 text-white m-1" title="Vista de Lista">
+                    <i class="fas fa-list"></i>
+                </button>
+                <button id="grid-view-btn" class="p-2 rounded-lg bg-gray-300 text-gray-700 m-1" title="Vista de Cuadrícula">
+                    <i class="fas fa-th-large"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Filtros y Búsqueda -->
+        <div class="bg-white p-2 rounded-lg shadow-md w-full">
+            <form method="GET" action="{{ url_for('main.marketing_provider_list') }}">
+                <div class="flex flex-wrap items-center gap-2">
+                    <input type="text" name="search" id="search" value="{{ filters.search if filters is defined else '' }}" placeholder="Buscar por nombre, RIF, contacto..." class="flex-grow min-w-0 w-1/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    
+                    <button type="submit" class="bg-blue-500 text-white font-bold py-2 px-3 rounded-lg hover:bg-blue-600 transition-colors" title="Filtrar"><i class="fas fa-filter"></i></button>
+                    <a href="{{ url_for('main.marketing_provider_list') }}" class="bg-gray-500 text-white font-bold py-2 px-3 rounded-lg hover:bg-gray-600 transition-colors" title="Limpiar Filtros"><i class="fas fa-eraser"></i></a>
+                    
+                    <a href="{{ url_for('main.new_provider') }}" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors ml-auto text-sm whitespace-nowrap">
+                        <i class="fas fa-plus mr-2"></i>Nuevo Proveedor
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Vista de Lista (Tabla) -->
+    <div id="list-view-container">
+        <div class="bg-white p-2 rounded-lg shadow-md">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Proveedor</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">RIF/Cédula</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contacto</th>
+                            <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for provider in providers %}
+                        <tr>
+                            <td class="px-4 py-2 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">{{ provider.name }}</div>
+                            </td>
+                            <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{{ provider.tax_id or 'N/A' }}</td>
+                            <td class="px-4 py-2 whitespace-nowrap">
+                                <div class="text-sm text-gray-900">{{ provider.phone or 'N/A' }}</div>
+                                <div class="text-sm text-gray-500">{{ provider.email or 'N/A' }}</div>
+                            </td>
+                            <td class="px-4 py-2 whitespace-nowrap text-center text-sm font-medium">
+                                <a href="{{ url_for('main.marketing_provider_detail_view', provider_id=provider.id) }}" title="Ver Estado de Cuenta" class="text-indigo-600 hover:text-indigo-900 mx-1"><i class="fas fa-file-invoice-dollar"></i></a>
+                                <a href="{{ url_for('main.edit_provider', provider_id=provider.id) }}" title="Editar Proveedor" class="text-yellow-600 hover:text-yellow-900 mx-1"><i class="fas fa-pencil-alt"></i></a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="px-4 py-2 text-center text-gray-500">No se encontraron proveedores.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vista de Cuadrícula (Grid) -->
+    <div id="grid-view-container" class="hidden">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {% for provider in providers %}
+            <div class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 flex flex-col">
+                <div class="p-4 flex-grow">
+                    <h5 class="text-lg font-bold text-gray-800 truncate" title="{{ provider.name }}">{{ provider.name }}</h5>
+                    <p class="text-sm text-gray-600 mb-2"><b>RIF/Cédula:</b> {{ provider.tax_id or 'N/A' }}</p>
+                    <p class="text-sm text-gray-600"><b>Teléfono:</b> {{ provider.phone or 'N/A' }}</p>
+                    <p class="text-sm text-gray-600"><b>Email:</b> {{ provider.email or 'N/A' }}</p>
+                </div>
+                <div class="bg-gray-50 p-3 border-t flex justify-around items-center">
+                    <a href="{{ url_for('main.marketing_provider_detail_view', provider_id=provider.id) }}" title="Ver Estado de Cuenta" class="text-indigo-600 hover:text-indigo-900 mx-1"><i class="fas fa-file-invoice-dollar"></i> Ver Cuenta</a>
+                    <a href="{{ url_for('main.edit_provider', provider_id=provider.id) }}" title="Editar Proveedor" class="text-yellow-600 hover:text-yellow-900 mx-1"><i class="fas fa-pencil-alt"></i> Editar</a>
+                </div>
+            </div>
+            {% else %}
+            <div class="col-span-full text-center text-gray-500 py-20">
+                No se encontraron proveedores que coincidan con los filtros.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const listViewBtn = document.getElementById('list-view-btn');
+    const gridViewBtn = document.getElementById('grid-view-btn');
+    const listContainer = document.getElementById('list-view-container');
+    const gridContainer = document.getElementById('grid-view-container');
+
+    const activeBtnClasses = ['bg-blue-500', 'text-white'];
+    const inactiveBtnClasses = ['bg-gray-300', 'text-gray-700'];
+
+    function showListView() {
+        listContainer.classList.remove('hidden');
+        gridContainer.classList.add('hidden');
+        
+        listViewBtn.classList.add(...activeBtnClasses);
+        listViewBtn.classList.remove(...inactiveBtnClasses);
+        
+        gridViewBtn.classList.add(...inactiveBtnClasses);
+        gridViewBtn.classList.remove(...activeBtnClasses);
+
+        localStorage.setItem('providerView', 'list');
+    }
+
+    function showGridView() {
+        gridContainer.classList.remove('hidden');
+        listContainer.classList.add('hidden');
+
+        gridViewBtn.classList.add(...activeBtnClasses);
+        gridViewBtn.classList.remove(...inactiveBtnClasses);
+
+        listViewBtn.classList.add(...inactiveBtnClasses);
+        listViewBtn.classList.remove(...activeBtnClasses);
+
+        localStorage.setItem('providerView', 'grid');
+    }
+
+    listViewBtn.addEventListener('click', showListView);
+    gridViewBtn.addEventListener('click', showGridView);
+
+    // Cargar la vista preferida al cargar la página
+    const preferredView = localStorage.getItem('providerView');
+    if (preferredView === 'grid') {
+        showGridView();
+    } else {
+        showListView(); // Por defecto, la vista de lista
+    }
+});
+</script>
+{% endblock content %}

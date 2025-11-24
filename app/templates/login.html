@@ -28,6 +28,7 @@
             {% endwith %}
 
             <form action="{{ url_for('main.login') }}" method="POST">
+                <input type="hidden" name="store_id" id="store_id_input">
                 <div class="mb-4">
                     <label for="username" class="block text-gray-700 text-sm font-bold mb-2">Usuario</label>
                     <input type="text" id="username" name="username" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500" required>
@@ -50,5 +51,72 @@
             </form>
         </div>
     </div>
+
+    <!-- Modal para seleccionar sucursal -->
+    <div id="store-selector-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100">
+                    <i class="fas fa-store text-blue-600 text-2xl"></i>
+                </div>
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mt-2">Seleccionar Sucursal</h3>
+                <div class="mt-2 px-7 py-3">
+                    <p class="text-sm text-gray-500">
+                        Tienes acceso a varias sucursales. Por favor, elige una para continuar.
+                    </p>
+                    <div id="store-list" class="mt-4 space-y-2">
+                        <!-- Las sucursales se insertarán aquí dinámicamente -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.querySelector('form');
+            const storeModal = document.getElementById('store-selector-modal');
+            const storeListContainer = document.getElementById('store-list');
+            const storeIdInput = document.getElementById('store_id_input');
+
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                try {
+                    const formData = new FormData(form);
+                    const response = await fetch("{{ url_for('main.login') }}", {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    // Primero, intentamos obtener la respuesta como JSON.
+                    const data = await response.json();
+
+                    if (data.redirect_to_store_selection) {
+                        storeListContainer.innerHTML = ''; // Limpiar lista anterior
+                        data.stores.forEach(store => {
+                            const button = document.createElement('button');
+                            button.className = 'w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded';
+                            button.textContent = store.name;
+                            button.onclick = () => {
+                                storeIdInput.value = store.id;
+                                form.submit(); // Reenviar el formulario con el store_id
+                            };
+                            storeListContainer.appendChild(button);
+                        });
+                        storeModal.classList.remove('hidden');
+                    } else if (data.redirect_url) {
+                        window.location.href = data.redirect_url;
+                    } else if (data.reload) {
+                        // Si el servidor indica recargar (por ej. para mostrar un flash de error)
+                        window.location.reload();
+                    }
+                } catch (error) {
+                    console.error('Error durante el login:', error);
+                    // Si hay un error (ej. 500), recargamos para ver el mensaje de error del servidor.
+                    window.location.reload(); 
+                }
+            });
+        });
+    </script>
 </body>
 </html>

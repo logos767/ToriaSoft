@@ -22,6 +22,36 @@
                         <label for="tax_id" class="block text-sm font-medium text-gray-700">Cédula Fiscal / RIF</label>
                         <input type="text" id="tax_id" name="tax_id" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
                     </div>
+                    <div>
+                        <label for="provider_type" class="block text-sm font-medium text-gray-700">Tipo de Proveedor</label>
+                        <select id="provider_type" name="provider_type" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                            <option value="Productos">Productos (Mercancía)</option>
+                            <optgroup label="Servicios de atención y venta al cliente">
+                                <option value="Servicios - Asesoramiento personalizado">Asesoramiento personalizado</option>
+                                <option value="Servicios - Prueba de productos">Prueba de productos</option>
+                                <option value="Servicios - Procesamiento de pagos">Procesamiento de pagos</option>
+                                <option value="Servicios - Gestión de ventas">Gestión de ventas</option>
+                                <option value="Servicios - Soporte post-venta">Soporte post-venta</option>
+                            </optgroup>
+                            <optgroup label="Servicios de valor agregado">
+                                <option value="Servicios - Asesoramiento de imagen">Asesoramiento de imagen</option>
+                                <option value="Servicios - Modificaciones">Modificaciones</option>
+                                <option value="Servicios - Entregas">Entregas</option>
+                                <option value="Servicios - Tarjetas de regalo">Tarjetas de regalo</option>
+                            </optgroup>
+                            <optgroup label="Servicios de gestión y administración">
+                                <option value="Servicios - Gestión de inventario">Gestión de inventario</option>
+                                <option value="Servicios - Marketing">Marketing</option>
+                                <option value="Servicios - Contabilidad">Contabilidad</option>
+                                <option value="Servicios - Mantenimiento">Mantenimiento</option>
+                            </optgroup>
+                            <optgroup label="Servicios de infraestructura y equipamiento">
+                                <option value="Servicios - Mobiliario">Mobiliario</option>
+                                <option value="Servicios - Tecnología">Tecnología</option>
+                                <option value="Servicios - Seguridad">Seguridad</option>
+                            </optgroup>
+                        </select>
+                    </div>
                     <div class="md:col-span-2">
                         <label for="address" class="block text-sm font-medium text-gray-700">Dirección Física</label>
                         <textarea id="address" name="address" rows="2" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm"></textarea>
@@ -52,6 +82,27 @@
                     <div class="md:col-span-2">
                         <label for="contact_person_email" class="block text-sm font-medium text-gray-700">Email del Contacto</label>
                         <input type="email" id="contact_person_email" name="contact_person_email" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección de Asociación con Cliente -->
+            <div class="border-b pb-6">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Asociación con Cliente (Opcional)</h2>
+                <p class="text-sm text-gray-600 mb-4">Si este proveedor también es un cliente (para intercambios), puedes asociarlo aquí.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="associated_client_id" class="block text-sm font-medium text-gray-700">Asociar a Cliente Existente</label>
+                        <select id="associated_client_id" name="associated_client_id" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                            <option value="">-- Ninguno --</option>
+                            {% for client in clients %}
+                                <option value="{{ client.id }}">{{ client.name }} ({{ client.cedula_rif }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="flex items-center pt-6">
+                        <input id="create_client_from_provider" name="create_client_from_provider" type="checkbox" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                        <label for="create_client_from_provider" class="ml-2 block text-sm text-gray-900">O crear un nuevo cliente con esta información</label>
                     </div>
                 </div>
             </div>

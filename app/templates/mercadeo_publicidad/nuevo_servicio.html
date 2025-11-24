@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mx-auto p-4 max-w-3xl">
+    <!-- Page-Title -->
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-concierge-bell mr-2"></i> {{ title }}</h1>
+        <a href="{{ url_for('main.marketing_service_list') }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver al Historial</a>
+    </div>
+
+    <form method="POST" action="{{ url_for('main.new_marketing_service') }}" id="exchange-form">
+        <div class="bg-white p-8 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold text-gray-700 border-b pb-4">Detalles del Servicio Recibido</h2>
+            
+            <div class="mt-6">
+                <label for="provider_id" class="block text-sm font-medium text-gray-700 mb-1">Proveedor del Servicio</label>
+                <select class="w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm" id="provider_id" name="provider_id" required>
+                    <option value="" disabled selected>Seleccione un proveedor...</option>
+                    {% for provider in providers %}
+                    <option value="{{ provider.id }}">{{ provider.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mt-4">
+                <label for="service_date" class="block text-sm font-medium text-gray-700 mb-1">Fecha y Hora del Servicio</label>
+                <input type="datetime-local" class="w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm" id="service_date" name="service_date" required>
+            </div>
+
+            <div class="mt-4">
+                <label for="service_description" class="block text-sm font-medium text-gray-700 mb-1">Descripción del Servicio</label>
+                <textarea class="w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm" id="service_description" name="service_description" rows="4" required placeholder="Ej: Sesión de fotos para la colección de Diciembre, incluyendo edición y entrega de 50 fotos."></textarea>
+            </div>
+
+            <div class="mt-4">
+                <label for="service_value_usd" class="block text-sm font-medium text-gray-700 mb-1">Valor Acordado del Servicio (USD)</label>
+                <div class="relative rounded-md shadow-sm">
+                    <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                        <span class="text-gray-500 sm:text-sm">$</span>
+                    </div>
+                    <input type="number" class="block w-full rounded-md border-gray-300 pl-7 pr-12 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" id="service_value_usd" name="service_value_usd" step="0.01" min="0.01" required placeholder="0.00">
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                        <span class="text-gray-500 sm:text-sm" id="currency">USD</span>
+                    </div>
+                </div>
+                <p class="mt-2 text-xs text-gray-500">Este valor se registrará como un crédito a favor del proveedor.</p>
+            </div>
+
+            <div class="flex items-center justify-end mt-8 border-t pt-6">
+                <a href="{{ url_for('main.marketing_service_list') }}" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 mr-4">Cancelar</a>
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline flex items-center">
+                    <i class="fas fa-save mr-2"></i>Registrar Servicio y Crear Crédito
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock content %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Establecer la fecha y hora actual en el campo de fecha
+    const now = new Date();
+    // Ajustar al timezone local para el formato YYYY-MM-DDTHH:MM
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    const formattedNow = now.toISOString().slice(0, 16);
+    
+    const dateInput = document.getElementById('service_date');
+    if (dateInput) dateInput.value = formattedNow;
+});
+</script>
+{% endblock scripts %}

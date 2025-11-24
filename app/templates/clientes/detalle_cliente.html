@@ -18,6 +18,18 @@
                 <p><strong>Email:</strong> {{ client.email or 'N/A' }}</p>
                 <p><strong>Teléfono:</strong> {{ client.phone or 'N/A' }}</p>
                 <p class="sm:col-span-2"><strong>Dirección:</strong> {{ client.address or 'N/A' }}</p>
+                {% if is_administrador() %}
+                <div class="sm:col-span-2 mt-4">
+                    <a href="{{ url_for('main.edit_client', client_id=client.id) }}" class="bg-yellow-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-yellow-600 transition-colors text-sm"><i class="fas fa-edit mr-2"></i>Editar Cliente</a>
+                </div>
+                {% endif %}
+                {% if client.associated_provider %}
+                <div class="sm:col-span-2 mt-2 border-t pt-2">
+                    <p><strong>Proveedor de Servicios Asociado:</strong> 
+                        <a href="{{ url_for('main.provider_detail', provider_id=client.associated_provider.id) }}" class="text-blue-600 hover:underline">{{ client.associated_provider.name }}</a>
+                    </p>
+                </div>
+                {% endif %}
             </div>
         </div>
 
@@ -121,14 +133,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- Payment Modal Logic ---
     const paymentSubmissionForm = document.getElementById('payment-submission-form');
     const paymentFormDataInput = document.getElementById('payment-form-data-input');
-    const paymentMethodSelect = document.getElementById('payment-method');
-    const paymentAmountInput = document.getElementById('payment-amount');
-
     const currencySymbol = '{{ currency_symbol }}';
     let payments = [];
     let orderTotal = 0;
     let currentRate = {{ current_rate }};
     let previousPaymentMethod;
+    const providerBalance = parseFloat("{{ provider_balance_usd or 0 }}");
 
 
     function openPaymentModalForAbono(orderId, dueAmount) {
@@ -138,6 +148,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const modalTotalAmount = document.getElementById('modal-total-amount');
         const modalTotalAmountUsd = document.getElementById('modal-total-amount-usd');
         const paymentFormOrderIdInput = document.getElementById('payment-form-order-id');
+        const paymentMethodSelect = document.getElementById('payment-method');
 
         if (!paymentModal || !paymentMethodSelect || !paymentDateInput || !modalTotalAmount) {
             console.error("Payment modal elements not found!");
@@ -174,6 +185,17 @@ document.addEventListener('DOMContentLoaded', function() {
         modalTotalAmount.textContent = orderTotal.toFixed(2) + ' Bs';
         modalTotalAmountUsd.textContent = (orderTotal / currentRate).toFixed(2) + ' ' + currencySymbol;
 
+        // --- NEW: Handle Commercial Exchange option ---
+        const commercialExchangeOption = document.querySelector('#payment-method option[value="intercambio_comercial"]');
+        if (commercialExchangeOption) {
+            if (providerBalance > 0) {
+                commercialExchangeOption.style.display = '';
+                commercialExchangeOption.textContent = `Intercambio Comercial (Saldo: $${providerBalance.toFixed(2)})`;
+            } else {
+                commercialExchangeOption.style.display = 'none';
+            }
+        }
+
         updatePaymentSummary();
         paymentModal.classList.remove('hidden');
 
@@ -186,14 +208,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updatePaymentSummary() {
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentAmountInput = document.getElementById('payment-amount');
         const modalPaidAmount = document.getElementById('modal-paid-amount');
         const modalRemainingAmount = document.getElementById('modal-remaining-amount');
         const modalPaidAmountUsd = document.getElementById('modal-paid-amount-usd');
         const modalRemainingAmountUsd = document.getElementById('modal-remaining-amount-usd');
         const finalizeOrderBtn = document.getElementById('finalize-order-btn');
-        const paymentMethodSelect = document.getElementById('payment-method');
         if (!paymentMethodSelect) return;
-        const paymentAmountInput = document.getElementById('payment-amount');
 
         const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
         const remaining = orderTotal - totalPaid;
@@ -212,6 +234,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updatePaymentAmountInput(remaining) {
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentAmountInput = document.getElementById('payment-amount');
         if (remaining <= 0.01) {
             const paymentAmountInput = document.getElementById('payment-amount');
             if (!paymentAmountInput) return;
@@ -219,8 +243,12 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         const method = paymentMethodSelect.value;
-        if (method === 'efectivo_usd' && currentRate > 0) {
-            paymentAmountInput.value = (remaining / currentRate).toFixed(2);
+        if (method === 'intercambio_comercial' && currentRate > 0) {
+            const dueInUsd = remaining / currentRate;
+            const amountToPay = Math.min(dueInUsd, providerBalance);
+            paymentAmountInput.value = amountToPay.toFixed(2);
+        } else if (method === 'efectivo_usd' && currentRate > 0) {
+             paymentAmountInput.value = (remaining / currentRate).toFixed(2);
         } else {
             paymentAmountInput.value = remaining.toFixed(2);
         }
@@ -230,6 +258,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function addPayment() {
         const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentAmountInput = document.getElementById('payment-amount');
         const paymentDateInput = document.getElementById('payment-date');
 
         if (!addPaymentBtnModal || !paymentMethodSelect || !paymentAmountInput || !paymentDateInput) return;
@@ -256,7 +286,9 @@ document.addEventListener('DOMContentLoaded', function() {
         let amount_ves_equivalent = amount;
         let currency_paid = 'VES';
         const transfer_currency = paymentCurrencySelect ? paymentCurrencySelect.value : 'VES';
-        if (method === 'efectivo_usd' || (method === 'transferencia' && transfer_currency === 'USD')) {
+
+        // CORRECCIÓN: Tratar 'intercambio_comercial' como un método de pago en USD para el cálculo del equivalente.
+        if (['efectivo_usd', 'intercambio_comercial'].includes(method) || (method === 'transferencia' && transfer_currency === 'USD')) {
             amount_ves_equivalent = amount * currentRate;
             currency_paid = 'USD';
         }
@@ -272,6 +304,7 @@ document.addEventListener('DOMContentLoaded', function() {
             sender_id: senderId,
             bank_id: document.getElementById('payment-bank').value ? parseInt(document.getElementById('payment-bank').value) : null,
             pos_id: document.getElementById('payment-pos').value ? parseInt(document.getElementById('payment-pos').value) : null,
+            provider_id: (method === 'intercambio_comercial' && {{ client.associated_provider.id or 'null' }}) ? {{ client.associated_provider.id }} : null,
             cash_box_id: document.getElementById('payment-cashbox').value ? parseInt(document.getElementById('payment-cashbox').value) : null,
         };
         payments.push(payment);
@@ -292,7 +325,9 @@ document.addEventListener('DOMContentLoaded', function() {
     function attachModalEventListeners() {
         const closeModalBtn = document.getElementById('close-modal-btn');
         const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
-        const paymentCurrencySelect = document.getElementById('payment-currency'); // May be null
+        const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentAmountInput = document.getElementById('payment-amount');
+        const paymentCurrencySelect = document.getElementById('payment-currency'); // May be null        
         const finalizeOrderBtn = document.getElementById('finalize-order-btn');
 
         if (!closeModalBtn || !addPaymentBtnModal || !paymentMethodSelect || !finalizeOrderBtn) return;
@@ -330,11 +365,36 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
+            // --- NEW: Handle Commercial Exchange UI ---
+            const isExchange = newMethod === 'intercambio_comercial';
+            const paymentProviderGroup = document.getElementById('payment-provider-group'); // This is the container for the info
+            if (paymentProviderGroup) {
+                paymentProviderGroup.classList.toggle('hidden', !isExchange);
+                if (isExchange) {
+                    const providerInfoDiv = document.getElementById('provider-info-display');
+                    const noProviderMsg = document.getElementById('no-provider-message');
+                    if (providerBalance > 0) {
+                        document.getElementById('provider-name-display').textContent = {{ client.associated_provider.name|tojson if client.associated_provider else 'null' }};
+                        document.getElementById('provider-balance-display').textContent = `${currencySymbol}${providerBalance.toFixed(2)}`;
+                        providerInfoDiv.classList.remove('hidden');
+                        noProviderMsg.classList.add('hidden');
+                    } else {
+                        noProviderMsg.textContent = 'El cliente no tiene un proveedor asociado con saldo disponible.';
+                        providerInfoDiv.classList.add('hidden');
+                        noProviderMsg.classList.remove('hidden');
+                    }
+                }
+            }
+            // --- End of new UI handling ---
+
             const isTransfer = newMethod === 'transferencia';
             [paymentReferenceGroup, paymentIssuingBankGroup, paymentSenderIdGroup, paymentBankGroup].forEach(el => el && el.classList.toggle('hidden', !isTransfer));
             if (paymentCurrencyGroup) paymentCurrencyGroup.classList.toggle('hidden', !isTransfer);
             if (paymentPosGroup) paymentPosGroup.classList.toggle('hidden', newMethod !== 'punto_de_venta');
             if (paymentCashboxGroup) paymentCashboxGroup.classList.toggle('hidden', !newMethod.startsWith('efectivo'));
+            
+            
+
 
             if (isTransfer) {
                 document.getElementById('payment-sender-id').value = '{{ client.phone or '' }}';
@@ -342,8 +402,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (amount && amount > 0 && currentRate > 0) {
-                const wasUsd = previousPaymentMethod === 'efectivo_usd' || (previousPaymentMethod === 'transferencia' && document.getElementById('payment-currency')?.value === 'USD');
-                const isUsd = newMethod === 'efectivo_usd' || (isTransfer && paymentCurrencySelect?.value === 'USD');
+                const wasUsd = ['efectivo_usd', 'intercambio_comercial'].includes(previousPaymentMethod) || (previousPaymentMethod === 'transferencia' && document.getElementById('payment-currency')?.value === 'USD');
+                const isUsd = ['efectivo_usd', 'intercambio_comercial'].includes(newMethod) || (isTransfer && paymentCurrencySelect?.value === 'USD');
                 if (wasUsd && !isUsd) { // USD -> VES
                     paymentAmountInput.value = (amount * currentRate).toFixed(2);
                 } else if (!wasUsd && isUsd) { // VES -> USD

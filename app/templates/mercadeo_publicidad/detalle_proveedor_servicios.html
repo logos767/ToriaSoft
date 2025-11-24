@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mx-auto p-4 max-w-full">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
+        <div>
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-800"><i class="fas fa-file-invoice-dollar mr-3"></i>{{ title }}</h1>
+            <nav class="text-sm font-medium text-gray-500" aria-label="Breadcrumb">
+                <ol class="list-none p-0 inline-flex">
+                    <li class="flex items-center">
+                        <a href="{{ url_for('main.dashboard') }}" class="hover:text-blue-600">Dashboard</a>
+                        <i class="fas fa-chevron-right mx-2"></i>
+                    </li>
+                    <li class="flex items-center">
+                        <a href="{{ url_for('main.marketing_provider_list') }}" class="hover:text-blue-600">Proveedores de Servicios</a>
+                        <i class="fas fa-chevron-right mx-2"></i>
+                    </li>
+                    <li class="text-gray-400">{{ title }}</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{{ url_for('main.new_marketing_service') }}" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors text-sm whitespace-nowrap">
+                <i class="fas fa-plus mr-2"></i>Registrar Servicio
+            </a>
+            <a href="{{ url_for('main.pay_marketing_service') }}" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors text-sm whitespace-nowrap">
+                <i class="fas fa-dollar-sign mr-2"></i>Pagar Servicio
+            </a>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- Provider Info & Balance (Left Column) -->
+        <div class="lg:col-span-1">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">Información del Proveedor</h2>
+                <p class="text-sm text-gray-600 mb-2"><strong>Nombre:</strong> {{ provider.name }}</p>
+                <p class="text-sm text-gray-600 mb-2"><strong>RIF/Cédula:</strong> {{ provider.tax_id or 'N/A' }}</p>
+                <p class="text-sm text-gray-600 mb-2"><strong>Teléfono:</strong> {{ provider.phone or 'N/A' }}</p>
+                <p class="text-sm text-gray-600"><strong>Email:</strong> {{ provider.email or 'N/A' }}</p>
+                
+                <div class="mt-6 border-t pt-4">
+                    <h3 class="text-lg font-semibold text-gray-700 text-center">Saldo Actual</h3>
+                    <h2 class="text-4xl font-bold text-center my-2 {% if final_balance > 0 %}text-green-600{% elif final_balance < 0 %}text-red-600{% else %}text-gray-800{% endif %}">
+                        ${{ "%.2f"|format(final_balance) }}
+                    </h2>
+                    <p class="text-center text-sm text-gray-500">
+                        {% if final_balance > 0 %}
+                            (Saldo a favor del proveedor)
+                        {% elif final_balance < 0 %}
+                            (Deuda del proveedor con la empresa)
+                        {% else %}
+                            (Sin saldo pendiente)
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Movements History (Right Column) -->
+        <div class="lg:col-span-3">
+            <div class="bg-white rounded-lg shadow-md">
+                <div class="p-6 border-b">
+                    <h2 class="text-xl font-semibold text-gray-800">Historial de Movimientos</h2>
+                    <p class="text-sm text-gray-500 mt-1">Créditos por servicios prestados, débitos por intercambios y pagos realizados.</p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Crédito (+)</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Débito (-)</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% if movements %}
+                                {% for movement in movements %}
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ movement.date.strftime('%d/%m/%Y') }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        {{ movement.description }}
+                                        <span class="block text-xs text-gray-400">{{ movement.type }}</span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-green-600">
+                                        {% if movement.credit > 0 %}${{ "%.2f"|format(movement.credit) }}{% endif %}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-red-600">
+                                        {% if movement.debit > 0 %}${{ "%.2f"|format(movement.debit) }}{% endif %}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-bold {% if movement.balance > 0 %}text-green-600{% elif movement.balance < 0 %}text-red-600{% else %}text-gray-800{% endif %}">
+                                        ${{ "%.2f"|format(movement.balance) }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="5" class="px-6 py-10 text-center text-gray-500">No hay movimientos registrados para este proveedor.</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

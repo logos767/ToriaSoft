@@ -272,6 +272,7 @@
                                     <option value="efectivo_usd">Efectivo (USD)</option>
                                     <option value="transferencia">Transferencia/Pago Móvil</option>
                                     <option value="punto_de_venta">Punto de Venta</option>
+                                    <option value="intercambio_comercial">Intercambio Comercial</option>
                                 </select>
                             </div>
                             <div>
@@ -350,6 +351,15 @@
                                     <option value="">Seleccione una caja</option>
                                     {% for box in cash_boxes %}<option value="{{ box.id }}">{{ box.name }}</option>{% endfor %}
                                 </select>
+                            </div>
+                            <!-- NEW: Provider Info for Commercial Exchange -->
+                            <div id="payment-provider-group" class="hidden md:col-span-2">
+                                <label class="block text-sm font-medium text-gray-700">Proveedor de Servicio Asociado</label>
+                                <div id="provider-info-display" class="hidden mt-1 bg-green-50 p-2 rounded-md border border-green-200 text-sm">
+                                    <p><strong>Proveedor:</strong> <span id="provider-name-display"></span></p>
+                                    <p><strong>Saldo Disponible:</strong> <span id="provider-balance-display" class="font-bold"></span></p>
+                                </div>
+                                <div id="no-provider-message" class="hidden mt-1 bg-red-50 p-2 rounded-md border border-red-200 text-red-700 text-sm"></div>
                             </div>
                         </div>
                     </div>
@@ -588,8 +598,30 @@
             clientPhoneSpan.textContent = client.phone || '';
             clientAddressSpan.textContent = client.address || '';
             clientInfoDiv.classList.remove('hidden');
+
             clientIdInput.value = client.id;
             selectedClient = client;
+
+            // Fetch provider info for the first time
+            fetchProviderInfo(client.id);
+        }
+
+        // --- NEW: Centralized function to fetch provider info ---
+        async function fetchProviderInfo(clientId) {
+            associatedProviderInfo = null; // Reset first
+            try {
+                const response = await fetch(`/api/client_provider_info/${clientId}`);
+                const data = await response.json();
+                if (data.has_provider) {
+                    associatedProviderInfo = {
+                        id: data.provider_id,
+                        name: data.provider_name,
+                        balance_usd: parseFloat(data.balance_usd)
+                    };
+                }
+            } catch (error) {
+                console.error('Error fetching provider info:', error);
+            }
         }
 
         function fetchClientSuggestions(query) {
@@ -1169,6 +1201,8 @@
         const paymentCurrencySelect = document.getElementById('payment-currency');
         const paymentCashboxGroup = document.getElementById('payment-cashbox-group'); // type: ignore
         const paymentCashboxSelect = document.getElementById('payment-cashbox'); // type: ignore
+        const paymentProviderGroup = document.getElementById('payment-provider-group');
+        const providerIdInput = document.getElementById('payment-provider'); // Asumiendo que tienes un input hidden o select para el provider_id
 
         const paymentsListDiv = document.getElementById('payments-list');
         const paymentsDataInput = document.getElementById('payments-data-input');
@@ -1178,6 +1212,8 @@
         const changeSourceGroup = document.getElementById('change-source-group');
         const changeSourceSelect = document.getElementById('change-source');
         let payments = [];
+        let associatedProviderInfo = null; // Object to store provider info { id, name, balance_usd }
+        
         let orderTotal = 0;
         let previousPaymentMethod = paymentMethodSelect.value;
         let previousTransferCurrency = paymentCurrencySelect.value; // type: ignore
@@ -1206,13 +1242,19 @@
             }
         }
 
-        function openPaymentModal() {
+        async function openPaymentModal() {
             updateOrderSummary(); // Asegurarse de que el total está actualizado
             orderTotal = parseFloat(document.getElementById('total-display').textContent) || 0; // type: ignore
 
             if (orderTotal <= 0) {
                 alert("Agregue productos a la orden antes de procesar el pago.");
                 return;
+            }
+
+            // --- CORRECCIÓN DEFINITIVA: Volver a consultar el saldo del proveedor ANTES de abrir el modal ---
+            if (selectedClient && selectedClient.id) {
+                // Esperamos a que la información se actualice antes de continuar.
+                await fetchProviderInfo(selectedClient.id);
             }
 
             const selectedSaleType = saleTypeSelect.value;
@@ -1318,27 +1360,37 @@
             const amount = parseFloat(paymentAmountInput.value);
             const reference = paymentReferenceInput.value;
             const issuing_bank = paymentIssuingBankInput.value;
-            const sender_id = paymentSenderIdInput.value;
             const bank_id = paymentBankSelect.value;
             const transfer_currency = paymentCurrencySelect.value; // type: ignore
-            const pos_id = paymentPosSelect.value;
+            const pos_id = paymentPosSelect.value; // type: ignore
             const cash_box_id = paymentCashboxSelect.value;
 
             if (!amount || amount <= 0) {
                 alert("Por favor, ingrese un monto válido.");
                 return;
             }
-
-            // Validar selección de destino
-            if (method === 'transferencia' && !bank_id) { // This validation is now more complex due to currency filtering
+            
+            // --- VALIDACIÓN CENTRALIZADA ---
+            if (method === 'intercambio_comercial') {
+                if (!associatedProviderInfo || associatedProviderInfo.balance_usd <= 0) {
+                    alert("El cliente no tiene un proveedor asociado con saldo suficiente para el intercambio.");
+                    return;
+                }
+                // CORRECCIÓN FINAL: El método de intercambio siempre es en USD.
+                // El monto 'amount' ya está en USD porque el input se convierte al seleccionar el método.
+                // No se debe usar 'paymentCurrencySelect.value' que es solo para transferencias.
+                const amountUsd = amount;
+                if (amountUsd > associatedProviderInfo.balance_usd) {
+                    alert(`El monto del intercambio (${amountUsd.toFixed(2)} USD) excede el saldo disponible del proveedor (${associatedProviderInfo.balance_usd.toFixed(2)} USD).`);
+                    return;
+                }
+            } else if (method === 'transferencia' && !bank_id) {
                 alert("Por favor, seleccione un banco de destino.");
                 return;
-            }
-            if (method === 'punto_de_venta' && !pos_id) {
+            } else if (method === 'punto_de_venta' && !pos_id) {
                 alert("Por favor, seleccione un punto de venta.");
                 return;
-            }
-            if (method.startsWith('efectivo') && !cash_box_id) {
+            } else if (method.startsWith('efectivo') && !cash_box_id) {
                 alert("Por favor, seleccione una caja.");
                 return;
             }
@@ -1346,11 +1398,10 @@
             let amount_ves_equivalent = amount;
             let currency_paid = 'VES';
 
-            if (method === 'efectivo_usd' || (method === 'transferencia' && transfer_currency === 'USD')) {
+            if (method === 'efectivo_usd' || method === 'intercambio_comercial' || (method === 'transferencia' && transfer_currency === 'USD')) {
                 amount_ves_equivalent = amount * activeRate;
                 currency_paid = 'USD';
             }
-
 
             const payment = {
                 method: method,
@@ -1359,11 +1410,18 @@
                 amount_ves_equivalent: amount_ves_equivalent,
                 reference: reference,
                 issuing_bank: method === 'transferencia' ? issuing_bank : null,
-                sender_id: method === 'transferencia' ? sender_id : null,
+                sender_id: method === 'transferencia' ? paymentSenderIdInput.value : null,
                 bank_id: method === 'transferencia' ? parseInt(bank_id) : null,
                 pos_id: method === 'punto_de_venta' ? parseInt(pos_id) : null,
-                cash_box_id: method.startsWith('efectivo') ? parseInt(cash_box_id) : null,
+                cash_box_id: method.startsWith('efectivo') ? parseInt(cash_box_id) : null, // type: ignore
+                provider_id: method === 'intercambio_comercial' ? associatedProviderInfo.id : null,
             };
+
+            // CORRECCIÓN: Para los intercambios, el 'reference' debe ser el ID del proveedor para que el backend pueda rastrear el saldo.
+            if (method === 'intercambio_comercial' && associatedProviderInfo) {
+                payment.reference = associatedProviderInfo.id.toString();
+                payment.provider_id = associatedProviderInfo.id; // Mantenemos esto por si se usa en otro lado.
+            }
 
             payments.push(payment);
             renderPayments();
@@ -1375,7 +1433,7 @@
             paymentIssuingBankInput.value = '';
             paymentSenderIdInput.value = '';
             paymentBankSelect.selectedIndex = 0;
-            paymentPosSelect.selectedIndex = 0;
+            paymentPosSelect.selectedIndex = 0; // type: ignore
             paymentCashboxSelect.selectedIndex = 0;
         }
 
@@ -1398,6 +1456,9 @@
                 let details = `${paymentMethodName}: ${p.amount_paid.toFixed(2)} ${p.currency_paid} (Equiv. ${p.amount_ves_equivalent.toFixed(2)} Bs)`;
                 if (p.reference) {
                     details += ` - Ref: ${p.reference}`;
+                }
+                if (p.provider_id) {
+                    details += ` - Proveedor ID: ${p.provider_id}`;
                 }
                 if (p.issuing_bank) {
                     details += ` - Banco: ${p.issuing_bank}`;
@@ -1446,6 +1507,27 @@
             [paymentReferenceGroup, paymentIssuingBankGroup, paymentSenderIdGroup, paymentBankGroup, paymentCurrencyGroup].forEach(el => el.classList.toggle('hidden', !isTransfer));
             paymentPosGroup.classList.toggle('hidden', newMethod !== 'punto_de_venta');
             paymentCashboxGroup.classList.toggle('hidden', !newMethod.startsWith('efectivo'));
+            
+            // --- NEW: Handle Commercial Exchange UI ---
+            const isExchange = newMethod === 'intercambio_comercial';
+            paymentProviderGroup.classList.toggle('hidden', !isExchange);
+            
+            if (isExchange) {
+                const providerInfoDiv = document.getElementById('provider-info-display');
+                const noProviderMsg = document.getElementById('no-provider-message');
+                // CORRECCIÓN: Validar que el proveedor exista Y que tenga saldo positivo.
+                if (associatedProviderInfo && associatedProviderInfo.balance_usd > 0) {
+                    const currencySymbol = '{{ currency_symbol }}';
+                    document.getElementById('provider-name-display').textContent = associatedProviderInfo.name;
+                    document.getElementById('provider-balance-display').textContent = `${currencySymbol}${associatedProviderInfo.balance_usd.toFixed(2)}`;
+                    providerInfoDiv.classList.remove('hidden');
+                    noProviderMsg.classList.add('hidden');
+                } else {
+                    noProviderMsg.textContent = 'El cliente seleccionado no tiene un proveedor de servicios asociado o no tiene saldo a favor.';
+                    providerInfoDiv.classList.add('hidden');
+                    noProviderMsg.classList.remove('hidden');
+                }
+            }
 
             if (newMethod === 'transferencia') {
                 if (selectedClient && selectedClient.phone) {
@@ -1462,8 +1544,8 @@
             const newTransferCurrency = paymentCurrencySelect.value; // type: ignore
 
             if (amount && amount > 0) {
-                const wasUsd = previousPaymentMethod === 'efectivo_usd' || (previousPaymentMethod === 'transferencia' && previousTransferCurrency === 'USD');
-                const isUsd = newMethod === 'efectivo_usd' || (newMethod === 'transferencia' && newTransferCurrency === 'USD');
+                const wasUsd = ['efectivo_usd', 'intercambio_comercial'].includes(previousPaymentMethod) || (previousPaymentMethod === 'transferencia' && previousTransferCurrency === 'USD');
+                const isUsd = ['efectivo_usd', 'intercambio_comercial'].includes(newMethod) || (newMethod === 'transferencia' && newTransferCurrency === 'USD');
 
                 if (wasUsd && !isUsd && activeRate > 0) {
                     // Convert from USD to VES
