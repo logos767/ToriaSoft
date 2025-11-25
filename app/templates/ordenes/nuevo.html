@@ -98,15 +98,21 @@
                                 <tr class="product-item bg-gray-50">
                                     <td class="px-1 py-1 align-top">
                                         <select name="product_id[]" required class="w-full shadow-sm appearance-none border rounded py-0.5 px-1 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 product-select text-xs">
-                                    {% for product in products %}
-                                        {% if product.stock_tienda > 0 %} {# Producto disponible para la venta desde la tienda principal #} 
-                                            <option value="{{ product.id }}" data-price-usd="{{ product.price_usd }}" data-stock="{{ product.stock_tienda }}" data-codigo="{{ product.codigo_producto }}"
-                                                    class="{% if product.stock_tienda < 5 %}stock-low{% elif product.stock_tienda < 20 %}stock-medium{% else %}stock-high{% endif %}">
+                                    {% for product in products %}                                        
+                                        {% set stock_level = product.stock_levels|selectattr('warehouse_id', 'equalto', sales_warehouse.id)|first %}
+                                        {% set available_stock = stock_level.quantity if stock_level else 0 %}
+
+                                        {% if available_stock > 0 %}
+                                            <option value="{{ product.id }}" 
+                                                    data-price-usd="{{ product.price_usd }}" 
+                                                    data-stock="{{ available_stock }}" 
+                                                    data-codigo="{{ product.codigo_producto }}"
+                                                    class="{% if available_stock < 5 %}stock-low{% elif available_stock < 20 %}stock-medium{% else %}stock-high{% endif %}">
                                                 {{ product.barcode }} | {{ product.name }}
                                             </option>
-                                        {% else %} {# Producto agotado, se muestra pero no se puede seleccionar #} 
-                                            <option value="{{ product.id }}" disabled data-price-usd="{{ product.price_usd }}" data-stock="{{ product.stock_tienda }}" data-codigo="{{ product.codigo_producto }}" class="stock-out">
-                                                {{ product.name }} (AGOTADO EN TIENDA - Stock: {{ product.stock_tienda }})
+                                        {% else %}
+                                            <option value="{{ product.id }}" disabled data-price-usd="{{ product.price_usd }}" data-stock="0" data-codigo="{{ product.codigo_producto }}" class="stock-out">
+                                                {{ product.name }} (AGOTADO EN {{ sales_warehouse.name }})
                                             </option>
                                         {% endif %}
                                     {% endfor %}

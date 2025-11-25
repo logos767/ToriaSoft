@@ -241,6 +241,21 @@ def create_app():
                 is_vendedor=is_vendedor
             )
 
+        @app.context_processor
+        def inject_sales_permission():
+            """
+            Injects a variable to check if the current active store can create sales orders.
+            """
+            from .models import Warehouse
+            can_create_order = False
+            active_store_id = session.get('active_store_id')
+
+            if active_store_id and active_store_id != 'all':
+                # Check if a sellable warehouse exists for the active store
+                if Warehouse.query.filter_by(store_id=active_store_id, is_sellable=True).first():
+                    can_create_order = True
+            return dict(can_create_order=can_create_order)
+
         # Bank icons dictionary
         BANK_ICONS = {
             'BBVA PROVINCIAL': '0108.png',

@@ -516,7 +516,7 @@ def login():
 
             next_page = request.args.get('next')
             redirect_url = next_page or (url_for('main.dashboard') if user.role != 'Vendedor' else url_for('main.new_order'))
-            return jsonify({'redirect_url': redirect_url})
+            return jsonify({'redirect_url': redirect_url}), 200
         else:
             flash('Inicio de sesión fallido. Por favor, verifica tu nombre de usuario y contraseña.', 'danger')
             # Devolvemos un error para que el JS pueda recargar la página y mostrar el flash.
@@ -2564,9 +2564,23 @@ def order_detail(order_id):
 @routes_blueprint.route('/ordenes/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_order():
+    active_store_id = session.get('active_store_id')
+
+    # --- Validación de Almacén de Ventas por Sucursal ---
+    if not active_store_id or active_store_id == 'all':
+        flash('Por favor, seleccione una sucursal específica para crear una orden de venta.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    # Verificar si existe un almacén vendible para la sucursal activa.
+    sales_warehouse = Warehouse.query.filter_by(store_id=active_store_id, is_sellable=True).first()
+    if not sales_warehouse:
+        store = Store.query.get(active_store_id)
+        flash(f'No hay un almacén de ventas configurado para la sucursal "{store.name}". Contacte al administrador.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    # --- Fin de la Validación ---
+
     clients = Client.query.all()
     products = Product.query.all()
-    active_store_id = session.get('active_store_id')
     calculation_currency, _ = get_main_calculation_currency_info()
     banks = Bank.query.order_by(Bank.name).all()
     points_of_sale = PointOfSale.query.order_by(PointOfSale.name).all()
@@ -2849,7 +2863,8 @@ def new_order():
                            products=products, 
                            banks=banks, 
                            points_of_sale=points_of_sale, 
-                           cash_boxes=cash_boxes,
+                           cash_boxes=cash_boxes,                           
+                           sales_warehouse=sales_warehouse,
                            last_order=last_order,
                            current_ve_time=current_ve_time)
 
@@ -5805,24 +5820,26 @@ def api_search_products_for_sale():
     if len(query_str) < 2:
         return jsonify(products=[])
 
+    sales_warehouse = Warehouse.query.filter_by(store_id=active_store_id, is_sellable=True).first()
+    if not sales_warehouse:
+        return jsonify(products=[]) # No hay almacén de ventas, no se puede vender nada.
+
     search_pattern = f'%{query_str}%'
 
-    # Filtrar por almacenes vendibles de la sucursal activa
-    sellable_warehouses_query = Warehouse.query.filter_by(is_sellable=True)
-    if active_store_id and active_store_id != 'all':
-        sellable_warehouses_query = sellable_warehouses_query.filter(Warehouse.store_id == active_store_id)
-    sellable_warehouse_ids = [wh.id for wh in sellable_warehouses_query.all()]
-
-    # Subconsulta para obtener el stock del almacén de tienda (ID=1)
-    stock_subquery = db.session.query(ProductStock.quantity).filter(ProductStock.product_id == Product.id, ProductStock.warehouse_id == 1).as_scalar()
-
-    products_with_stock = db.session.query(Product, func.coalesce(stock_subquery, 0).label('stock_in_warehouse')).filter(
+    # La consulta correcta une Product y ProductStock, y filtra por el almacén de ventas y la cantidad.
+    products_with_stock = db.session.query(
+        Product,
+        ProductStock.quantity
+    ).join(
+        ProductStock, Product.id == ProductStock.product_id
+    ).filter(
+        ProductStock.warehouse_id == sales_warehouse.id,
+        ProductStock.quantity > 0,
         or_(
-            Product.name.ilike(search_pattern), 
+            Product.name.ilike(search_pattern),
             Product.barcode.ilike(search_pattern),
             Product.codigo_producto.ilike(search_pattern)
-        ),
-        ProductStock.warehouse_id.in_(sellable_warehouse_ids), ProductStock.quantity > 0
+        )
     ).limit(10).all()
 
     results = [{'id': p.id, 'name': p.name, 'barcode': p.barcode, 'codigo_producto': p.codigo_producto, 'price_usd': p.price_usd, 'stock': stock} for p, stock in products_with_stock]
