@@ -473,11 +473,14 @@ def handle_connect():
 @routes_blueprint.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        # Si ya está autenticado, redirigir a la página principal correspondiente a su rol
-        redirect_url = url_for('main.dashboard') if current_user.role != 'Vendedor' else url_for('main.new_order')
-        if request.is_json:
-            return jsonify({'redirect_url': redirect_url})
-        return redirect(redirect_url)
+        # Si el usuario ya está autenticado y es una solicitud AJAX (como la selección de sucursal),
+        # cerramos la sesión para forzar un re-login limpio.
+        if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            logout_user()
+        else:
+            # Si es una solicitud normal (no AJAX), simplemente redirigimos.
+            redirect_url = url_for('main.dashboard') if current_user.role != 'Vendedor' else url_for('main.new_order')
+            return redirect(redirect_url)
 
     if request.method == 'POST':
         username = request.form.get('username')
@@ -516,7 +519,11 @@ def login():
 
             next_page = request.args.get('next')
             redirect_url = next_page or (url_for('main.dashboard') if user.role != 'Vendedor' else url_for('main.new_order'))
-            return jsonify({'redirect_url': redirect_url}), 200
+            
+            # Si la solicitud es AJAX, devolvemos JSON. Si no, forzamos la redirección.
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'redirect_url': redirect_url})
+            return redirect(redirect_url)
         else:
             flash('Inicio de sesión fallido. Por favor, verifica tu nombre de usuario y contraseña.', 'danger')
             # Devolvemos un error para que el JS pueda recargar la página y mostrar el flash.
