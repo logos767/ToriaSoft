@@ -388,6 +388,7 @@ class Payment(db.Model):
     sender_id = db.Column(db.String(50), nullable=True) # Cédula o teléfono del emisor
     date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)
     
+    exchange_rate_at_payment = db.Column(db.Float, nullable=True) # NEW: Rate used for this specific payment
     # Destination of funds
     bank_id = db.Column(db.Integer, db.ForeignKey('banks.id'), nullable=True)
     pos_id = db.Column(db.Integer, db.ForeignKey('points_of_sale.id'), nullable=True)
@@ -574,6 +575,17 @@ class ExchangeRate(db.Model):
 
     def __repr__(self):
         return f"ExchangeRate(currency='{self.currency}', rate='{self.rate}', date='{self.date_updated}')"
+
+class HistoricalExchangeRate(db.Model):
+    __tablename__ = 'historical_exchange_rates'
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, unique=True, nullable=False) # Store only date
+    currency = db.Column(db.String(3), nullable=False, default='USD') # To support other currencies if needed, but default to USD
+    rate = db.Column(db.Float, nullable=False)
+    date_recorded = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve) # When this historical rate was recorded
+
+    def __repr__(self):
+        return f"HistoricalExchangeRate(date='{self.date}', currency='{self.currency}', rate='{self.rate}')"
 
 class CostStructure(db.Model):
     id = db.Column(db.Integer, primary_key=True)

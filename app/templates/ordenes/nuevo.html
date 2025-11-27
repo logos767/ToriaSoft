@@ -270,6 +270,11 @@
                 <div class="lg:col-span-3">
                     <!-- Formulario para agregar pago -->
                     <div id="add-payment-form" class="border p-3 rounded-lg">
+                        <!-- NEW: Payment Date -->
+                        <div class="mb-2">
+                            <label for="payment-date" class="block text-sm font-medium text-gray-700">Fecha del Pago</label>
+                            <input type="datetime-local" id="payment-date" name="payment-date" class="mt-1 block w-full py-1 px-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        </div>
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
                             <div>
                                 <label for="payment-method" class="block text-sm font-medium text-gray-700">Método de Pago</label>
@@ -497,10 +502,25 @@
         const IS_GERENTE = {{ is_gerente()|tojson }};
         const defaultRate = {{ current_rate }};
         let activeRate = defaultRate;
+        const specialExchangeRateInput = document.getElementById('special_exchange_rate');
 
-        {% if current_user.role == 'administrador' %}
+        if (specialExchangeRateInput) {
+            specialExchangeRateInput.value = activeRate.toFixed(2);
+        }
+
+        let orderDateRate = defaultRate; // Rate specific to the order's date
+        let paymentModalRate = defaultRate; // Rate specific to the payment modal's date
+
+        // Mover la declaración de modalRateInput aquí para que esté disponible globalmente en el script
+        const modalRateInput = document.getElementById('modal_exchange_rate');
+
+
+
+
+        {% if is_vendedor() %}
         const dateCreatedInput = document.getElementById('date_created'); // type: ignore
         const today = new Date('{{ current_ve_time.isoformat() }}');
+        const paymentDateInput = document.getElementById('payment-date'); // NEW: Get reference to payment date input
         const todayString = today.toISOString().split('T')[0];
 
         // Función para recalcular todos los precios y el resumen de la orden en el frontend.
@@ -522,12 +542,88 @@
             updateOrderSummary();
         }
 
+        // Function to fetch historical rate and update activeRate
+        async function fetchAndUpdateRate(targetDateString, updateTarget = 'order') {
+            if (!targetDateString) {
+                console.warn("No target date string provided for rate fetch.");
+                return;
+            }
+            const dateOnly = targetDateString.split('T')[0];
+            try {
+                const response = await fetch(`/api/historical_exchange_rate?date=${dateOnly}&currency=USD`);
+                const data = await response.json();
+                if (data.rate) {
+                    if (updateTarget === 'order') {
+                        orderDateRate = data.rate;
+                        activeRate = orderDateRate; // Update global active rate for order calculations
+                        toastr.success(`Tasa para ${dateOnly}: ${activeRate.toFixed(2)} Bs.`, 'Tasa Histórica');
+                        // NEW: Update the special exchange rate input field
+                        if (specialExchangeRateInput) {
+                            specialExchangeRateInput.value = activeRate.toFixed(2);
+                        }
+                    } else if (updateTarget === 'paymentModal') {
+                        paymentModalRate = data.rate;
+                        // For payment modal, we use paymentModalRate directly for calculations within the modal
+                        toastr.success(`Tasa para el pago en ${dateOnly}: ${paymentModalRate.toFixed(2)} Bs.`, 'Tasa Histórica');
+                    }
+                    updateAllPricesAndSummary(); // Recalculate all prices and summary
+                    updatePaymentSummary(); // Recalculate payment modal summary
+                } else {
+                    // If no historical rate, fall back to current rate and notify
+                    if (updateTarget === 'order') {
+                        orderDateRate = defaultRate;
+                        activeRate = orderDateRate;
+                        toastr.warning(`No se encontró tasa histórica para ${dateOnly}. Usando tasa actual: ${activeRate.toFixed(2)} Bs.`, 'Tasa No Encontrada');
+                        // NEW: Update the special exchange rate input field with default rate
+                        if (specialExchangeRateInput) {
+                            specialExchangeRateInput.value = activeRate.toFixed(2);
+                        }
+                    } else if (updateTarget === 'paymentModal') {
+                        paymentModalRate = defaultRate;
+                        toastr.warning(`No se encontró tasa histórica para el pago en ${dateOnly}. Usando tasa actual: ${paymentModalRate.toFixed(2)} Bs.`, 'Tasa No Encontrada');
+                    }
+                    updateAllPricesAndSummary();
+                    updatePaymentSummary();
+                }
+            } catch (error) {
+                console.error('Error fetching historical rate:', error);
+                // Fallback to current rate on error
+                if (updateTarget === 'order') {
+                    orderDateRate = defaultRate;
+                    activeRate = orderDateRate;
+                } else if (updateTarget === 'paymentModal') {
+                    paymentModalRate = defaultRate;
+                }
+                toastr.error('Error al obtener tasa histórica. Usando tasa actual.', 'Error');
+                updateAllPricesAndSummary();
+                updatePaymentSummary();
+            }
+        }
+
         dateCreatedInput.addEventListener('input', function() {
-            const selectedDateString = this.value.split('T')[0];
+            const selectedDateString = this.value;
+            const selectedDateOnly = selectedDateString.split('T')[0];
             
-            if (selectedDateString && selectedDateString !== todayString) { // type: ignore
-                // Open the modal
-                document.getElementById('rate-change-modal').classList.remove('hidden');
+            if (selectedDateOnly && selectedDateOnly !== todayString) { // type: ignore
+                // If a past date is selected, fetch historical rate
+                fetchAndUpdateRate(selectedDateString, 'order');
+                // Open the modal for managers to potentially override
+                if (IS_GERENTE) {
+                    document.getElementById('rate-change-modal').classList.remove('hidden');
+                    modalRateInput.value = orderDateRate.toFixed(2); // Pre-fill with fetched historical rate
+                }
+            } else {
+                // If today's date is selected, reset to defaultRate
+                orderDateRate = defaultRate;
+                activeRate = defaultRate;
+                updateAllPricesAndSummary();
+                // NEW: Reset the special exchange rate input to the default rate
+                if (specialExchangeRateInput) {
+                    specialExchangeRateInput.value = activeRate.toFixed(2);
+                }
+
+                updatePaymentSummary();
+                document.getElementById('rate-change-modal').classList.add('hidden'); // Hide modal if back to today
             }
         });
 
@@ -535,12 +631,19 @@
         const rateModal = document.getElementById('rate-change-modal');
         const cancelRateBtn = document.getElementById('cancel-rate-change-btn');
         const updateRateBtn = document.getElementById('update-rate-btn');
-        const modalRateInput = document.getElementById('modal_exchange_rate');
 
         cancelRateBtn.addEventListener('click', () => {
-            rateModal.classList.add('hidden'); // type: ignore
-            // Reset date to today
+            rateModal.classList.add('hidden');
+            // Reset date to original value if cancelled
             dateCreatedInput.value = '{{ current_ve_time.strftime("%Y-%m-%dT%H:%M") }}';
+            orderDateRate = defaultRate; // Reset rate
+            activeRate = defaultRate;
+            updateAllPricesAndSummary();
+            // NEW: Reset the special exchange rate input to the default rate
+            if (specialExchangeRateInput) {
+                specialExchangeRateInput.value = activeRate.toFixed(2);
+            }
+            updatePaymentSummary();
         });
 
         updateRateBtn.addEventListener('click', () => {
@@ -549,39 +652,32 @@
                 alert('Por favor, ingrese una tasa de cambio válida.');
                 return;
             }
-
-            // Use fetch to call the existing update_rate endpoint
-            const formData = new FormData();
-            formData.append('currency', '{{ calculation_currency }}');
-            formData.append('manual_rate', newRate);
-            // Store the original rate in the session via a new endpoint
-            formData.append('store_original_rate', 'true');
-            // CORRECCIÓN: Añadir un indicador explícito de que esta es una llamada AJAX.
-            formData.append('is_ajax', 'true');
-
-            fetch("{{ url_for('main.update_exchange_rate') }}", {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // CORRECCIÓN: No recargar la página. Actualizar la tasa activa y recalcular todo.
-                    activeRate = newRate;
-                    updateAllPricesAndSummary(); // type: ignore
-                    rateModal.classList.add('hidden');
-                    // Usar Toastr para notificar al usuario del éxito.
-                    toastr.success(`Tasa de cambio actualizada a ${newRate.toFixed(2)} Bs.`, 'Éxito');
-                } else {
-                    alert('Error al actualizar la tasa: ' + (data.message || 'Error desconocido.'));
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Ocurrió un error de red al intentar actualizar la tasa.');
-            });
+            // This part is for managers to override the rate for the order
+            orderDateRate = newRate;
+            activeRate = newRate;
+            updateAllPricesAndSummary();
+            // NEW: Update the special exchange rate input with the manually set rate
+            if (specialExchangeRateInput) {
+                specialExchangeRateInput.value = activeRate.toFixed(2);
+            }
+            updatePaymentSummary();
+            rateModal.classList.add('hidden');
+            toastr.success(`Tasa de cambio para la orden actualizada a ${newRate.toFixed(2)} Bs.`, 'Éxito');
+            // No need to call backend update_exchange_rate here, as this is a temporary override for the order.
+            // The backend will receive this rate in the form submission.
         });
         {% endif %}
+
+        // NEW: Event listener for manual changes on the special exchange rate input
+        if (specialExchangeRateInput) {
+            specialExchangeRateInput.addEventListener('input', function() {
+                const newRate = parseFloat(this.value);
+                if (newRate && newRate > 0) {
+                    activeRate = newRate;
+                    updateAllPricesAndSummary();
+                }
+            });
+        }
 
         let selectedClient = null;
         let debounceTimeout = null;
@@ -779,7 +875,7 @@
         // Función para actualizar el precio en Bolívares
         function updatePriceVes(priceUsdInput) {
             const priceUsd = parseFloat(priceUsdInput.value) || 0;
-            const priceVesDisplay = priceUsdInput.closest('tr.product-item').querySelector('.price-ves-display');
+            const priceVesDisplay = priceUsdInput.closest('tr.product-item').querySelector('.price-ves-display'); // type: ignore
             const priceVes = (priceUsd * activeRate).toFixed(2);
             priceVesDisplay.textContent = priceVes;
         }
@@ -801,7 +897,7 @@
                 const priceUsdDisplay = productItem.querySelector('.price-usd-display');
                 const priceUsdHiddenInput = productItem.querySelector('.price-usd-hidden-for-submit');
                 const priceVesDisplay = productItem.querySelector('.price-ves-display');
-                
+
                 // CORRECCIÓN: Asignar el precio al atributo data- del span para que updateOrderSummary() pueda leerlo.
                 if (priceUsdDisplay) priceUsdDisplay.dataset.priceUsd = priceUsd;
                 
@@ -990,7 +1086,7 @@
         // Función para calcular y actualizar el resumen de la orden
         function updateOrderSummary() {
             let subtotal = 0;
-            
+
             document.querySelectorAll('tr.product-item').forEach(productItem => {
                 const quantity = parseFloat(productItem.querySelector('.quantity-input').value) || 0;
                 const priceUsdInput = productItem.querySelector('.price-usd-input');
@@ -1027,7 +1123,32 @@
             document.getElementById('subtotal-display').textContent = subtotal.toFixed(2) + ' Bs';
             document.getElementById('iva-display').textContent = iva.toFixed(2) + ' Bs';
             document.getElementById('total-display').textContent = Math.max(0, total).toFixed(2) + ' Bs';
+            // Update modal total amounts
+            modalTotalAmount.textContent = Math.max(0, total).toFixed(2) + ' Bs';
+            modalTotalAmountUsd.textContent = (Math.max(0, total) / activeRate).toFixed(2) + ' {{ currency_symbol }}';
         }
+
+        // --- Lógica del Modal de Pago ---
+        const paymentModal = document.getElementById('payment-modal');
+        const mainActionBtn = document.getElementById('main-action-btn');
+        const closeModalBtn = document.getElementById('close-modal-btn'); // type: ignore
+        const saleTypeSelect = document.getElementById('sale_type');
+        const finalizeOrderBtn = document.getElementById('finalize-order-btn');
+        const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
+
+        // Nuevos elementos para la lógica de Entrega Especial
+        const financialSummarySection = document.getElementById('financial-summary-section');
+        const specialDispatchReasonSection = document.getElementById('special-dispatch-reason-section');
+        const dispatchReasonTextarea = document.getElementById('dispatch_reason');
+
+        const modalTotalAmount = document.getElementById('modal-total-amount');
+        const modalPaidAmount = document.getElementById('modal-paid-amount');
+        const modalRemainingAmount = document.getElementById('modal-remaining-amount');
+        const modalTotalAmountUsd = document.getElementById('modal-total-amount-usd');
+        const modalPaidAmountUsd = document.getElementById('modal-paid-amount-usd');
+        const modalRemainingAmountUsd = document.getElementById('modal-remaining-amount-usd');
+        const modalChangeDisplay = document.getElementById('modal-change-display'); // type: ignore
+        const modalChangeAmount = document.getElementById('modal-change-amount');
 
         // Inicializar resumen de la orden
         updateOrderSummary();
@@ -1168,27 +1289,6 @@
                 });
         });
 
-        // --- Lógica del Modal de Pago ---
-        const paymentModal = document.getElementById('payment-modal');
-        const mainActionBtn = document.getElementById('main-action-btn');
-        const closeModalBtn = document.getElementById('close-modal-btn'); // type: ignore
-        const saleTypeSelect = document.getElementById('sale_type');
-        const finalizeOrderBtn = document.getElementById('finalize-order-btn');
-        const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
-
-        // Nuevos elementos para la lógica de Entrega Especial
-        const financialSummarySection = document.getElementById('financial-summary-section');
-        const specialDispatchReasonSection = document.getElementById('special-dispatch-reason-section');
-        const dispatchReasonTextarea = document.getElementById('dispatch_reason');
-
-        const modalTotalAmount = document.getElementById('modal-total-amount');
-        const modalPaidAmount = document.getElementById('modal-paid-amount');
-        const modalRemainingAmount = document.getElementById('modal-remaining-amount');
-        const modalTotalAmountUsd = document.getElementById('modal-total-amount-usd');
-        const modalPaidAmountUsd = document.getElementById('modal-paid-amount-usd');
-        const modalRemainingAmountUsd = document.getElementById('modal-remaining-amount-usd');
-        const modalChangeDisplay = document.getElementById('modal-change-display'); // type: ignore
-        const modalChangeAmount = document.getElementById('modal-change-amount');
         const creditSaleNotice = document.getElementById('credit-sale-notice');
         
         const paymentMethodSelect = document.getElementById('payment-method'); // type: ignore
@@ -1220,6 +1320,9 @@
         let payments = [];
         let associatedProviderInfo = null; // Object to store provider info { id, name, balance_usd }
         
+        // Set default payment date to current time
+        paymentDateInput.value = '{{ current_ve_time.strftime("%Y-%m-%dT%H:%M") }}';
+
         let orderTotal = 0;
         let previousPaymentMethod = paymentMethodSelect.value;
         let previousTransferCurrency = paymentCurrencySelect.value; // type: ignore
@@ -1237,7 +1340,7 @@
             const transfer_currency = paymentCurrencySelect.value;
 
             if ((method === 'efectivo_usd') || (method === 'transferencia' && transfer_currency === 'USD')) {
-                if (activeRate > 0) {
+                if (paymentModalRate > 0) { // Use paymentModalRate
                     const amountUsd = remaining / activeRate;
                     paymentAmountInput.value = amountUsd.toFixed(2);
                 } else {
@@ -1309,8 +1412,9 @@
             // Trigger change to update conditional fields (like cashbox, bank, etc.)
             paymentMethodSelect.dispatchEvent(new Event('change'));
 
-            modalTotalAmount.textContent = orderTotal.toFixed(2) + ' Bs'; // type: ignore
-            modalTotalAmountUsd.textContent = (orderTotal / activeRate).toFixed(2) + ' {{ currency_symbol }}';
+            paymentModalRate = activeRate; // Initialize modal rate with the order's rate
+            modalTotalAmount.textContent = orderTotal.toFixed(2) + ' Bs';
+            modalTotalAmountUsd.textContent = (orderTotal / paymentModalRate).toFixed(2) + ' {{ currency_symbol }}';
             updatePaymentSummary(); // This will set up the initial state of the modal correctly
             paymentModal.classList.remove('hidden');
         }
@@ -1327,8 +1431,8 @@
             const remaining = orderTotal - totalPaid;
 
             modalPaidAmount.textContent = totalPaid.toFixed(2) + ' Bs'; // type: ignore
-            modalPaidAmountUsd.textContent = (totalPaid / activeRate).toFixed(2) + ' {{ currency_symbol }}';
-            modalRemainingAmountUsd.textContent = (Math.max(0, remaining) / activeRate).toFixed(2) + ' {{ currency_symbol }}';
+            modalPaidAmountUsd.textContent = (totalPaid / paymentModalRate).toFixed(2) + ' {{ currency_symbol }}'; // Use paymentModalRate
+            modalRemainingAmountUsd.textContent = (Math.max(0, remaining) / paymentModalRate).toFixed(2) + ' {{ currency_symbol }}'; // Use paymentModalRate
 
 
             // Handle change display
@@ -1370,6 +1474,7 @@
             const transfer_currency = paymentCurrencySelect.value; // type: ignore
             const pos_id = paymentPosSelect.value; // type: ignore
             const cash_box_id = paymentCashboxSelect.value;
+            const payment_date = paymentDateInput.value;
 
             if (!amount || amount <= 0) {
                 alert("Por favor, ingrese un monto válido.");
@@ -1421,6 +1526,7 @@
                 pos_id: method === 'punto_de_venta' ? parseInt(pos_id) : null,
                 cash_box_id: method.startsWith('efectivo') ? parseInt(cash_box_id) : null, // type: ignore
                 provider_id: method === 'intercambio_comercial' ? associatedProviderInfo.id : null,
+                date: payment_date // NEW: Add payment date
             };
 
             // CORRECCIÓN: Para los intercambios, el 'reference' debe ser el ID del proveedor para que el backend pueda rastrear el saldo.
@@ -1572,6 +1678,12 @@
             previousTransferCurrency = newTransferCurrency; // type: ignore
         });
 
+        // NEW: Event listener for payment date input in modal
+        paymentDateInput.addEventListener('input', function() {
+            const selectedDateString = this.value;
+            fetchAndUpdateRate(selectedDateString, 'paymentModal'); // Update paymentModalRate
+        });
+
         // Add event listener for the new currency dropdown for transfers
         paymentCurrencySelect.addEventListener('change', function() {
             // When currency changes, re-filter the bank list
@@ -1617,7 +1729,7 @@
             const remaining = orderTotal - payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
             const changeAmountVes = Math.abs(remaining);
             const currency = (method === 'efectivo_usd' || (method === 'transferencia' && changeSourceSelect.selectedOptions[0]?.dataset.currency === 'USD')) ? 'USD' : 'VES';
-            const amount = currency === 'USD' ? changeAmountVes / activeRate : changeAmountVes;
+            const amount = currency === 'USD' ? changeAmountVes / paymentModalRate : changeAmountVes; // Use paymentModalRate
 
             return { method, source_id: changeSourceSelect.value, amount: amount.toFixed(2), currency };
         }
@@ -1785,5 +1897,6 @@
         // Disparar el evento change al cargar para establecer el estado inicial correcto
         paymentMethodSelect.dispatchEvent(new Event('change'));
     });
+
 </script>
 {% endblock %}

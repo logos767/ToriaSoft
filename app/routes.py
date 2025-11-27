@@ -31,7 +31,7 @@ from sqlalchemy.orm import joinedload, subqueryload
 from .extensions import db, bcrypt, socketio
 from .models import (User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, 
                     CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, UserActivityLog, Store, MarketingServiceOrder,
-                    CashBox, Payment, ManualFinancialMovement, InventoryAdjustment, InventoryAdjustmentItem, VE_TIMEZONE, OrderReturn, OrderReturnItem,
+                    CashBox, Payment, ManualFinancialMovement, InventoryAdjustment, InventoryAdjustmentItem, VE_TIMEZONE, OrderReturn, OrderReturnItem, HistoricalExchangeRate,
                     UserDevice, Warehouse, ProductStock, WarehouseTransfer, BulkLoadLog)
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -217,12 +217,41 @@ def get_cached_exchange_rate(currency='USD'):
     current_app.logger.warning(f"No se encontró una tasa de cambio para '{currency}' en la base de datos.")
     return None
 
+def get_historical_exchange_rate(target_date, currency='USD'):
+    """
+    Obtiene la tasa de cambio histórica para una fecha y moneda específicas.
+    Si no se encuentra una tasa para la fecha exacta, busca la más reciente anterior.
+    Si no hay ninguna, retorna la tasa actual.
+    """
+    # Ensure target_date is a date object
+    if isinstance(target_date, datetime):
+        target_date = target_date.date()
+
+    # Try to find the rate for the exact date
+    historical_rate_entry = HistoricalExchangeRate.query.filter_by(date=target_date, currency=currency).first()
+    if historical_rate_entry:
+        return historical_rate_entry.rate
+
+    # If not found for the exact date, find the most recent rate before that date
+    historical_rate_entry = HistoricalExchangeRate.query.filter(
+        HistoricalExchangeRate.date < target_date,
+        HistoricalExchangeRate.currency == currency
+    ).order_by(HistoricalExchangeRate.date.desc()).first()
+
+    if historical_rate_entry:
+        return historical_rate_entry.rate
+
+    # Fallback: if no historical rate is found, use the current rate
+    current_app.logger.warning(f"No historical exchange rate found for {currency} on or before {target_date}. Falling back to current rate.")
+    return get_cached_exchange_rate(currency) # This gets the rate from the ExchangeRate table
+
 def fetch_and_update_exchange_rate():
     """
     Obtiene las tasas de cambio actuales VES/USD y VES/EUR de exchangerate-api.com y las guarda en la BD.
     """
     rates = obtener_tasas_exchangerate_api()
 
+    current_ve_date = get_current_time_ve().date()
     if rates:
         try:
             for currency, rate_value in rates.items():
@@ -233,6 +262,19 @@ def fetch_and_update_exchange_rate():
                 else:
                     exchange_rate_entry = ExchangeRate(currency=currency, rate=rate_value)
                     db.session.add(exchange_rate_entry)
+            
+            # For USD, also update HistoricalExchangeRate
+            if 'USD' in rates:
+                usd_rate = rates['USD']
+                historical_entry = HistoricalExchangeRate.query.filter_by(date=current_ve_date, currency='USD').first()
+                if historical_entry:
+                    # Only update if the rate has changed significantly
+                    if abs(historical_entry.rate - usd_rate) > 0.001: # Threshold for change
+                        historical_entry.rate = usd_rate
+                        historical_entry.date_recorded = get_current_time_ve()
+                else:
+                    new_historical_entry = HistoricalExchangeRate(date=current_ve_date, currency='USD', rate=usd_rate)
+                    db.session.add(new_historical_entry)
             
             db.session.commit()
             current_app.logger.info(f"Tasas de cambio actualizadas en la base de datos: {rates}")
@@ -1895,20 +1937,27 @@ def client_detail(client_id):
             # --- END: Handle Commercial Exchange ---
 
 
+                if payment_rate is None or payment_rate <= 0:
+                    raise ValueError("No se pudo determinar una tasa de cambio válida para la fecha del abono.")
 
-            # Calculate USD equivalent for all other payment methods
-            if 'amount_usd_equivalent' not in payment_info:
-                payment_info['amount_usd_equivalent'] = float(payment_info['amount_ves_equivalent']) / current_rate if current_rate > 0 else 0
-            payment_date = get_current_time_ve()
-            if payment_info.get('date'):
-                try:
-                    naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
-                    payment_date = VE_TIMEZONE.localize(naive_dt)
-                except (ValueError, TypeError):
-                    current_app.logger.warning(f"Invalid payment date format: '{payment_info['date']}'. Falling back to now.")
+                # Calculate USD equivalent for all other payment methods
+                if payment_info['currency_paid'] == 'USD':
+                    payment_info['amount_ves_equivalent'] = float(payment_info['amount_paid']) * payment_rate
+                else:
+                    payment_info['amount_ves_equivalent'] = float(payment_info['amount_paid'])
+                
+                amount_usd_equivalent = payment_info['amount_ves_equivalent'] / payment_rate if payment_rate > 0 else 0
+
+                payment_date = get_current_time_ve() # type: ignore
+                if payment_info.get('date'): # type: ignore
+                    try:
+                        naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
+                        payment_date = VE_TIMEZONE.localize(naive_dt)
+                    except (ValueError, TypeError):
+                        current_app.logger.warning(f"Invalid payment date format: '{payment_info['date']}'. Falling back to now.")
 
             payment = Payment(
-                order_id=order.id,
+                order_id=order.id, # type: ignore
                 amount_paid=payment_info['amount_paid'],
                 currency_paid=payment_info['currency_paid'],
                 amount_ves_equivalent=payment_info['amount_ves_equivalent'],
@@ -1917,7 +1966,8 @@ def client_detail(client_id):
                 reference=payment_info.get('reference'),
                 issuing_bank=payment_info.get('issuing_bank'),
                 sender_id=payment_info.get('sender_id'),
-                date=payment_date,
+                date=payment_date, # type: ignore
+                exchange_rate_at_payment=current_rate, # NEW: Store the rate used
                 bank_id=payment_info.get('bank_id'),
                 pos_id=payment_info.get('pos_id'),
                 cash_box_id=payment_info.get('cash_box_id')
@@ -2617,7 +2667,15 @@ def new_order():
         change_data = json.loads(change_data_str) if change_data_str else {}
         dispatch_reason = request.form.get('dispatch_reason', '').strip()
         
-        rate_for_order = current_rate
+        order_date = get_current_time_ve()
+        if date_created_str:
+            try:
+                naive_dt = datetime.strptime(date_created_str, '%Y-%m-%dT%H:%M')
+                order_date = VE_TIMEZONE.localize(naive_dt)
+            except (ValueError, TypeError):
+                current_app.logger.warning(f"Invalid date_created format: '{date_created_str}'. Falling back.")
+
+        rate_for_order = get_historical_exchange_rate(order_date.date(), 'USD')
         if is_gerente() and special_rate_str: # Only Gerente and Superuser can set special rate
             try:
                 special_rate = float(special_rate_str)
@@ -2625,6 +2683,10 @@ def new_order():
                     rate_for_order = special_rate
                     flash(f'¡Atención! Se está usando una tasa de cambio especial para esta orden: {rate_for_order}', 'info')
             except (ValueError, TypeError):
+                    flash('La tasa de cambio especial no es un número válido. Usando tasa determinada por fecha.', 'warning')
+            
+            if rate_for_order is None or rate_for_order <= 0:
+                flash('No se pudo determinar una tasa de cambio válida para la fecha de la orden. No se puede crear la orden.', 'danger')
                 flash('La tasa de cambio especial no es un número válido. Usando tasa actual.', 'warning')
 
         discount_enabled = request.form.get('discount_enabled') == 'on'
@@ -2641,6 +2703,11 @@ def new_order():
             if not sequence_name:
                 raise ValueError("Tipo de venta no válido.")
             
+            # --- FIX: Select the correct sequence for Store 2 ---
+            # If the active store is Sucursal 2, append '_suc2' to the sequence name.
+            if int(active_store_id) == 2:
+                sequence_name += "_suc2"
+
             if sale_type == 'special_dispatch':
                 if not dispatch_reason:
                     raise ValueError("El motivo de la entrega es obligatorio para una Entrega Especial.")
@@ -2658,28 +2725,23 @@ def new_order():
 
             # Financial validation only for sales, not for special dispatches
             if sale_type != 'special_dispatch':
-                paid_total_usd = 0
-                paid_total_ves = 0
-                for p in payments_data:
-                    if p['currency_paid'] == 'USD':
-                        p['amount_ves_equivalent'] = float(p['amount_paid']) * rate_for_order
+                paid_total_ves = 0.0
+                for payment_info in payments_data:
+                    # Use the rate_for_order for payment calculations
+                    payment_rate = rate_for_order
+                    
+                    if payment_info['currency_paid'] == 'USD':
+                        payment_info['amount_ves_equivalent'] = float(payment_info['amount_paid']) * payment_rate
                     else:
-                        p['amount_ves_equivalent'] = float(p['amount_paid'])
-                    paid_total_ves += float(p['amount_ves_equivalent'])
-                    # Calcular el equivalente en USD para el abono
-                    p['amount_usd_equivalent'] = p['amount_ves_equivalent'] / rate_for_order
-                    paid_total_usd += p['amount_usd_equivalent']
+                        payment_info['amount_ves_equivalent'] = float(payment_info['amount_paid'])
+                    
+                    payment_info['amount_usd_equivalent'] = payment_info['amount_ves_equivalent'] / payment_rate if payment_rate > 0 else 0
+                    
+                    paid_total_ves += float(payment_info['amount_ves_equivalent'])
+
                 
                 if sale_type == 'regular' and paid_total_ves < final_order_total_ves - 0.01:
                     raise ValueError(f"El monto pagado (Bs. {paid_total_ves:.2f}) es menor que el total de la orden (Bs. {final_order_total_ves:.2f}).")
-
-            order_date = get_current_time_ve()
-            if date_created_str:
-                try:
-                    naive_dt = datetime.strptime(date_created_str, '%Y-%m-%dT%H:%M')
-                    order_date = VE_TIMEZONE.localize(naive_dt)
-                except (ValueError, TypeError):
-                    current_app.logger.warning(f"Invalid date_created format: '{date_created_str}'. Falling back.")
 
             # --- Performance Optimization: Pre-fetch all products ---
             unique_product_ids = [pid for pid in product_ids if pid]
@@ -2696,14 +2758,21 @@ def new_order():
                     if not product or quantity <= 0: # type: ignore
                         continue
                     # La venta siempre es desde el almacén principal (ID 1)
-                    if product.stock_tienda < quantity:
-                        raise ValueError(f'Stock insuficiente en Tienda para "{product.name}". Solicitado: {quantity}, Disponible: {product.stock_tienda}.')
+                    # CORRECCIÓN: Usar el almacén de ventas de la sucursal activa, no uno fijo.
+                    sales_warehouse_for_order = Warehouse.query.filter_by(store_id=active_store_id, is_sellable=True).first()
+                    if not sales_warehouse_for_order:
+                        raise ValueError(f"No se encontró un almacén de ventas para la sucursal actual. Contacte al administrador.")
+
+                    stock_entry = ProductStock.query.filter_by(product_id=product.id, warehouse_id=sales_warehouse_for_order.id).first()
+                    available_stock = stock_entry.quantity if stock_entry else 0
+                    if available_stock < quantity:
+                        raise ValueError(f'Stock insuficiente en "{sales_warehouse_for_order.name}" para "{product.name}". Solicitado: {quantity}, Disponible: {available_stock}.')
 
             new_order = Order(
                 id=next_id, client_id=client_id, status='Pendiente', total_amount=0, 
                 total_amount_usd=final_order_total_usd, discount_usd=discount_usd, 
                 exchange_rate_at_sale=rate_for_order,
-                date_created=order_date, order_type=sale_type, store_id=active_store_id
+                date_created=order_date, order_type=sale_type, store_id=int(active_store_id)
             )
             # Override totals for special dispatch
             if sale_type == 'special_dispatch':
@@ -2732,15 +2801,21 @@ def new_order():
                 # Only move inventory if it's not a pending special dispatch
                 should_move_inventory = sale_type != 'special_dispatch' or (sale_type == 'special_dispatch' and is_gerente())
                 if should_move_inventory:
-                    # Descontar stock del almacén principal (ID 1)
-                    main_store_stock = ProductStock.query.filter_by(product_id=product.id, warehouse_id=1).first()
-                    if not main_store_stock or main_store_stock.quantity < quantity:
+                    # CORRECCIÓN: Usar el almacén de ventas de la sucursal activa.
+                    sales_warehouse_for_order = Warehouse.query.filter_by(store_id=active_store_id, is_sellable=True).first()
+                    if not sales_warehouse_for_order:
+                        raise ValueError(f"No se encontró un almacén de ventas para la sucursal actual. Contacte al administrador.")
+
+                    stock_entry = ProductStock.query.filter_by(product_id=product.id, warehouse_id=sales_warehouse_for_order.id).first()
+                    if not stock_entry or stock_entry.quantity < quantity:
                          raise ValueError(f"Error de consistencia de stock para {product.name}. Intente de nuevo.")
-                    main_store_stock.quantity -= quantity
+                    stock_entry.quantity -= quantity
 
                     # Registrar movimiento de salida desde el almacén principal
                     document_type = 'Entrega Especial' if sale_type == 'special_dispatch' else 'Orden de Venta'
-                    movement = Movement(product_id=product.id, type='Salida', warehouse_id=1, quantity=quantity, document_id=new_order.id, document_type=document_type, description=f"Venta al cliente #{new_order.client_id}", related_party_id=new_order.client_id, related_party_type='Cliente', date=order_date)
+                    movement = Movement(product_id=product.id, type='Salida', warehouse_id=sales_warehouse_for_order.id, quantity=quantity, 
+                                        document_id=new_order.id, document_type=document_type, description=f"Venta al cliente #{new_order.client_id}", 
+                                        related_party_id=new_order.client_id, related_party_type='Cliente', date=order_date)
                     db.session.add(movement)
                 
                 total_amount += price_ves * quantity
@@ -2771,7 +2846,7 @@ def new_order():
                 for payment_info in payments_data:
                     payment = Payment(
                         order_id=new_order.id, amount_paid=payment_info['amount_paid'], currency_paid=payment_info['currency_paid'], # type: ignore
-                        amount_ves_equivalent=payment_info['amount_ves_equivalent'], amount_usd_equivalent=payment_info['amount_usd_equivalent'], method=payment_info['method'],
+                        amount_ves_equivalent=payment_info['amount_ves_equivalent'], amount_usd_equivalent=payment_info['amount_usd_equivalent'], method=payment_info['method'], exchange_rate_at_payment=rate_for_order, # NEW: Store the rate used
                         reference=payment_info.get('reference'), issuing_bank=payment_info.get('issuing_bank'),
                         sender_id=payment_info.get('sender_id'), date=order_date, # Use the order's date for the payment
                         bank_id=payment_info.get('bank_id'),
@@ -2953,7 +3028,7 @@ def credit_detail(order_id):
                 payment = Payment(
                     order_id=order.id, amount_paid=payment_info['amount_paid'], currency_paid=payment_info['currency_paid'],
                     amount_ves_equivalent=payment_info['amount_ves_equivalent'], amount_usd_equivalent=amount_usd_equivalent, method=payment_info['method'],
-                    reference=payment_info.get('reference'), issuing_bank=payment_info.get('issuing_bank'), date=payment_date,
+                    reference=payment_info.get('reference'), issuing_bank=payment_info.get('issuing_bank'), date=payment_date, exchange_rate_at_payment=payment_rate, # NEW: Store the rate used
                     sender_id=payment_info.get('sender_id'), bank_id=payment_info.get('bank_id'),
                     pos_id=payment_info.get('pos_id'), cash_box_id=payment_info.get('cash_box_id')
                 )
@@ -3051,7 +3126,7 @@ def reservation_detail(order_id):
             try:
                 payment_info = json.loads(payment_data_json)[0]
                 # Para abonos, siempre usar la tasa de cambio actual para calcular el equivalente en USD.
-                current_rate = get_cached_exchange_rate('USD') or 1.0
+                payment_rate = get_historical_exchange_rate(payment_date.date(), 'USD') # Use the date part only
                 
                 # --- NEW: Handle Commercial Exchange ---
                 if payment_info['method'] == 'intercambio_comercial':
@@ -3087,7 +3162,7 @@ def reservation_detail(order_id):
                 amount_usd_equivalent = float(payment_info['amount_ves_equivalent']) / current_rate if current_rate > 0 else 0
 
                 payment_date = get_current_time_ve()
-                if payment_info.get('date'):
+                if payment_info.get('date'): # type: ignore
                     try:
                         naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
                         payment_date = VE_TIMEZONE.localize(naive_dt)
@@ -3097,7 +3172,7 @@ def reservation_detail(order_id):
                 payment = Payment(
                     order_id=order.id, amount_paid=payment_info['amount_paid'], currency_paid=payment_info['currency_paid'],
                     amount_ves_equivalent=payment_info['amount_ves_equivalent'], amount_usd_equivalent=amount_usd_equivalent, method=payment_info['method'],
-                    reference=payment_info.get('reference'), issuing_bank=payment_info.get('issuing_bank'), date=payment_date,
+                    reference=payment_info.get('reference'), issuing_bank=payment_info.get('issuing_bank'), date=payment_date, exchange_rate_at_payment=payment_rate, # NEW: Store the rate used
                     sender_id=payment_info.get('sender_id'), bank_id=payment_info.get('bank_id'),
                     pos_id=payment_info.get('pos_id'), cash_box_id=payment_info.get('cash_box_id')
                 )
@@ -3983,7 +4058,7 @@ def cost_structure_config():
 @routes_blueprint.route('/costos/update_rate', methods=['POST'])
 @login_required
 def update_exchange_rate():
-    """
+    """ # type: ignore
     Updates an exchange rate. Can be called from the settings page (form redirect)
     or from the new order modal (AJAX).
     """
@@ -4011,6 +4086,19 @@ def update_exchange_rate():
             else:
                 exchange_rate_entry = ExchangeRate(currency=currency, rate=manual_rate)
                 db.session.add(exchange_rate_entry)
+
+            # Also record in HistoricalExchangeRate for USD
+            if currency == 'USD':
+                current_ve_date = get_current_time_ve().date()
+                historical_entry = HistoricalExchangeRate.query.filter_by(date=current_ve_date, currency='USD').first()
+                if historical_entry:
+                    if abs(historical_entry.rate - manual_rate) > 0.001: # Only update if rate changed
+                        historical_entry.rate = manual_rate
+                        historical_entry.date_recorded = get_current_time_ve()
+                else:
+                    new_historical_entry = HistoricalExchangeRate(date=current_ve_date, currency='USD', rate=manual_rate)
+                    db.session.add(new_historical_entry)
+
             db.session.commit()
             
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.form.get('is_ajax') == 'true':
@@ -4278,10 +4366,21 @@ def api_check_stock():
 
     try:
         # Fetch all products in one query
-        # Comprobar stock solo en el almacén de tienda (ID 1)
-        products_in_db = Product.query.filter(Product.id.in_(product_ids)).options(joinedload(Product.stock_levels)).all()
-        product_stock_map = {p.id: p.stock_tienda for p in products_in_db}
+        # CORRECCIÓN: Usar el almacén de ventas de la sucursal activa, no uno fijo.
+        active_store_id = session.get('active_store_id')
+        if not active_store_id or active_store_id == 'all':
+            return jsonify({'success': False, 'error': 'No hay una sucursal activa seleccionada para verificar el stock.'}), 400
 
+        sales_warehouse = Warehouse.query.filter_by(store_id=active_store_id, is_sellable=True).first()
+        if not sales_warehouse:
+            return jsonify({'success': False, 'error': 'No se encontró un almacén de ventas para la sucursal actual.'}), 400
+
+        # Obtener el stock de los productos solicitados en el almacén correcto
+        stock_levels = db.session.query(ProductStock.product_id, ProductStock.quantity).filter(
+            ProductStock.warehouse_id == sales_warehouse.id,
+            ProductStock.product_id.in_(product_ids)
+        ).all()
+        product_stock_map = {product_id: quantity for product_id, quantity in stock_levels}
         errors = []
         for req in product_requests:
             req_id = req.get('id')
@@ -4290,9 +4389,10 @@ def api_check_stock():
             if not req_id or not isinstance(req_qty, int) or req_qty <= 0: # type: ignore
                 continue
 
-            current_stock = product_stock_map.get(int(req_id), 0)
+            # Usar el mapa de stock del almacén correcto. Si un producto no está en el mapa, su stock es 0.
+            current_stock = product_stock_map.get(int(req_id), 0) # type: ignore
             if current_stock < req_qty:
-                product_name = next((p.name for p in products_in_db if p.id == int(req_id)), 'Desconocido')
+                product_name = Product.query.with_entities(Product.name).filter_by(id=int(req_id)).scalar() or 'Desconocido'
                 errors.append({
                     'id': req_id,
                     'name': product_name,
@@ -4386,6 +4486,33 @@ def api_new_client():
         db.session.rollback()
         current_app.logger.error(f"Error creando nuevo cliente vía API: {e}")
         return jsonify({'error': 'Ocurrió un error interno en el servidor.'}), 500
+
+@routes_blueprint.route('/api/historical_exchange_rate')
+def api_historical_exchange_rate():
+    """
+    API endpoint to get the historical exchange rate for a given date.
+    If no date is provided, returns the current rate.
+    """
+    date_str = request.args.get('date')
+    currency = request.args.get('currency', 'USD')
+
+    if date_str:
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            rate = get_historical_exchange_rate(target_date, currency)
+            if rate is not None:
+                return jsonify(rate=rate)
+            else:
+                return jsonify(error=f"No historical rate found for {currency} on {date_str}"), 404
+        except ValueError:
+            return jsonify(error="Invalid date format. Use YYYY-MM-DD."), 400
+    else:
+        # If no date, return the current rate
+        rate = get_cached_exchange_rate(currency)
+        if rate is not None:
+            return jsonify(rate=rate)
+        else:
+            return jsonify(error=f"No current rate found for {currency}"), 404
 
 @routes_blueprint.route('/api/proveedores/nuevo', methods=['POST'])
 @login_required
