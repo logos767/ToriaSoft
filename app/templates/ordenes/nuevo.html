@@ -629,43 +629,45 @@
 
         // Modal logic
         const rateModal = document.getElementById('rate-change-modal');
-        const cancelRateBtn = document.getElementById('cancel-rate-change-btn');
-        const updateRateBtn = document.getElementById('update-rate-btn');
+        if (rateModal) {
+            const cancelRateBtn = document.getElementById('cancel-rate-change-btn');
+            const updateRateBtn = document.getElementById('update-rate-btn');
 
-        cancelRateBtn.addEventListener('click', () => {
-            rateModal.classList.add('hidden');
-            // Reset date to original value if cancelled
-            dateCreatedInput.value = '{{ current_ve_time.strftime("%Y-%m-%dT%H:%M") }}';
-            orderDateRate = defaultRate; // Reset rate
-            activeRate = defaultRate;
-            updateAllPricesAndSummary();
-            // NEW: Reset the special exchange rate input to the default rate
-            if (specialExchangeRateInput) {
-                specialExchangeRateInput.value = activeRate.toFixed(2);
+            if (cancelRateBtn) {
+                cancelRateBtn.addEventListener('click', () => {
+                    rateModal.classList.add('hidden');
+                    // Reset date to original value if cancelled
+                    dateCreatedInput.value = '{{ current_ve_time.strftime("%Y-%m-%dT%H:%M") }}';
+                    orderDateRate = defaultRate; // Reset rate
+                    activeRate = defaultRate;
+                    updateAllPricesAndSummary();
+                    // NEW: Reset the special exchange rate input to the default rate
+                    if (specialExchangeRateInput) {
+                        specialExchangeRateInput.value = activeRate.toFixed(2);
+                    }
+                    updatePaymentSummary();
+                });
             }
-            updatePaymentSummary();
-        });
 
-        updateRateBtn.addEventListener('click', () => {
-            const newRate = parseFloat(modalRateInput.value);
-            if (!newRate || newRate <= 0) {
-                alert('Por favor, ingrese una tasa de cambio válida.');
-                return;
+            if (updateRateBtn) {
+                updateRateBtn.addEventListener('click', () => {
+                    const newRate = parseFloat(modalRateInput.value);
+                    if (!newRate || newRate <= 0) {
+                        alert('Por favor, ingrese una tasa de cambio válida.');
+                        return;
+                    }
+                    orderDateRate = newRate;
+                    activeRate = newRate;
+                    updateAllPricesAndSummary();
+                    if (specialExchangeRateInput) {
+                        specialExchangeRateInput.value = activeRate.toFixed(2);
+                    }
+                    updatePaymentSummary();
+                    rateModal.classList.add('hidden');
+                    toastr.success(`Tasa de cambio para la orden actualizada a ${newRate.toFixed(2)} Bs.`, 'Éxito');
+                });
             }
-            // This part is for managers to override the rate for the order
-            orderDateRate = newRate;
-            activeRate = newRate;
-            updateAllPricesAndSummary();
-            // NEW: Update the special exchange rate input with the manually set rate
-            if (specialExchangeRateInput) {
-                specialExchangeRateInput.value = activeRate.toFixed(2);
-            }
-            updatePaymentSummary();
-            rateModal.classList.add('hidden');
-            toastr.success(`Tasa de cambio para la orden actualizada a ${newRate.toFixed(2)} Bs.`, 'Éxito');
-            // No need to call backend update_exchange_rate here, as this is a temporary override for the order.
-            // The backend will receive this rate in the form submission.
-        });
+        }
         {% endif %}
 
         // NEW: Event listener for manual changes on the special exchange rate input
@@ -1587,7 +1589,9 @@
         }
 
         mainActionBtn.addEventListener('click', handleMainAction);
-        closeModalBtn.addEventListener('click', closePaymentModal); // type: ignore
+        if (closeModalBtn) {
+            closeModalBtn.addEventListener('click', closePaymentModal);
+        }
         addPaymentBtnModal.addEventListener('click', addPayment);
         
         paymentMethodSelect.addEventListener('change', function() {
