@@ -54,7 +54,7 @@
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for movement in movements %}
                     <tr>
-                        <td class="px-2 py-1 whitespace-nowrap text-sm text-gray-500">{{ movement.date.strftime('%d/%m/%Y %H:%M') }}</td>
+                        <td class="px-2 py-1 whitespace-nowrap text-sm text-gray-500">{{ format_datetime_ve(movement.date) }}</td>
                         <td class="px-2 py-1 whitespace-nowrap">
                             <div class="text-sm font-medium text-gray-900">{{ movement.product.name }}</div>
                             <div style="display: flex; align-items: center;">

@@ -870,6 +870,16 @@ def inject_user_profile_pic():
         return dict(profile_image_file=image_file)
     return dict(profile_image_file=url_for('static', filename='profile_pics/default.png'))
 
+@routes_blueprint.context_processor
+def utility_processor():
+    def format_datetime_ve(dt):
+        if not dt:
+            return ""
+        # Ensure the datetime is timezone-aware (UTC) then convert to VE time
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=None) # Treat as naive, then localize if needed, but astimezone is safer
+        return dt.astimezone(VE_TIMEZONE).strftime('%d/%m/%Y %H:%M')
+    return dict(format_datetime_ve=format_datetime_ve)
 
 # --- Rutas de Perfil de Usuario ---
 @routes_blueprint.route('/perfil', methods=['GET', 'POST'])
@@ -3246,12 +3256,11 @@ def movement_list():
     start_date_str = request.args.get('start_date', default=None)
     end_date_str = request.args.get('end_date', default=None)
 
+    query = Movement.query
     active_store_id = session.get('active_store_id')
     if active_store_id and active_store_id != 'all':
         query = query.join(Warehouse).filter(Warehouse.store_id == active_store_id)
 
-
-    query = Movement.query
 
     if product_id:
         query = query.filter(Movement.product_id == product_id)
