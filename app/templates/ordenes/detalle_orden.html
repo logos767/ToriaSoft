@@ -146,16 +146,23 @@
                                 <div class="bg-gray-50 p-3 rounded-lg border">
                                     <div class="flex justify-between items-center">
                                         <span class="font-semibold text-gray-800 flex items-center">
-                                            {% set icon_found = namespace(path=None, name=None) %}
-                                            {% for bank_name, icon_file in BANK_ICONS.items() %}
-                                                {% if bank_name.lower() in payment.method.replace('_', ' ').lower() %}
-                                                    {% set icon_found.path = url_for('static', filename='img/bancos/' + icon_file) %}
-                                                    {% set icon_found.name = bank_name %}
+                                            {# --- Icono del Banco Emisor --- #}
+                                            {% set issuing_icon_path = None %}
+                                            {% for code, icon_file in BANK_ICONS.items() %}
+                                                {# Intentar encontrar el código en el nombre del banco emisor o en la referencia #}
+                                                {% if code and icon_file and (code in (payment.issuing_bank or '') or code in (payment.reference or '')) %}
+                                                    {% set issuing_icon_path = url_for('static', filename='img/bancos/' + icon_file.icon) %}
                                                 {% endif %}
                                             {% endfor %}
 
-                                            {% if icon_found.path %}
-                                                <img src="{{ icon_found.path }}" alt="{{ icon_found.name }}" class="inline-block h-6 w-6 mr-2" title="{{ icon_found.name }}">
+                                            {% if issuing_icon_path %}
+                                                <img src="{{ issuing_icon_path }}" alt="Banco Emisor" class="inline-block h-6 w-6 mr-2">
+                                            {% endif %}
+
+                                            {# --- Icono del Banco Destino --- #}
+                                            {% set dest_bank = payment.bank or (payment.pos.bank if payment.pos else None) %}
+                                            {% if dest_bank and dest_bank.code and dest_bank.code in BANK_ICONS %}
+                                                <img src="{{ url_for('static', filename='img/bancos/' + BANK_ICONS[dest_bank.code].icon) }}" alt="Banco Destino" class="inline-block h-6 w-6 mr-2" title="Destino: {{ dest_bank.name }}">
                                             {% endif %}
                                             {{ payment.method.replace('_', ' ')|title }}
                                         </span>

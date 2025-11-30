@@ -337,6 +337,7 @@ class Bank(db.Model):
     __tablename__ = 'banks'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
+    code = db.Column(db.String(10), nullable=True, unique=True) # Código único del banco (ej: 0134 para Banesco)
     account_number = db.Column(db.String(20), nullable=True, unique=True)
     balance = db.Column(db.Float, nullable=False, default=0.0) # Balance in the bank's currency
     currency = db.Column(db.String(3), nullable=False, default='VES') # 'VES', 'USD', etc.

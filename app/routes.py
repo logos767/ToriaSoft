@@ -393,6 +393,42 @@ def create_notification_for_admins(message, link):
         db.session.rollback()
 
 @routes_blueprint.context_processor
+def inject_bank_icons():
+    """Injects a dictionary of bank names to icon filenames."""
+    BANK_ICONS = {
+        '0102': {'name': 'BANCO DE VENEZUELA', 'icon': '0102.png'},
+        '0104': {'name': 'BANCO VENEZOLANO DE CREDITO', 'icon': '0104.png'},
+        '0105': {'name': 'BANCO MERCANTIL', 'icon': '0105.png'},
+        '0108': {'name': 'BBVA PROVINCIAL', 'icon': '0108.png'},
+        '0114': {'name': 'BANCARIBE', 'icon': '0114.png'},
+        '0115': {'name': 'BANCO EXTERIOR', 'icon': '0115.png'},
+        '0128': {'name': 'BANCO CARONI', 'icon': '0128.png'},
+        '0134': {'name': 'BANESCO', 'icon': '0134.png'},
+        '0137': {'name': 'BANCO SOFITASA', 'icon': '0137.png'},
+        '0138': {'name': 'BANCO PLAZA', 'icon': '0138.png'},
+        '0146': {'name': 'BANGENTE', 'icon': '0146.png'},
+        '0151': {'name': 'BANCO FONDO COMUN', 'icon': '0151.png'},
+        '0156': {'name': '100% BANCO', 'icon': '0156.png'},
+        '0157': {'name': 'DELSUR BANCO UNIVERSAL', 'icon': '0157.png'},
+        '0163': {'name': 'BANCO DEL TESORO', 'icon': '0163.png'},
+        '0168': {'name': 'BANCRECER', 'icon': '0168.png'},
+        '0169': {'name': 'R4 BANCO MICROFINANCIERO C.A.', 'icon': '0169.png'},
+        '0171': {'name': 'BANCO ACTIVO', 'icon': '0171.png'},
+        '0172': {'name': 'BANCAMIGA BANCO UNIVERSAL, C.A.', 'icon': '0172.png'},
+        '0173': {'name': 'BANCO INTERNACIONAL DE DESARROLLO', 'icon': '0173.png'},
+        '0174': {'name': 'BANPLUS', 'icon': '0174.png'},
+        '0175': {'name': 'BANCO DIGITAL DE LOS TRABAJADORES, BANCO UNIVERSAL', 'icon': '0175.png'},
+        '0177': {'name': 'BANFANB', 'icon': '0177.png'},
+        '0178': {'name': 'N58 BANCO DIGITAL BANCO MICROFINANCIERO S A', 'icon': '0178.png'},
+        '0191': {'name': 'BANCO NACIONAL DE CREDITO', 'icon': '0191.png'},
+        '0053': {'name': 'ZELLE', 'icon': '0053.png'}
+    }
+    # Obtener los bancos registrados en el sistema para los dropdowns
+    registered_banks = Bank.query.order_by(Bank.name).all()
+    return dict(BANK_ICONS=BANK_ICONS, REGISTERED_BANKS=registered_banks)
+
+
+@routes_blueprint.context_processor
 def inject_notifications():
     if not current_user.is_authenticated or not is_gerente(): # Superusuario and Gerente receive notifications
         return dict(unread_notifications=[], unread_notification_count=0)

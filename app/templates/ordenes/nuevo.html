@@ -315,27 +315,12 @@
                             <div id="payment-issuing-bank-group" class="hidden">
                                 <label for="payment-issuing-bank" class="block text-sm font-medium text-gray-700">Banco Origen</label>
                                 <select id="payment-issuing-bank" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                                    <option value="">Seleccione un banco</option>
-                                    <option value="Banco de Venezuela">Banco de Venezuela</option>
-                                    <option value="BBVA Provincial">BBVA Provincial</option>
-                                    <option value="Banesco">Banesco</option>
-                                    <option value="Banesco Panama">Banesco Panamá</option>
-                                    <option value="Binance">Binance</option>
-                                    <option value="BNC (Banco Nacional de Crédito)">BNC (Banco Nacional de Crédito)</option>
-                                    <option value="Mercantil">Mercantil</option>
-                                    <option value="Mercantil Panama">Mercantil Panamá</option>
-                                    <option value="Bancamiga">Bancamiga</option>
-                                    <option value="BDT (Banco del Tesoro)">BDT (Banco del Tesoro)</option>
-                                    <option value="Banplus">Banplus</option>
-                                    <option value="Plaza">Plaza</option>
-                                    <option value="Bancaribe">Bancaribe</option>
-                                    <option value="Banco Exterior">Banco Exterior</option>
-                                    <option value="Banco Caroní">Banco Caroní</option>
-                                    <option value="Banco Activo">Banco Activo</option>
-                                    <option value="Fondo Común (BFC)">Fondo Común (BFC)</option>
-                                    <option value="Bancrecer">Bancrecer</option>
-                                    <option value="Banco Del Sur">Banco Del Sur</option>
-                                    <option value="ZELLE">ZELLE</option>
+                                    <option value="" data-code="">Seleccione un banco</option>
+                                    {% for code, bank_data in BANK_ICONS.items()|sort %}
+                                        <option value="{{ bank_data.name }}" data-code="{{ code }}">
+                                            {{ bank_data.name }}
+                                        </option>
+                                    {% endfor %}
                                 </select>
                             </div>
                             <div id="payment-sender-id-group" class="hidden">
@@ -346,7 +331,7 @@
                                 <label for="payment-bank" class="block text-sm font-medium text-gray-700">Banco Destino</label>
                                 <select id="payment-bank" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                                     <option value="">Seleccione un banco</option>
-                                    {% for bank in banks %}<option value="{{ bank.id }}" data-currency="{{ bank.currency }}">{{ bank.name }} ({{ bank.currency }})</option>{% endfor %}
+                                    {% for bank in REGISTERED_BANKS %}<option value="{{ bank.id }}" data-currency="{{ bank.currency }}">{{ bank.name }} ({{ bank.currency }})</option>{% endfor %}
                                 </select>
                             </div>
                             <div id="payment-pos-group" class="hidden">
@@ -1472,6 +1457,9 @@
             const amount = parseFloat(paymentAmountInput.value);
             const reference = paymentReferenceInput.value;
             const issuing_bank = paymentIssuingBankInput.value;
+            // Obtener el código del banco desde el atributo data-code
+            const selectedBankOption = paymentIssuingBankInput.options[paymentIssuingBankInput.selectedIndex];
+            const issuing_bank_code = selectedBankOption ? selectedBankOption.dataset.code : null;
             const bank_id = paymentBankSelect.value;
             const transfer_currency = paymentCurrencySelect.value; // type: ignore
             const pos_id = paymentPosSelect.value; // type: ignore
@@ -1523,6 +1511,7 @@
                 amount_ves_equivalent: amount_ves_equivalent,
                 reference: reference,
                 issuing_bank: method === 'transferencia' ? issuing_bank : null,
+                issuing_bank_code: method === 'transferencia' ? issuing_bank_code : null, // Guardamos el código
                 sender_id: method === 'transferencia' ? paymentSenderIdInput.value : null,
                 bank_id: method === 'transferencia' ? parseInt(bank_id) : null,
                 pos_id: method === 'punto_de_venta' ? parseInt(pos_id) : null,
@@ -1560,10 +1549,11 @@
                 const paymentMethodName = p.method.replace(/_/g, ' ');
                 let iconHtml = '';
 
-                for (const [bankName, iconFile] of Object.entries(BANK_ICONS)) {
-                    if (paymentMethodName.toLowerCase() === bankName.toLowerCase()) {
-                        iconHtml = `<img src="/static/img/bancos/${iconFile}" alt="${bankName}" class="inline-block h-6 w-6 mr-2" title="${bankName}">`;
-                        break;
+                // Ahora buscamos el ícono usando el 'issuing_bank_code' que guardamos
+                if (p.issuing_bank_code && BANK_ICONS[p.issuing_bank_code]) {
+                    const iconFile = BANK_ICONS[p.issuing_bank_code].icon;
+                    if (iconFile) {
+                        iconHtml = `<img src="/static/img/bancos/${iconFile}" alt="${p.issuing_bank}" class="inline-block h-6 w-6 mr-2" title="${p.issuing_bank}">`;
                     }
                 }
 

@@ -41,11 +41,11 @@
                         {% for movement in movements_ves %}
                         <tr>
                             <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{{ movement.date|ve_datetime(fmt='%d/%m/%y %H:%M') }}</td>
-                            <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                            <td class="px-4 py-2 text-sm text-gray-900">
                                 {% set icon_found = namespace(value=false) %}
-                                {% for bank_name, icon_file in BANK_ICONS.items() %}
-                                    {% if bank_name in movement.description and not icon_found.value %}
-                                        <img src="{{ url_for('static', filename='img/bancos/' + icon_file) }}" alt="{{ bank_name }}" class="inline-block h-6 w-6 mr-2" title="{{ bank_name }}">
+                                {% for code, icon_file in BANK_ICONS.items() %}
+                                    {% if code and icon_file and 'Ref: ' + code in movement.description and not icon_found.value %}
+                                        <img src="{{ url_for('static', filename='img/bancos/' + icon_file) }}" alt="Banco" class="inline-block h-6 w-6 mr-2" title="Banco">
                                         {% set icon_found.value = true %}
                                     {% endif %}
                                 {% endfor %}
@@ -103,11 +103,11 @@
                         {% for movement in movements_usd %}
                         <tr>
                             <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{{ movement.date|ve_datetime(fmt='%d/%m/%y %H:%M') }}</td>
-                            <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                            <td class="px-4 py-2 text-sm text-gray-900">
                                 {% set icon_found = namespace(value=false) %}
-                                {% for bank_name, icon_file in BANK_ICONS.items() %}
-                                    {% if bank_name in movement.description and not icon_found.value %}
-                                        <img src="{{ url_for('static', filename='img/bancos/' + icon_file) }}" alt="{{ bank_name }}" class="inline-block h-6 w-6 mr-2" title="{{ bank_name }}">
+                                {% for code, icon_file in BANK_ICONS.items() %}
+                                    {% if code and icon_file and 'Ref: ' + code in movement.description and not icon_found.value %}
+                                        <img src="{{ url_for('static', filename='img/bancos/' + icon_file) }}" alt="Banco" class="inline-block h-6 w-6 mr-2" title="Banco">
                                         {% set icon_found.value = true %}
                                     {% endif %}
                                 {% endfor %}
