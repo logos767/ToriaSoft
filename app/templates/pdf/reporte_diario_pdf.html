@@ -174,6 +174,50 @@
         </table>
     </div>
 
+    <!-- Sección 1.B: Cobranzas del Día -->
+    {% if collections_today %}
+    <div class="section">
+        <h2 class="section-title" style="font-size: 14pt;">1.B. Cobranzas del Día</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 25%;">Orden / Cliente</th>
+                    <th style="width: 55%;">Productos de la Orden Original</th>
+                    <th style="width: 20%;" class="text-right">Abono Realizado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for payment in collections_today %}
+                <tr>
+                    <td>
+                        <strong>#{{ payment.order.id|order_id_format }}</strong><br>
+                        <span style="font-size: 9pt;">Fecha Orden: {{ payment.order.date_created.strftime('%d/%m/%Y') }}</span><br>
+                        <span style="font-size: 9pt;">{{ payment.order.client.name }}</span>
+                    </td>
+                    <td>
+                        <div style="font-size: 9pt;">
+                        {% for item in payment.order.items %}
+                            <p style="margin: 0; padding: 1px 0;">- {{ item.quantity }} x {{ item.product.name }}</p>
+                        {% endfor %}
+                        </div>
+                    </td>
+                    <td class="text-right">
+                        <strong class="positive"><span class="currency">{{ "{:,.2f}".format(payment.amount_usd_equivalent) }}</span></strong><br>
+                        <span style="font-size: 8pt; color: #555;">({{ payment.method|replace('_', ' ')|title }})</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="font-weight: bold; background-color: #e8f5e9;">
+                    <td colspan="2" class="text-right positive">Total Cobranzas del Día:</td>
+                    <td class="text-right positive"><span class="currency">{{ "{:,.2f}".format(collections_today|sum(attribute='amount_usd_equivalent')) }}</span></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    {% endif %}
+
     <!-- Sección 2s: Flujo de Fondos -->
     <div class="section" style="page-break-before: auto;">
         <h2 class="section-title">2. Resumen de Flujo de Fondos</h2>

@@ -2964,25 +2964,35 @@ def new_order():
             )
 
             db.session.commit()
-            if sale_type == 'special_dispatch':
-                flash('Entrega Especial creada exitosamente. Esperando aprobación del gerente.', 'info')
-                return redirect(url_for('main.order_detail', order_id=new_order.id))
-            elif sale_type == 'reservation':
-                flash('Apartado creado exitosamente! Preparando para imprimir recibo...', 'success')
-                return redirect(url_for('main.print_reservation_receipt', order_id=new_order.id))
-            else:
-                flash('Orden de venta creada exitosamente! Preparando para imprimir...', 'success')
-                return redirect(url_for('main.print_delivery_note', order_id=new_order.id))
+            
+            # Si la solicitud es AJAX (desde el nuevo flujo del frontend), devolver JSON.
+            # De lo contrario, mantener el comportamiento de redirección.
+            is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            if is_ajax:
+                return jsonify(success=True, order_id=new_order.id, sale_type=sale_type)
+            else: # Comportamiento original para cualquier otro caso
+                if sale_type == 'special_dispatch':
+                    flash('Entrega Especial creada exitosamente. Esperando aprobación del gerente.', 'info')
+                    return redirect(url_for('main.order_detail', order_id=new_order.id))
+                elif sale_type == 'reservation':
+                    flash('Apartado creado exitosamente! Preparando para imprimir recibo...', 'success')
+                    return redirect(url_for('main.print_reservation_receipt', order_id=new_order.id))
+                else:
+                    flash('Orden de venta creada exitosamente! Preparando para imprimir...', 'success')
+                    return redirect(url_for('main.print_delivery_note', order_id=new_order.id))
         except (ValueError, IntegrityError) as e:
             db.session.rollback()
-            flash(f'Error al crear la orden: {str(e)}', 'danger')
+            return jsonify(success=False, error=str(e)), 400
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Error inesperado al crear la orden: {e}", exc_info=True)
-            flash(f'Ocurrió un error inesperado al crear la orden. Por favor, contacta al administrador.', 'danger')
-            return redirect(url_for('main.new_order'))
+            return jsonify(success=False, error='Ocurrió un error inesperado en el servidor.'), 500
 
-    last_order = Order.query.order_by(Order.date_created.desc()).first()
+    # --- FIX: Get the last order for the CURRENT store, not the global last order ---
+    last_order = None
+    if active_store_id and active_store_id != 'all':
+        last_order = Order.query.filter_by(store_id=active_store_id).order_by(Order.date_created.desc()).first()
+
     current_ve_time = get_current_time_ve()
 
     return render_template('ordenes/nuevo.html', 
@@ -3171,9 +3181,19 @@ def reservation_detail(order_id):
         if payment_data_json:
             try:
                 payment_info = json.loads(payment_data_json)[0]
-                # Para abonos, siempre usar la tasa de cambio actual para calcular el equivalente en USD.
-                payment_rate = get_historical_exchange_rate(payment_date.date(), 'USD') # Use the date part only
                 
+                # --- FIX: Define payment_date BEFORE using it ---
+                payment_date = get_current_time_ve()
+                if payment_info.get('date'): # type: ignore
+                    try:
+                        naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
+                        payment_date = VE_TIMEZONE.localize(naive_dt)
+                    except (ValueError, TypeError):
+                        current_app.logger.warning(f"Invalid payment date format for reservation abono: '{payment_info['date']}'. Falling back to now.")
+
+                # Now that payment_date is defined, we can get the correct historical rate.
+                payment_rate = get_historical_exchange_rate(payment_date.date(), 'USD')
+
                 # --- NEW: Handle Commercial Exchange ---
                 if payment_info['method'] == 'intercambio_comercial':
                     if not associated_provider:
@@ -3205,15 +3225,7 @@ def reservation_detail(order_id):
                         target_id=order.id, target_type="Order")
                 # --- END: Handle Commercial Exchange ---
 
-                amount_usd_equivalent = float(payment_info['amount_ves_equivalent']) / current_rate if current_rate > 0 else 0
-
-                payment_date = get_current_time_ve()
-                if payment_info.get('date'): # type: ignore
-                    try:
-                        naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
-                        payment_date = VE_TIMEZONE.localize(naive_dt)
-                    except (ValueError, TypeError):
-                        current_app.logger.warning(f"Invalid payment date format for reservation abono: '{payment_info['date']}'. Falling back to now.")
+                amount_usd_equivalent = float(payment_info['amount_ves_equivalent']) / payment_rate if payment_rate > 0 else 0
 
                 payment = Payment(
                     order_id=order.id, amount_paid=payment_info['amount_paid'], currency_paid=payment_info['currency_paid'],
@@ -3508,7 +3520,7 @@ def generate_pnl_chart_base64(pnl_data, currency_symbol):
     bars = ax.bar(labels, values, color=colors)
 
     ax.set_ylabel(f'Monto ({currency_symbol})')
-    ax.set_title('Resumen de Resultados del Mes')
+    ax.set_title('Resumen de Resultados del Periodo')
     ax.yaxis.grid(True, linestyle='--', which='major', color='grey', alpha=.25)
     
     # Añadir etiquetas de valor sobre las barras
@@ -3559,9 +3571,14 @@ def generar_reporte_mensual_pdf():
     # A. Estado de Resultados (P&L)
     pnl_summary = {'sales': 0, 'cogs': 0, 'variable_expenses': 0, 'fixed_expenses': 0, 'gross_profit': 0, 'net_profit': 0}
     
-    orders_in_month = Order.query.filter(
+    active_store_id = session.get('active_store_id')
+    orders_query = Order.query.filter(
         Order.date_created.between(start_dt, end_dt),
-    ).options(joinedload(Order.items).joinedload(OrderItem.product)).all()
+    )
+    if active_store_id and active_store_id != 'all':
+        orders_query = orders_query.filter(Order.store_id == active_store_id)
+
+    orders_in_month = orders_query.options(joinedload(Order.items).joinedload(OrderItem.product)).all()
 
     cost_structure = CostStructure.query.first() or CostStructure()
 
@@ -3586,20 +3603,26 @@ def generar_reporte_mensual_pdf():
     pnl_summary['net_profit'] = pnl_summary['gross_profit'] - pnl_summary['variable_expenses'] - pnl_summary['fixed_expenses']
 
     # B. Productos más vendidos
-    top_products = db.session.query(
+    top_products_query = db.session.query(
         Product.name.label('nombre'), func.sum(OrderItem.quantity).label('total_vendido')
     ).join(OrderItem).join(Order).filter(
         Order.date_created.between(start_dt, end_dt)
-    ).group_by(Product.id).order_by(func.sum(OrderItem.quantity).desc()).limit(10).all()
+    )
+    if active_store_id and active_store_id != 'all':
+        top_products_query = top_products_query.filter(Order.store_id == active_store_id)
+    top_products = top_products_query.group_by(Product.id).order_by(func.sum(OrderItem.quantity).desc()).limit(10).all()
 
     # C. Ventas por tipo (status)
-    sales_by_type_raw = db.session.query(
+    sales_by_type_query = db.session.query(
         Order.order_type,
         func.count(Order.id).label('num_ventas'),
         func.sum(Order.total_amount_usd).label('total_ventas_usd')
     ).filter(
         Order.date_created.between(start_dt, end_dt)
-    ).group_by(Order.order_type).all()
+    )
+    if active_store_id and active_store_id != 'all':
+        sales_by_type_query = sales_by_type_query.filter(Order.store_id == active_store_id)
+    sales_by_type_raw = sales_by_type_query.group_by(Order.order_type).all()
 
     sales_by_type = {'Contado': {'num_ventas': 0, 'total_ventas': 0.0}, 'Crédito': {'num_ventas': 0, 'total_ventas': 0.0}, 'Apartado': {'num_ventas': 0, 'total_ventas': 0.0}}
     for order_type, num, total in sales_by_type_raw:
@@ -3608,23 +3631,32 @@ def generar_reporte_mensual_pdf():
         elif order_type == 'credit': sales_by_type['Crédito']['num_ventas'] += num; sales_by_type['Crédito']['total_ventas'] += total
         elif order_type == 'reservation': sales_by_type['Apartado']['num_ventas'] += num; sales_by_type['Apartado']['total_ventas'] += total
 
-    # D. Cuentas por cobrar pendientes (al final del mes)
-    # Optimización: Filtrar en la base de datos en lugar de en Python
-    paid_subquery = db.session.query(
-        Payment.order_id,
-        func.sum(Payment.amount_ves_equivalent).label('total_paid')
-    ).group_by(Payment.order_id).subquery()
+    # D. Cobranzas realizadas en el mes (de ventas anteriores)
+    collections_in_month_query = Payment.query.options(
+        joinedload(Payment.order).joinedload(Order.client),
+        joinedload(Payment.order).joinedload(Order.items).joinedload(OrderItem.product)
+    ).join(Order).filter(
+        Payment.date.between(start_dt, end_dt),
+        Order.date_created < start_dt,
+        Order.order_type.in_(['credit', 'reservation'])
+    )
+    if active_store_id and active_store_id != 'all':
+        collections_in_month_query = collections_in_month_query.filter(Order.store_id == active_store_id)
+    collections_in_month = collections_in_month_query.order_by(Payment.date.desc()).all()
 
-    pending_accounts_receivable = Order.query.options(
+    # E. Cuentas por cobrar pendientes (al final del mes)
+    paid_subquery = db.session.query(Payment.order_id, func.sum(Payment.amount_ves_equivalent).label('total_paid')).group_by(Payment.order_id).subquery()
+
+    pending_accounts_query = Order.query.options(
         joinedload(Order.client), subqueryload(Order.payments)
     ).outerjoin(paid_subquery, Order.id == paid_subquery.c.order_id).filter( # This logic is correct, it calculates due amount at the time of query
         Order.date_created <= end_dt, (Order.total_amount - func.coalesce(paid_subquery.c.total_paid, 0)) > 0.01
-    ).order_by(Order.date_created.asc()).all()
+    )
+    if active_store_id and active_store_id != 'all':
+        pending_accounts_query = pending_accounts_query.filter(Order.store_id == active_store_id)
+    pending_accounts_receivable = pending_accounts_query.order_by(Order.date_created.asc()).all()
 
-    # E. Cobros hechos en el mes
-    collections_in_month = Payment.query.options(joinedload(Payment.order).joinedload(Order.client)).filter(Payment.date.between(start_dt, end_dt)).order_by(Payment.date.asc()).all()
-
-    # F. Flujo de Fondos por Cuenta
+    # F. Flujo de Fondos por Cuenta (simplificado para coincidir con el reporte diario)
     from flask import make_response
     banks = Bank.query.all()
     bank_balances = []
@@ -3633,10 +3665,14 @@ def generar_reporte_mensual_pdf():
         outflows_ves = db.session.query(func.sum(ManualFinancialMovement.amount)).filter(ManualFinancialMovement.bank_id == bank.id, ManualFinancialMovement.date.between(start_dt, end_dt), ManualFinancialMovement.movement_type == 'Egreso', ManualFinancialMovement.status == 'Aprobado', ManualFinancialMovement.currency == 'VES').scalar() or 0.0
         final_balance_ves = bank.balance # This is the current balance
         initial_balance_ves = final_balance_ves - inflows_ves + outflows_ves
-        bank_balances.append({'name': bank.name, 'initial_balance_ves': initial_balance_ves, 'inflows_ves': inflows_ves, 'outflows_ves': outflows_ves, 'final_balance_ves': final_balance_ves})
+        bank_balances.append({'name': bank.name, 'inflows_ves': inflows_ves, 'outflows_ves': outflows_ves})
 
-    cash_boxes = CashBox.query.all()
+    cash_boxes_query = CashBox.query
+    if active_store_id and active_store_id != 'all':
+        cash_boxes_query = cash_boxes_query.filter(CashBox.store_id == active_store_id)
+    cash_boxes = cash_boxes_query.all()
     cash_box_balances = []
+
     for box in cash_boxes:
         # VES
         inflows_ves = (db.session.query(func.sum(Payment.amount_paid)).filter(Payment.cash_box_id == box.id, Payment.date.between(start_dt, end_dt), Payment.currency_paid == 'VES').scalar() or 0.0) + (db.session.query(func.sum(ManualFinancialMovement.amount)).filter(ManualFinancialMovement.cash_box_id == box.id, ManualFinancialMovement.date.between(start_dt, end_dt), ManualFinancialMovement.movement_type == 'Ingreso', ManualFinancialMovement.currency == 'VES', ManualFinancialMovement.status == 'Aprobado').scalar() or 0.0)
@@ -3651,6 +3687,33 @@ def generar_reporte_mensual_pdf():
         initial_balance_usd = final_balance_usd - inflows_usd + outflows_usd
 
         cash_box_balances.append({'name': box.name, 'initial_balance_ves': initial_balance_ves, 'inflows_ves': inflows_ves, 'outflows_ves': outflows_ves, 'final_balance_ves': final_balance_ves, 'initial_balance_usd': initial_balance_usd, 'inflows_usd': inflows_usd, 'outflows_usd': outflows_usd, 'final_balance_usd': final_balance_usd})
+
+    # G. Resumen de Ingresos por Método de Pago
+    payments_in_month_query = Payment.query.filter(Payment.date.between(start_dt, end_dt))
+    if active_store_id and active_store_id != 'all':
+        payments_in_month_query = payments_in_month_query.join(Order).filter(Order.store_id == active_store_id)
+    
+    payments_summary = {
+        'efectivo_ves': {'amount': 0.0},
+        'efectivo_usd': {'amount': 0.0, 'amount_usd_equivalent': 0.0},
+        'transferencia_ves': {'amount': 0.0},
+        'transferencia_usd': {'amount': 0.0, 'amount_usd_equivalent': 0.0},
+        'punto_de_venta': {'amount': 0.0},
+        'intercambio_comercial': {'amount': 0.0, 'amount_usd_equivalent': 0.0},
+    }
+    for payment in payments_in_month_query.all():
+        if payment.method == 'efectivo_ves':
+            payments_summary['efectivo_ves']['amount'] += payment.amount_paid
+        elif payment.method == 'efectivo_usd':
+            payments_summary['efectivo_usd']['amount'] += payment.amount_paid
+        elif payment.method == 'transferencia' and payment.currency_paid == 'VES':
+            payments_summary['transferencia_ves']['amount'] += payment.amount_paid
+        elif payment.method == 'transferencia' and payment.currency_paid == 'USD':
+            payments_summary['transferencia_usd']['amount'] += payment.amount_paid
+        elif payment.method == 'punto_de_venta':
+            payments_summary['punto_de_venta']['amount'] += payment.amount_ves_equivalent
+        elif payment.method == 'intercambio_comercial':
+            payments_summary['intercambio_comercial']['amount'] += payment.amount_usd_equivalent
 
     # --- 3. Generación de Gráfico ---
     pnl_chart_base64 = generate_pnl_chart_base64(pnl_summary, currency_symbol)
@@ -3681,11 +3744,13 @@ def generar_reporte_mensual_pdf():
             'pnl_summary': pnl_summary,
             'pnl_chart_base64': pnl_chart_base64,
             'top_products': top_products,
+            'orders_in_month': orders_in_month, # Pasar las órdenes para el detalle
             'sales_by_type': sales_by_type,
             'pending_accounts_receivable': pending_accounts_receivable,
             'collections_in_month': collections_in_month,
             'bank_balances': bank_balances,
             'cash_box_balances': cash_box_balances,
+            'payments_summary': payments_summary, # Pasar resumen de pagos
             'start_date': start_date,
             'end_date': end_date,
             'current_fallback_rate': current_fallback_rate,
@@ -5584,6 +5649,22 @@ def print_daily_closing_report_pdf():
 
         sales_summary['total']['cogs_usd'] += order_cogs_usd
 
+    # --- Collections from past sales (credits/reservations) ---
+    collections_today_query = Payment.query.options(
+        joinedload(Payment.order).joinedload(Order.client),
+        joinedload(Payment.order).joinedload(Order.items).joinedload(OrderItem.product)
+    ).join(Order).filter(
+        Payment.date.between(start_dt, end_dt),
+        Order.date_created < start_dt,  # Key: payments today for orders from the past
+        Order.order_type.in_(['credit', 'reservation'])
+    )
+
+    if active_store_id and active_store_id != 'all':
+        collections_today_query = collections_today_query.filter(Order.store_id == active_store_id)
+
+    collections_today = collections_today_query.order_by(Payment.date.desc()).all()
+
+
     # --- P&L Summary for the day ---
     pnl_summary = {
         'sales': sales_summary['total']['amount_usd'],
@@ -5657,6 +5738,7 @@ def print_daily_closing_report_pdf():
         'orders_today': orders_today,
         'sales_summary': sales_summary, # Pasar el desglose de ventas a la plantilla
         'report_date': report_date,
+        'collections_today': collections_today, # Pass collections to the template
     }
     html_string = render_template('pdf/reporte_diario_pdf.html', **context)
 

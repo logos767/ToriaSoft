@@ -1868,24 +1868,51 @@
         });
 
         function submitOrderForm() {
+            const form = document.getElementById('order-form');
+            const formData = new FormData(form);
             const button = finalizeOrderBtn;
             button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Procesando...';
-            paymentsDataInput.value = JSON.stringify(payments);
 
             // Capture and stringify change data
             const changeData = getChangeData();
-            const changeDataInput = document.getElementById('change-data-input');
             if (changeData && changeData.source_id) {
-                changeDataInput.value = JSON.stringify(changeData);
+                formData.set('change_data', JSON.stringify(changeData));
             } else if (changeData && !changeData.source_id) {
                 alert('Por favor, seleccione una caja o banco para registrar la salida del vuelto.');
                 button.disabled = false;
                 button.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Finalizar y Crear Orden';
                 return;
-            } else {
-                changeDataInput.value = ''; // Ensure it's empty if no change data
             }
-            document.getElementById('order-form').submit();
+
+            // Add payments data to form data
+            formData.set('payments_data', JSON.stringify(payments));
+
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' } // Header para que el backend sepa que es AJAX
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.order_id) {
+                    if (confirm('Orden creada con éxito. ¿Desea imprimir la nota de entrega?')) {
+                        // Abre la URL de impresión en una nueva pestaña
+                        window.open("{{ url_for('main.print_delivery_note', order_id=0) }}".replace('0', data.order_id), '_blank');
+                    }
+                    // Recarga la página actual para empezar una nueva orden
+                    window.location.href = "{{ url_for('main.new_order') }}";
+                } else {
+                    alert('Error al crear la orden: ' + (data.error || 'Error desconocido.'));
+                    button.disabled = false;
+                    button.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Finalizar y Crear Orden';
+                }
+            })
+            .catch(error => {
+                console.error('Error submitting form:', error);
+                alert('Ocurrió un error de red al procesar la orden. Por favor, intente de nuevo.');
+                button.disabled = false;
+                button.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Finalizar y Crear Orden';
+            });
         }
 
         // Disparar el evento change al cargar para establecer el estado inicial correcto
