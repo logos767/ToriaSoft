@@ -1974,6 +1974,15 @@ def client_detail(client_id):
                 )
                 db.session.add(exchange_service)
 
+                # --- FIX: Define payment_date and payment_rate BEFORE using them ---
+                payment_date = get_current_time_ve()
+                if payment_info.get('date'):
+                    try:
+                        naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
+                        payment_date = VE_TIMEZONE.localize(naive_dt)
+                    except (ValueError, TypeError):
+                        current_app.logger.warning(f"Invalid payment date format for abono: '{payment_info['date']}'. Falling back to now.")
+                payment_rate = get_historical_exchange_rate(payment_date.date(), 'USD')
                 log_user_activity(
                     action="Aplicó Intercambio Comercial",
                     details=f"Usó ${exchange_amount_usd:.2f} del saldo del proveedor '{associated_provider.name}' para abonar a la orden #{order.id:09d}",
@@ -1983,9 +1992,6 @@ def client_detail(client_id):
             # --- END: Handle Commercial Exchange ---
 
 
-                if payment_rate is None or payment_rate <= 0:
-                    raise ValueError("No se pudo determinar una tasa de cambio válida para la fecha del abono.")
-
                 # Calculate USD equivalent for all other payment methods
                 if payment_info['currency_paid'] == 'USD':
                     payment_info['amount_ves_equivalent'] = float(payment_info['amount_paid']) * payment_rate
@@ -1994,13 +2000,6 @@ def client_detail(client_id):
                 
                 amount_usd_equivalent = payment_info['amount_ves_equivalent'] / payment_rate if payment_rate > 0 else 0
 
-                payment_date = get_current_time_ve() # type: ignore
-                if payment_info.get('date'): # type: ignore
-                    try:
-                        naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
-                        payment_date = VE_TIMEZONE.localize(naive_dt)
-                    except (ValueError, TypeError):
-                        current_app.logger.warning(f"Invalid payment date format: '{payment_info['date']}'. Falling back to now.")
 
             payment = Payment(
                 order_id=order.id, # type: ignore
@@ -2013,7 +2012,7 @@ def client_detail(client_id):
                 issuing_bank=payment_info.get('issuing_bank'),
                 sender_id=payment_info.get('sender_id'),
                 date=payment_date, # type: ignore
-                exchange_rate_at_payment=current_rate, # NEW: Store the rate used
+                exchange_rate_at_payment=payment_rate, # FIX: Use the correct historical rate
                 bank_id=payment_info.get('bank_id'),
                 pos_id=payment_info.get('pos_id'),
                 cash_box_id=payment_info.get('cash_box_id')
@@ -3072,6 +3071,16 @@ def credit_detail(order_id):
                         details=f"Usó ${exchange_amount_usd:.2f} del saldo del proveedor '{associated_provider.name}' para abonar al crédito #{order.id:09d}",
                         target_id=order.id, target_type="Order")
                 # --- END: Handle Commercial Exchange ---
+
+                # --- FIX: Define payment_date and payment_rate BEFORE using them ---
+                payment_date = get_current_time_ve()
+                if payment_info.get('date'):
+                    try:
+                        naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
+                        payment_date = VE_TIMEZONE.localize(naive_dt)
+                    except (ValueError, TypeError):
+                        current_app.logger.warning(f"Invalid payment date format for credit abono: '{payment_info['date']}'. Falling back to now.")
+                payment_rate = get_historical_exchange_rate(payment_date.date(), 'USD')
 
                 payment_date = get_current_time_ve()
                 if payment_info.get('date'):
