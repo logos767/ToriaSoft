@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-4xl">
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <form method="POST" action="{{ url_for('main.new_credit_note') }}" id="credit-note-form">
+            <div class="flex justify-between items-center mb-6 border-b pb-4">
+                <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-plus-circle mr-2"></i>Crear Nota de Crédito</h1>
+                <a href="{{ url_for('main.client_list') }}" class="text-blue-500 hover:underline"><i class="fas fa-arrow-left mr-1"></i> Volver a Clientes</a>
+            </div>
+
+            <!-- Client Selection -->
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">1. Seleccionar Cliente</h2>
+                <select id="client_id" name="client_id" class="shadow-sm appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                    <option value="">-- Seleccione un cliente --</option>
+                    {% for client in clients %}
+                    <option value="{{ client.id }}" {% if preselected_client_id == client.id %}selected{% endif %}>{{ client.name }} ({{ client.cedula_rif or 'N/A' }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Payment Details -->
+            <div class="mb-4">
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">2. Registrar Pago del Cliente</h2>
+                <div id="add-payment-form" class="border p-4 rounded-lg bg-gray-50">
+                    <!-- Payment Date -->
+                    <div class="mb-3">
+                        <label for="payment-date" class="block text-sm font-medium text-gray-700">Fecha del Pago</label>
+                        <input type="datetime-local" id="payment-date" name="payment-date" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" required>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                        <div>
+                            <label for="payment-method" class="block text-sm font-medium text-gray-700">Método de Pago</label>
+                            <select id="payment-method" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                <option value="efectivo_ves">Efectivo (Bs)</option>
+                                <option value="efectivo_usd">Efectivo (USD)</option>
+                                <option value="transferencia">Transferencia/Pago Móvil</option>
+                                <option value="punto_de_venta">Punto de Venta</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="payment-amount" class="block text-sm font-medium text-gray-700">Monto Recibido</label>
+                            <input type="number" id="payment-amount" step="0.01" min="0.01" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" required>
+                        </div>
+                    </div>
+
+                    <!-- Conditional Fields -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div id="payment-currency-group" class="hidden">
+                            <label for="payment-currency" class="block text-sm font-medium text-gray-700">Moneda de Transferencia</label>
+                            <select id="payment-currency" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm sm:text-sm">
+                                <option value="VES">Bolívares (VES)</option>
+                                <option value="USD">Dólares (USD)</option>
+                            </select>
+                        </div>
+                        <div id="payment-reference-group" class="hidden">
+                            <label for="payment-reference" class="block text-sm font-medium text-gray-700">Referencia</label>
+                            <input type="text" id="payment-reference" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm sm:text-sm">
+                        </div>
+                        <div id="payment-issuing-bank-group" class="hidden">
+                            <label for="payment-issuing-bank" class="block text-sm font-medium text-gray-700">Banco Origen</label>
+                            <input type="text" id="payment-issuing-bank" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm sm:text-sm">
+                        </div>
+                        <div id="payment-sender-id-group" class="hidden">
+                            <label for="payment-sender-id" class="block text-sm font-medium text-gray-700">Teléfono/C.I. del Emisor</label>
+                            <input type="text" id="payment-sender-id" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm sm:text-sm">
+                        </div>
+                        <div id="payment-bank-group" class="hidden">
+                            <label for="payment-bank" class="block text-sm font-medium text-gray-700">Banco Destino</label>
+                            <select id="payment-bank" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm sm:text-sm">
+                                <option value="">Seleccione un banco</option>
+                                {% for bank in banks %}<option value="{{ bank.id }}" data-currency="{{ bank.currency }}">{{ bank.name }} ({{ bank.currency }})</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div id="payment-pos-group" class="hidden">
+                            <label for="payment-pos" class="block text-sm font-medium text-gray-700">Punto de Venta</option>
+                            <select id="payment-pos" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm sm:text-sm">
+                                <option value="">Seleccione un POS</option>
+                                {% for pos in points_of_sale %}<option value="{{ pos.id }}">{{ pos.name }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div id="payment-cashbox-group">
+                            <label for="payment-cashbox" class="block text-sm font-medium text-gray-700">Caja Receptora</label>
+                            <select id="payment-cashbox" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm sm:text-sm">
+                                <option value="">Seleccione una caja</option>
+                                {% for box in cash_boxes %}<option value="{{ box.id }}">{{ box.name }}</option>{% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="flex justify-end mt-6">
+                <input type="hidden" name="payments_data" id="payments-data-input">
+                <button type="submit" id="submit-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg focus:outline-none focus:shadow-outline transition-all">
+                    <i class="fas fa-save mr-2"></i>Guardar Nota de Crédito
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('credit-note-form');
+    const paymentMethodSelect = document.getElementById('payment-method');
+    const paymentAmountInput = document.getElementById('payment-amount');
+    const paymentDateInput = document.getElementById('payment-date');
+    const paymentsDataInput = document.getElementById('payments-data-input');
+
+    // Set default payment date to current time
+    paymentDateInput.value = new Date().toISOString().slice(0, 16);
+
+    // Conditional fields logic
+    const paymentReferenceGroup = document.getElementById('payment-reference-group');
+    const paymentIssuingBankGroup = document.getElementById('payment-issuing-bank-group');
+    const paymentSenderIdGroup = document.getElementById('payment-sender-id-group');
+    const paymentBankGroup = document.getElementById('payment-bank-group');
+    const paymentPosGroup = document.getElementById('payment-pos-group');
+    const paymentCashboxGroup = document.getElementById('payment-cashbox-group');
+    const paymentCurrencyGroup = document.getElementById('payment-currency-group');
+    const paymentCurrencySelect = document.getElementById('payment-currency');
+    const paymentBankSelect = document.getElementById('payment-bank');
+
+    function togglePaymentFields() {
+        const method = paymentMethodSelect.value;
+        const isTransfer = method === 'transferencia';
+
+        paymentReferenceGroup.classList.toggle('hidden', !isTransfer);
+        paymentIssuingBankGroup.classList.toggle('hidden', !isTransfer);
+        paymentSenderIdGroup.classList.toggle('hidden', !isTransfer);
+        paymentBankGroup.classList.toggle('hidden', !isTransfer);
+        paymentCurrencyGroup.classList.toggle('hidden', !isTransfer);
+        paymentPosGroup.classList.toggle('hidden', method !== 'punto_de_venta');
+        paymentCashboxGroup.classList.toggle('hidden', !method.startsWith('efectivo'));
+
+        if (isTransfer) {
+            filterBankOptions();
+        }
+    }
+
+    function filterBankOptions() {
+        const selectedCurrency = paymentCurrencySelect.value;
+        const bankOptions = paymentBankSelect.options;
+        for (let i = 1; i < bankOptions.length; i++) { // Skip "Seleccione un banco"
+            const option = bankOptions[i];
+            option.style.display = (option.dataset.currency === selectedCurrency) ? '' : 'none';
+        }
+        if (paymentBankSelect.selectedOptions.length > 0 && paymentBankSelect.selectedOptions[0].style.display === 'none') {
+            paymentBankSelect.value = '';
+        }
+    }
+
+    paymentMethodSelect.addEventListener('change', togglePaymentFields);
+    paymentCurrencySelect.addEventListener('change', filterBankOptions);
+
+    // Form submission logic
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const amount = parseFloat(paymentAmountInput.value);
+        if (!amount || amount <= 0) {
+            alert("Por favor, ingrese un monto válido.");
+            return;
+        }
+
+        const method = paymentMethodSelect.value;
+        const transfer_currency = paymentCurrencySelect.value;
+        let currency_paid = 'VES';
+        if (method === 'efectivo_usd' || (method === 'transferencia' && transfer_currency === 'USD')) {
+            currency_paid = 'USD';
+        }
+
+        const paymentData = {
+            method: method,
+            amount_paid: amount,
+            currency_paid: currency_paid,
+            reference: document.getElementById('payment-reference').value,
+            date: paymentDateInput.value,
+            issuing_bank: document.getElementById('payment-issuing-bank').value,
+            sender_id: document.getElementById('payment-sender-id').value,
+            bank_id: document.getElementById('payment-bank').value ? parseInt(document.getElementById('payment-bank').value) : null,
+            pos_id: document.getElementById('payment-pos').value ? parseInt(document.getElementById('payment-pos').value) : null,
+            cash_box_id: document.getElementById('payment-cashbox').value ? parseInt(document.getElementById('payment-cashbox').value) : null,
+        };
+
+        // Validation
+        if (paymentData.method === 'transferencia' && !paymentData.bank_id) {
+            alert("Por favor, seleccione un banco de destino.");
+            return;
+        }
+        if (paymentData.method === 'punto_de_venta' && !paymentData.pos_id) {
+            alert("Por favor, seleccione un punto de venta.");
+            return;
+        }
+        if (paymentData.method.startsWith('efectivo') && !paymentData.cash_box_id) {
+            alert("Por favor, seleccione una caja.");
+            return;
+        }
+
+        paymentsDataInput.value = JSON.stringify([paymentData]);
+        form.submit();
+    });
+
+    // Initialize fields on load
+    togglePaymentFields();
+});
+</script>
+{% endblock %}

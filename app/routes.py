@@ -30,7 +30,7 @@ from firebase_admin import messaging
 from sqlalchemy.orm import joinedload, subqueryload
 from .extensions import db, bcrypt, socketio
 from .models import (User, Product, Client, Provider, Order, OrderItem, Purchase, PurchaseItem, Reception, Movement, 
-                    CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, UserActivityLog, Store, MarketingServiceOrder,
+                    CompanyInfo, CostStructure, Notification, ExchangeRate, get_current_time_ve, Bank, PointOfSale, UserActivityLog, Store, MarketingServiceOrder, ClientCreditMovement,
                     CashBox, Payment, ManualFinancialMovement, InventoryAdjustment, InventoryAdjustmentItem, VE_TIMEZONE, OrderReturn, OrderReturnItem, HistoricalExchangeRate,
                     UserDevice, Warehouse, ProductStock, WarehouseTransfer, BulkLoadLog)
 from reportlab.lib.pagesizes import A4
@@ -1936,6 +1936,11 @@ def client_detail(client_id):
     if associated_provider:
         provider_balance_usd = associated_provider.get_balance_usd()
 
+    # NEW: Get client's credit balance
+    client_credit_balance_usd = client.credit_balance_usd or 0.0
+
+
+
 
     if request.method == 'POST':
         # This handles adding a payment to an order from the client detail page
@@ -2077,6 +2082,7 @@ def client_detail(client_id):
                            orders=orders, # This now contains the updated order states
                            total_due=total_due_pre_payment, # This is now the updated total due
                            provider_balance_usd=provider_balance_usd, # Pass the balance to the template
+                           client_credit_balance_usd=client_credit_balance_usd,
                            banks=banks,
                            points_of_sale=points_of_sale,
                            cash_boxes=cash_boxes)
@@ -2788,6 +2794,13 @@ def new_order():
                 if sale_type == 'regular' and paid_total_ves < final_order_total_ves - 0.01:
                     raise ValueError(f"El monto pagado (Bs. {paid_total_ves:.2f}) es menor que el total de la orden (Bs. {final_order_total_ves:.2f}).")
 
+            # --- NEW: Validate Client Credit Usage ---
+            client_credit_used_usd = 0
+            for p in payments_data:
+                if p['method'] == 'credito_cliente':
+                    client_credit_used_usd += p.get('amount_usd_equivalent', 0.0)
+            if client_credit_used_usd > (client.credit_balance_usd or 0.0):
+                raise ValueError(f"El crédito a utilizar (${client_credit_used_usd:.2f}) excede el saldo disponible del cliente (${client.credit_balance_usd or 0.0:.2f}).")
             # --- Performance Optimization: Pre-fetch all products ---
             unique_product_ids = [pid for pid in product_ids if pid]
             products_from_db = Product.query.filter(Product.id.in_(unique_product_ids)).all()
@@ -2898,6 +2911,22 @@ def new_order():
                         pos_id=payment_info.get('pos_id'), cash_box_id=payment_info.get('cash_box_id')
                     )
                     db.session.add(payment)
+
+                    # --- NEW: Handle Client Credit ---
+                    if payment.method == 'credito_cliente':
+                        credit_movement = ClientCreditMovement(
+                            client_id=client_id,
+                            movement_type='Egreso',
+                            amount_usd=-payment.amount_usd_equivalent,
+                            description=f"Uso de crédito en Nota de Entrega #{new_order.id:09d}",
+                            related_order_id=new_order.id,
+                            user_id=current_user.id
+                        )
+                        db.session.add(credit_movement)
+                        # Update client balance
+                        client.credit_balance_usd = (client.credit_balance_usd or 0.0) - payment.amount_usd_equivalent
+
+                    # --- END NEW ---
 
                     if payment.bank_id and payment.bank_id in banks_map:
                         banks_map[payment.bank_id].balance += payment.amount_ves_equivalent
@@ -6409,7 +6438,110 @@ def api_client_provider_info(client_id):
         })
     return jsonify({'has_provider': False})
 
+@routes_blueprint.route('/api/client_credit_info/<int:client_id>')
+@login_required
+def api_client_credit_info(client_id):
+    """API endpoint to get the credit balance for a client."""
+    client = Client.query.get(client_id)
+    if client:
+        return jsonify({'has_credit': True, 'credit_balance_usd': (client.credit_balance_usd or 0.0)})
+    return jsonify({'has_credit': False, 'credit_balance_usd': 0.0})
+
+
 # --- Rutas de Gestión de Usuarios (Solo Superusuario) ---
+@routes_blueprint.route('/finanzas/nota-credito/nueva', methods=['GET', 'POST'])
+@login_required
+def new_credit_note():
+    """Página para crear una nota de crédito (saldo a favor) para un cliente."""
+    clients = Client.query.order_by(Client.name).all()
+    banks = Bank.query.order_by(Bank.name).all()
+    points_of_sale = PointOfSale.query.order_by(PointOfSale.name).all()
+    
+    active_store_id = session.get('active_store_id')
+    cash_boxes_query = CashBox.query.order_by(CashBox.name)
+    if active_store_id and active_store_id != 'all':
+        cash_boxes_query = cash_boxes_query.filter(CashBox.store_id == active_store_id)
+    cash_boxes = cash_boxes_query.all()
+
+    preselected_client_id = request.args.get('client_id', type=int)
+
+    if request.method == 'POST':
+        try:
+            client_id = request.form.get('client_id', type=int)
+            payment_data_json = request.form.get('payments_data')
+            
+            if not client_id or not payment_data_json:
+                raise ValueError("Debe seleccionar un cliente y agregar un método de pago.")
+
+            client = Client.query.get_or_404(client_id)
+            payment_info = json.loads(payment_data_json)[0] # Solo se permite un pago para la nota de crédito
+
+            payment_date = get_current_time_ve()
+            if payment_info.get('date'):
+                try:
+                    naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
+                    payment_date = VE_TIMEZONE.localize(naive_dt)
+                except (ValueError, TypeError):
+                    current_app.logger.warning(f"Invalid date format for credit note: '{payment_info['date']}'.")
+
+            payment_rate = get_historical_exchange_rate(payment_date.date(), 'USD')
+            if not payment_rate or payment_rate <= 0:
+                raise ValueError("No se pudo obtener una tasa de cambio válida para la fecha del pago.")
+
+            amount_usd_equivalent = 0
+            if payment_info['currency_paid'] == 'USD':
+                amount_usd_equivalent = float(payment_info['amount_paid'])
+                payment_info['amount_ves_equivalent'] = amount_usd_equivalent * payment_rate
+            else: # VES
+                payment_info['amount_ves_equivalent'] = float(payment_info['amount_paid'])
+                amount_usd_equivalent = payment_info['amount_ves_equivalent'] / payment_rate
+
+            # 1. Crear el pago (sin asociarlo a una orden)
+            payment = Payment(
+                amount_paid=payment_info['amount_paid'], currency_paid=payment_info['currency_paid'],
+                amount_ves_equivalent=payment_info['amount_ves_equivalent'], amount_usd_equivalent=amount_usd_equivalent,
+                method=payment_info['method'], reference=payment_info.get('reference'),
+                issuing_bank=payment_info.get('issuing_bank'), sender_id=payment_info.get('sender_id'),
+                date=payment_date, exchange_rate_at_payment=payment_rate,
+                bank_id=payment_info.get('bank_id'), pos_id=payment_info.get('pos_id'),
+                cash_box_id=payment_info.get('cash_box_id'),
+                description=f"Abono para Nota de Crédito a cliente: {client.name}"
+            )
+            db.session.add(payment)
+            db.session.flush() # Para obtener el ID del pago
+
+            # 2. Actualizar saldos de cuentas
+            if payment.bank_id:
+                bank = Bank.query.get(payment.bank_id); bank.balance += payment.amount_ves_equivalent
+            elif payment.pos_id:
+                pos = PointOfSale.query.get(payment.pos_id); pos.bank.balance += payment.amount_ves_equivalent
+            elif payment.cash_box_id:
+                cash_box = CashBox.query.get(payment.cash_box_id)
+                if payment.currency_paid == 'VES': cash_box.balance_ves += payment.amount_paid
+                else: cash_box.balance_usd += payment.amount_paid
+
+            # 3. Crear el movimiento de crédito del cliente
+            credit_movement = ClientCreditMovement(
+                client_id=client.id, movement_type='Ingreso', amount_usd=amount_usd_equivalent,
+                description=f"Nota de Crédito generada por pago #{payment.id}",
+                related_payment_id=payment.id, user_id=current_user.id
+            )
+            db.session.add(credit_movement)
+
+            # 4. Actualizar el saldo del cliente
+            client.credit_balance_usd = (client.credit_balance_usd or 0.0) + amount_usd_equivalent
+
+            log_user_activity(action="Creó Nota de Crédito", details=f"Generó saldo a favor de ${amount_usd_equivalent:.2f} para el cliente '{client.name}'", target_id=client.id, target_type="Client")
+            db.session.commit()
+
+            flash(f'Nota de crédito creada exitosamente. El cliente "{client.name}" ahora tiene un saldo a favor de ${client.credit_balance_usd:.2f}.', 'success')
+            return redirect(url_for('main.client_detail', client_id=client.id))
+
+        except (ValueError, IntegrityError) as e:
+            db.session.rollback()
+            flash(f'Error al crear la nota de crédito: {e}', 'danger')
+
+    return render_template('finanzas/nueva_nota_credito.html', title='Nueva Nota de Crédito', clients=clients, banks=banks, points_of_sale=points_of_sale, cash_boxes=cash_boxes, preselected_client_id=preselected_client_id)
 
 @routes_blueprint.route('/configuracion/usuarios', methods=['GET'])
 @login_required

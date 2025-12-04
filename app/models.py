@@ -155,9 +155,12 @@ class Client(db.Model):
     
     # Columna para asociar este cliente con un registro de proveedor
     provider_id = db.Column(db.Integer, db.ForeignKey('provider.id'), nullable=True, unique=True)
+    credit_balance_usd = db.Column(db.Numeric(10, 2), default=0.0, nullable=False)
+
 
     # Relaciones
     orders = db.relationship('Order', backref='client', lazy=True)
+    credit_movements = db.relationship('ClientCreditMovement', backref='client', lazy=True, cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"Client('{self.name}', '{self.email}')"
@@ -623,3 +626,23 @@ class UserActivityLog(db.Model):
 
     def __repr__(self):
         return f"UserActivityLog('{self.user.username}', '{self.action}', '{self.created_at}')"
+
+class ClientCreditMovement(db.Model):
+    __tablename__ = 'client_credit_movement'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    movement_type = db.Column(db.String(10), nullable=False)  # 'Ingreso' o 'Egreso'
+    amount_usd = db.Column(db.Numeric(10, 2), nullable=False)
+    description = db.Column(db.String(255), nullable=False)
+    related_order_id = db.Column(db.BigInteger, db.ForeignKey('order.id'), nullable=True)
+    related_payment_id = db.Column(db.Integer, db.ForeignKey('payments.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    date = db.Column(db.DateTime(timezone=True), default=get_current_time_ve, nullable=False)
+
+    # Relaciones
+    user = db.relationship('User', backref='client_credit_movements')
+    order = db.relationship('Order', backref='client_credit_movements')
+    payment = db.relationship('Payment', backref='client_credit_movement')
+
+    def __repr__(self):
+        return f"<ClientCreditMovement {self.id} - {self.movement_type} ${self.amount_usd}>"

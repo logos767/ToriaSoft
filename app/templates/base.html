@@ -202,6 +202,9 @@
                         <a href="{{ url_for('main.my_withdrawals') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
                             <i class="fas fa-history mr-2"></i><span class="sidebar-text">Mis Retiros</span>
                         </a>
+                        <a href="{{ url_for('main.new_credit_note') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm">
+                            <i class="fas fa-plus-circle mr-2"></i><span class="sidebar-text">Nueva Nota de Crédito</span>
+                        </a>
                         {% if is_administrador() %} {# Superusuario, Gerente, administrador can view pending withdrawals and cashbox movements #}
                         <a href="{{ url_for('main.pending_withdrawals') }}" class="flex items-center py-1 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white text-sm relative">
                             <i class="fas fa-hourglass-half mr-2"></i><span class="sidebar-text">Retiros Pendientes</span>
