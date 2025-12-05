@@ -2800,7 +2800,12 @@ def new_order():
                 if p['method'] == 'credito_cliente':
                     client_credit_used_usd += p.get('amount_usd_equivalent', 0.0)
             if client_credit_used_usd > (client.credit_balance_usd or 0.0):
-                raise ValueError(f"El crédito a utilizar (${client_credit_used_usd:.2f}) excede el saldo disponible del cliente (${client.credit_balance_usd or 0.0:.2f}).")
+                # Fetch the client object to check its balance and name
+                client = Client.query.get(client_id)
+                if not client:
+                    raise ValueError("Cliente no encontrado para la validación de crédito.")
+                if client_credit_used_usd > (client.credit_balance_usd or 0.0):
+                    raise ValueError(f"El crédito a utilizar (${client_credit_used_usd:.2f}) excede el saldo disponible del cliente (${client.credit_balance_usd or 0.0:.2f}).")
             # --- Performance Optimization: Pre-fetch all products ---
             unique_product_ids = [pid for pid in product_ids if pid]
             products_from_db = Product.query.filter(Product.id.in_(unique_product_ids)).all()
@@ -2914,6 +2919,7 @@ def new_order():
 
                     # --- NEW: Handle Client Credit ---
                     if payment.method == 'credito_cliente':
+                        client = Client.query.get(client_id) # Ensure client is loaded
                         credit_movement = ClientCreditMovement(
                             client_id=client_id,
                             movement_type='Egreso',
