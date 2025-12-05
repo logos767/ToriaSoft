@@ -1401,12 +1401,19 @@
 
             const paymentMethodSelect = document.getElementById('payment-method');
             
-            // Ensure all options are visible
+            // Reset all options visibility
             for (let option of paymentMethodSelect.options) {
                 option.style.display = '';
             }
             // Reset to default if needed
             paymentMethodSelect.value = 'efectivo_ves';
+
+            // --- NEW: Conditionally show/hide client credit option ---
+            const clientCreditOption = paymentMethodSelect.querySelector('option[value="credito_cliente"]');
+            if (clientCreditOption) {
+                clientCreditOption.style.display = (clientCreditInfo && clientCreditInfo.balance_usd > 0) ? '' : 'none';
+            }
+            // --- END NEW ---
 
             // Trigger change to update conditional fields (like cashbox, bank, etc.)
             paymentMethodSelect.dispatchEvent(new Event('change'));

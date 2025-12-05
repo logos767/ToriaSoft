@@ -381,13 +381,14 @@ class CashBox(db.Model):
 class Payment(db.Model):
     __tablename__ = 'payments'
     id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.BigInteger, db.ForeignKey('order.id'), nullable=False)
+    order_id = db.Column(db.BigInteger, db.ForeignKey('order.id'), nullable=True) # Changed to nullable=True
     amount_paid = db.Column(db.Float, nullable=False) # The amount in the currency it was paid
     currency_paid = db.Column(db.String(3), nullable=False) # 'VES', 'USD'
     amount_ves_equivalent = db.Column(db.Float, nullable=False) # The equivalent in VES for the order total
     amount_usd_equivalent = db.Column(db.Float, nullable=False, default=0.0) # El equivalente en USD para el total de la orden
     method = db.Column(db.String(50), nullable=False) # 'transferencia', 'pago_movil', 'punto_de_venta', 'efectivo_usd', 'efectivo_ves', 'cruce_de_cuentas'
     reference = db.Column(db.String(100), nullable=True)
+    description = db.Column(db.String(255), nullable=True) # NEW: Add description field
     issuing_bank = db.Column(db.String(100), nullable=True) # Banco emisor
     sender_id = db.Column(db.String(50), nullable=True) # Cédula o teléfono del emisor
     date = db.Column(db.DateTime(timezone=True), nullable=False, default=get_current_time_ve)

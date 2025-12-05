@@ -60,6 +60,10 @@
                                 <option value="intercambio_comercial" style="display: none;">
                                     Intercambio Comercial
                                 </option>
+                                <!-- La visibilidad de esta opción es controlada por JS -->
+                                <option value="credito_cliente" style="display: none;">
+                                    Usar Crédito de Cliente
+                                </option>
                             </select>
                         </div>
                         <div>
@@ -145,6 +149,15 @@
                             <p><strong>Saldo Disponible:</strong> <span id="provider-balance-display" class="font-bold"></span></p>
                         </div>
                         <div id="no-provider-message" class="hidden bg-red-50 p-3 rounded-md border border-red-200 text-red-700"></div>
+                    </div>
+
+                    <!-- NEW: Client Credit Info -->
+                    <div id="payment-client-credit-group" class="mb-4 hidden">
+                        <label class="block text-gray-700 font-bold mb-2">Saldo a Favor del Cliente</label>
+                        <div id="client-credit-info-display" class="hidden bg-blue-50 p-3 rounded-md border border-blue-200">
+                            <p><strong>Saldo Disponible:</strong> <span id="client-credit-balance-display" class="font-bold"></span></p>
+                        </div>
+                        <div id="no-client-credit-message" class="hidden bg-yellow-50 p-3 rounded-md border border-yellow-200 text-yellow-700"></div>
                     </div>
 
                     <button id="add-payment-btn-modal" class="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">

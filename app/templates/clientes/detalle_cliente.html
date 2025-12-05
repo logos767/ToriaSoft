@@ -154,6 +154,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentRate = {{ current_rate }};
     let previousPaymentMethod;
     const providerBalance = parseFloat("{{ provider_balance_usd or 0 }}");
+    const clientCreditBalance = parseFloat("{{ client_credit_balance_usd or 0 }}");
 
 
     function openPaymentModalForAbono(orderId, dueAmount) {
@@ -211,6 +212,18 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        // --- NEW: Handle Client Credit option ---
+        const clientCreditOption = document.querySelector('#payment-method option[value="credito_cliente"]');
+        if (clientCreditOption) {
+            if (clientCreditBalance > 0) {
+                clientCreditOption.style.display = '';
+                clientCreditOption.textContent = `Usar Crédito de Cliente (Saldo: $${clientCreditBalance.toFixed(2)})`;
+            } else {
+                clientCreditOption.style.display = 'none';
+            }
+        }
+
+
         updatePaymentSummary();
         paymentModal.classList.remove('hidden');
 
@@ -265,6 +278,10 @@ document.addEventListener('DOMContentLoaded', function() {
         } else if (method === 'efectivo_usd' && currentRate > 0) {
              paymentAmountInput.value = (remaining / currentRate).toFixed(2);
         } else {
+            const remainingUsd = remaining / currentRate;
+            const amountToPay = Math.min(remainingUsd, clientCreditBalance);
+            paymentAmountInput.value = amountToPay.toFixed(2);
+        } else {
             paymentAmountInput.value = remaining.toFixed(2);
         }
     }
@@ -301,9 +318,17 @@ document.addEventListener('DOMContentLoaded', function() {
         let amount_ves_equivalent = amount;
         let currency_paid = 'VES';
         const transfer_currency = paymentCurrencySelect ? paymentCurrencySelect.value : 'VES';
-
-        // CORRECCIÓN: Tratar 'intercambio_comercial' como un método de pago en USD para el cálculo del equivalente.
-        if (['efectivo_usd', 'intercambio_comercial'].includes(method) || (method === 'transferencia' && transfer_currency === 'USD')) {
+        
+        // VALIDATION
+        if (method === 'intercambio_comercial' && amount > providerBalance) {
+            alert(`El monto a utilizar (${amount.toFixed(2)} USD) excede el saldo del proveedor (${providerBalance.toFixed(2)} USD).`);
+            return;
+        }
+        if (method === 'credito_cliente' && amount > clientCreditBalance) {
+            alert(`El monto a utilizar (${amount.toFixed(2)} USD) excede el saldo a favor del cliente (${clientCreditBalance.toFixed(2)} USD).`);
+            return;
+        }
+        if (['efectivo_usd', 'intercambio_comercial', 'credito_cliente'].includes(method) || (method === 'transferencia' && transfer_currency === 'USD')) {
             amount_ves_equivalent = amount * currentRate;
             currency_paid = 'USD';
         }
@@ -361,6 +386,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const paymentPosGroup = document.getElementById('payment-pos-group');
             const paymentCashboxGroup = document.getElementById('payment-cashbox-group');
             const paymentCurrencyGroup = document.getElementById('payment-currency-group'); // May be null
+            const paymentClientCreditGroup = document.getElementById('payment-client-credit-group');
 
             function filterBankOptions() {
                 const selectedCurrency = paymentCurrencySelect ? paymentCurrencySelect.value : 'VES';
@@ -402,6 +428,26 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             // --- End of new UI handling ---
 
+            // --- NEW: Handle Client Credit UI ---
+            const isClientCredit = newMethod === 'credito_cliente';
+            if (paymentClientCreditGroup) {
+                paymentClientCreditGroup.classList.toggle('hidden', !isClientCredit);
+                if (isClientCredit) {
+                    const creditInfoDiv = document.getElementById('client-credit-info-display');
+                    const noCreditMsg = document.getElementById('no-client-credit-message');
+                    if (clientCreditBalance > 0) {
+                        document.getElementById('client-credit-balance-display').textContent = `${currencySymbol}${clientCreditBalance.toFixed(2)}`;
+                        creditInfoDiv.classList.remove('hidden');
+                        noCreditMsg.classList.add('hidden');
+                    } else {
+                        noCreditMsg.textContent = 'El cliente no tiene saldo a favor disponible.';
+                        creditInfoDiv.classList.add('hidden');
+                        noCreditMsg.classList.remove('hidden');
+                    }
+                }
+            }
+            // --- End of Client Credit UI ---
+
             const isTransfer = newMethod === 'transferencia';
             [paymentReferenceGroup, paymentIssuingBankGroup, paymentSenderIdGroup, paymentBankGroup].forEach(el => el && el.classList.toggle('hidden', !isTransfer));
             if (paymentCurrencyGroup) paymentCurrencyGroup.classList.toggle('hidden', !isTransfer);
@@ -417,8 +463,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (amount && amount > 0 && currentRate > 0) {
-                const wasUsd = ['efectivo_usd', 'intercambio_comercial'].includes(previousPaymentMethod) || (previousPaymentMethod === 'transferencia' && document.getElementById('payment-currency')?.value === 'USD');
-                const isUsd = ['efectivo_usd', 'intercambio_comercial'].includes(newMethod) || (isTransfer && paymentCurrencySelect?.value === 'USD');
+                const wasUsd = ['efectivo_usd', 'intercambio_comercial', 'credito_cliente'].includes(previousPaymentMethod) || (previousPaymentMethod === 'transferencia' && document.getElementById('payment-currency')?.value === 'USD');
+                const isUsd = ['efectivo_usd', 'intercambio_comercial', 'credito_cliente'].includes(newMethod) || (isTransfer && paymentCurrencySelect?.value === 'USD');
                 if (wasUsd && !isUsd) { // USD -> VES
                     paymentAmountInput.value = (amount * currentRate).toFixed(2);
                 } else if (!wasUsd && isUsd) { // VES -> USD
