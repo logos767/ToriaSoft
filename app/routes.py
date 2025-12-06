@@ -2883,9 +2883,11 @@ def new_order():
                                         related_party_id=new_order.client_id, related_party_type='Cliente', date=order_date)
                     db.session.add(movement)
                 
-                total_amount += price_ves * quantity
+                # Ensure total_amount is a float for consistent calculations
+                total_amount += float(price_ves * quantity)
 
-            new_order.total_amount = total_amount - discount_ves
+            # Ensure both operands are floats before subtraction
+            new_order.total_amount = float(total_amount) - float(discount_ves)
             db.session.flush()
 
             if sale_type == 'special_dispatch':
