@@ -2673,6 +2673,7 @@ def order_detail(order_id):
 @routes_blueprint.route('/ordenes/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_order():
+    from decimal import Decimal
     active_store_id = session.get('active_store_id')
 
     # --- Validación de Almacén de Ventas por Sucursal ---
