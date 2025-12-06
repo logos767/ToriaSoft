@@ -1925,6 +1925,7 @@ def edit_client(client_id):
 @login_required
 def client_detail(client_id):
     client = Client.query.get_or_404(client_id)
+    from decimal import Decimal
     orders_query = Order.query.filter_by(client_id=client.id).options(subqueryload(Order.payments)).order_by(Order.date_created.desc())
 
     # Calculate total due before any potential new payment
@@ -2039,7 +2040,7 @@ def client_detail(client_id):
                 if cash_box:
                     if payment.currency_paid == 'VES': cash_box.balance_ves += payment.amount_paid
                     elif payment.currency_paid == 'USD': cash_box.balance_usd += payment.amount_paid
-
+            
             db.session.flush() # Flush to calculate new due amount
 
             # Update order status if it's now fully paid
@@ -2934,7 +2935,7 @@ def new_order():
                         )
                         db.session.add(credit_movement)
                         # Update client balance
-                        client.credit_balance_usd = (client.credit_balance_usd or 0.0) - payment.amount_usd_equivalent
+                        client.credit_balance_usd = (client.credit_balance_usd or Decimal('0.0')) - Decimal(str(payment.amount_usd_equivalent))
 
                     # --- END NEW ---
 
@@ -6462,6 +6463,7 @@ def api_client_credit_info(client_id):
 @routes_blueprint.route('/finanzas/nota-credito/nueva', methods=['GET', 'POST'])
 @login_required
 def new_credit_note():
+    from decimal import Decimal
     """Página para crear una nota de crédito (saldo a favor) para un cliente."""
     clients = Client.query.order_by(Client.name).all()
     banks = Bank.query.order_by(Bank.name).all()
@@ -6539,7 +6541,7 @@ def new_credit_note():
             db.session.add(credit_movement)
 
             # 4. Actualizar el saldo del cliente
-            client.credit_balance_usd = (client.credit_balance_usd or 0.0) + amount_usd_equivalent
+            client.credit_balance_usd = (client.credit_balance_usd or Decimal('0.0')) + Decimal(str(amount_usd_equivalent))
 
             log_user_activity(action="Creó Nota de Crédito", details=f"Generó saldo a favor de ${amount_usd_equivalent:.2f} para el cliente '{client.name}'", target_id=client.id, target_type="Client")
             db.session.commit()
@@ -6779,6 +6781,7 @@ def return_detail(return_id):
 @routes_blueprint.route('/ordenes/devolucion', methods=['GET', 'POST']) # type: ignore
 @login_required
 def return_order():
+    from decimal import Decimal
     """
     Handles the cancellation (anulación) or return (devolución) of products from a sales order.
     """
