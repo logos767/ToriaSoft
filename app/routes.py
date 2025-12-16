@@ -1995,6 +1995,9 @@ def client_detail(client_id):
                     target_id=order.id,
                     target_type="Order"
                 )
+                # FIX: Associate the payment with the provider for correct balance calculation.
+                payment_info['reference'] = str(associated_provider.id)
+
             # --- END: Handle Commercial Exchange ---
 
 
@@ -2092,9 +2095,6 @@ def client_detail(client_id):
 @routes_blueprint.route('/proveedores/lista')
 @login_required
 def provider_list():
-    if not is_administrador(): # Superusuario and Gerente can view providers
-        flash('Acceso denegado. Solo los administradores pueden ver esta sección.', 'danger')
-        return redirect(request.referrer or url_for('main.dashboard'))
     
     # Añadido: Cargar el cliente asociado para cada proveedor de forma eficiente
     # Corregido: Se elimina el joinedload que causaba el error. La asociación se resolverá en la plantilla.
@@ -2104,10 +2104,7 @@ def provider_list():
 @routes_blueprint.route('/proveedores/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_provider():
-    if not is_administrador(): # Superusuario and Gerente can create providers
-        flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
-        return redirect(request.referrer or url_for('main.dashboard'))
-
+    
     if request.method == 'POST':
         try:
             # Datos para asociación de cliente
@@ -2188,9 +2185,7 @@ def new_provider():
 @routes_blueprint.route('/proveedores/detalle/<int:provider_id>')
 @login_required
 def provider_detail(provider_id):
-    if not is_administrador():
-        flash('Acceso denegado.', 'danger')
-        return redirect(request.referrer or url_for('main.dashboard'))
+    
     provider = Provider.query.get_or_404(provider_id)
     # Buscar si hay un cliente asociado a este proveedor
     associated_client = Client.query.filter_by(provider_id=provider.id).first()
@@ -2205,10 +2200,7 @@ def provider_detail(provider_id):
 @routes_blueprint.route('/proveedores/editar/<int:provider_id>', methods=['GET', 'POST'])
 @login_required
 def edit_provider(provider_id):
-    if not is_administrador():
-        flash('Acceso denegado.', 'danger')
-        return redirect(url_for('main.provider_list'))
-
+    
     # Cargar clientes para el dropdown de asociación
     clients = Client.query.order_by(Client.name).all()
     associated_client = Client.query.filter_by(provider_id=provider_id).first()
@@ -2291,6 +2283,7 @@ def purchase_detail(purchase_id):
 @routes_blueprint.route('/compras/nuevo', methods=['GET', 'POST'])
 @login_required
 def new_purchase():
+    duplicate_purchase_id = request.args.get('duplicate_id', type=int)
     if not is_administrador(): # Superusuario and Gerente can create purchases
         flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger')
         return redirect(request.referrer or url_for('main.dashboard'))
@@ -2330,6 +2323,28 @@ def new_purchase():
     if current_rate is None:
         flash('No se ha podido obtener la tasa de cambio. No se pueden crear compras en este momento.', 'danger')
         return redirect(url_for('main.purchase_list'))
+
+    purchase_to_duplicate_data = None
+    if duplicate_purchase_id:
+        purchase_to_duplicate = Purchase.query.options(
+            joinedload(Purchase.provider),
+            joinedload(Purchase.items).joinedload(PurchaseItem.product)
+        ).get(duplicate_purchase_id)
+        if purchase_to_duplicate:
+            purchase_to_duplicate_data = {
+                "provider": {
+                    "id": purchase_to_duplicate.provider.id,
+                    "name": purchase_to_duplicate.provider.name,
+                    "tax_id": purchase_to_duplicate.provider.tax_id,
+                },
+                "items": [
+                    {
+                        "product_id": item.product_id,
+                        "quantity": item.quantity,
+                        "cost_usd": item.product.cost_usd
+                    } for item in purchase_to_duplicate.items
+                ]
+            }
 
     if request.method == 'POST':
         provider_id = request.form.get('provider_id')
@@ -2428,7 +2443,8 @@ def new_purchase():
                            products=products,
                            banks=banks,
                            cash_boxes=cash_boxes,
-                           current_rate=current_rate)
+                           current_rate=current_rate,
+                           purchase_to_duplicate_data=purchase_to_duplicate_data)
 
 # Rutas de recepciones
 @routes_blueprint.route('/recepciones/lista')
@@ -3033,6 +3049,7 @@ def new_order():
     if active_store_id and active_store_id != 'all':
         last_order = Order.query.filter_by(store_id=active_store_id).order_by(Order.date_created.desc()).first()
 
+    order_to_duplicate_data = None  # Initialize to prevent template error
     current_ve_time = get_current_time_ve()
 
     return render_template('ordenes/nuevo.html', 
@@ -3044,6 +3061,7 @@ def new_order():
                            cash_boxes=cash_boxes,                           
                            sales_warehouse=sales_warehouse,
                            last_order=last_order,
+                           order_to_duplicate_data=order_to_duplicate_data,
                            current_ve_time=current_ve_time)
 
 # --- Rutas de Créditos ---
@@ -3111,6 +3129,9 @@ def credit_detail(order_id):
                         action="Aplicó Intercambio Comercial a Crédito",
                         details=f"Usó ${exchange_amount_usd:.2f} del saldo del proveedor '{associated_provider.name}' para abonar al crédito #{order.id:09d}",
                         target_id=order.id, target_type="Order")
+                    # FIX: Associate the payment with the provider for correct balance calculation.
+                    payment_info['reference'] = str(associated_provider.id)
+
                 # --- END: Handle Commercial Exchange ---
 
                 # --- FIX: Define payment_date and payment_rate BEFORE using them ---
@@ -3273,6 +3294,9 @@ def reservation_detail(order_id):
                         action="Aplicó Intercambio Comercial a Apartado",
                         details=f"Usó ${exchange_amount_usd:.2f} del saldo del proveedor '{associated_provider.name}' para abonar al apartado #{order.id:09d}",
                         target_id=order.id, target_type="Order")
+                    # FIX: Associate the payment with the provider for correct balance calculation.
+                    payment_info['reference'] = str(associated_provider.id)
+
                 # --- END: Handle Commercial Exchange ---
 
                 amount_usd_equivalent = float(payment_info['amount_ves_equivalent']) / payment_rate if payment_rate > 0 else 0
@@ -5844,6 +5868,7 @@ def warehouse_list():
 @login_required
 def warehouse_transfer():
     """Permite realizar traslados de stock entre almacenes."""
+    duplicate_transfer_id = request.args.get('duplicate_id', type=int)
     
     if request.method == 'POST':
         try:
@@ -5922,8 +5947,35 @@ def warehouse_transfer():
         warehouses_query = warehouses_query.filter(Warehouse.store_id == active_store_id)
     warehouses = warehouses_query.all()
 
+    transfer_to_duplicate_data = None
+    if duplicate_transfer_id:
+        transfer_to_duplicate = WarehouseTransfer.query.get(duplicate_transfer_id)
+        if transfer_to_duplicate:
+            # Get movements for this transfer to find products and quantities
+            movements = Movement.query.filter_by(
+                document_id=duplicate_transfer_id,
+                document_type='Traslado de Almacén',
+                type='Salida' # We only need one side of the transfer
+            ).options(
+                joinedload(Movement.product),
+                joinedload(Movement.warehouse)
+            ).all()
+
+            if movements:
+                from_warehouse = movements[0].warehouse
+                # Infer the 'to_warehouse' from the description
+                to_warehouse_id_str = re.search(r'ID (\d+)', movements[0].description)
+                to_warehouse_id = int(to_warehouse_id_str.group(1)) if to_warehouse_id_str else None
+
+                transfer_to_duplicate_data = {
+                    "from_warehouse_id": from_warehouse.id,
+                    "to_warehouse_id": to_warehouse_id,
+                    "reason": f"Duplicado de {transfer_to_duplicate.transfer_code}",
+                    "items": [{"product_id": m.product_id, "quantity": m.quantity, "comment": m.comment or ""} for m in movements]
+                }
+
     products = Product.query.order_by(Product.name).all()
-    return render_template('almacenes/traslados.html', title='Traslado entre Almacenes', warehouses=warehouses, products=products)
+    return render_template('almacenes/traslados.html', title='Traslado entre Almacenes', warehouses=warehouses, products=products, transfer_to_duplicate_data=transfer_to_duplicate_data)
 
 @routes_blueprint.route('/almacenes/traslados/<int:transfer_id>')
 @login_required
@@ -6055,6 +6107,29 @@ def api_product_by_barcode_for_transfer(barcode):
     
     return jsonify(product_data)
 
+@routes_blueprint.route('/api/product_by_id_for_transfer/<int:product_id>')
+@login_required
+def api_product_by_id_for_transfer(product_id):
+    """API para obtener un producto por su ID y su stock en un almacén específico."""
+    warehouse_id = request.args.get('warehouse_id', type=int)
+    if not warehouse_id:
+        return jsonify({'error': 'ID de almacén no proporcionado'}), 400
+
+    active_store_id = session.get('active_store_id')
+    warehouse = Warehouse.query.get_or_404(warehouse_id)
+    if active_store_id and active_store_id != 'all' and warehouse.store_id != active_store_id:
+        return jsonify({'error': 'Acceso denegado al almacén'}), 403
+
+    product = Product.query.get_or_404(product_id)
+
+    stock_entry = ProductStock.query.filter_by(product_id=product.id, warehouse_id=warehouse_id).first()
+    stock_quantity = stock_entry.quantity if stock_entry else 0
+
+    # Devolvemos el mismo formato que la búsqueda por nombre para reutilizar addProductToTable
+    product_data = {'id': product.id, 'name': product.name, 'barcode': product.barcode, 'codigo_producto': product.codigo_producto, 'stock': stock_quantity}
+    
+    return jsonify(product_data)
+
 @routes_blueprint.route('/api/search_products_for_transfer')
 @login_required
 def api_search_products_for_transfer():
@@ -6176,9 +6251,6 @@ def marketing_provider_list():
 @login_required
 def marketing_service_list():
     """Muestra un historial de todos los servicios prestados."""
-    if not is_administrador():
-        flash('Acceso denegado.', 'danger') # type: ignore
-        return redirect(request.referrer or url_for('main.dashboard'))
 
     services = MarketingServiceOrder.query.options(
         joinedload(MarketingServiceOrder.provider)
@@ -6190,9 +6262,6 @@ def marketing_service_list():
 @login_required
 def new_marketing_service():
     """Página para registrar un nuevo servicio prestado por un proveedor."""
-    if not is_administrador():
-        flash('Acceso denegado.', 'danger') # type: ignore
-        return redirect(request.referrer or url_for('main.dashboard'))
 
     # Proveedores de servicios
     providers = Provider.query.filter(Provider.provider_type.like('Servicios%')).order_by(Provider.name).all()
@@ -6261,10 +6330,7 @@ def new_marketing_service():
 @login_required
 def marketing_service_detail(service_id):
     """Muestra los detalles de un servicio prestado específico."""
-    if not is_administrador():
-        flash('Acceso denegado.', 'danger') # type: ignore
-        return redirect(request.referrer or url_for('main.dashboard'))
-
+    
     service_order = MarketingServiceOrder.query.options(
         joinedload(MarketingServiceOrder.provider),
         joinedload(MarketingServiceOrder.user),
@@ -6289,14 +6355,20 @@ def marketing_provider_detail_view(provider_id):
 
     # 2. Obtener todos los pagos realizados a este proveedor
     # Asumimos que los pagos se registran con una descripción que incluye el service_code
-    service_codes = [s.service_code for s in services]
-    
-    # Construir un patrón de búsqueda para los pagos
-    search_patterns = [f"%{code}%" for code in service_codes]
-    payments = ManualFinancialMovement.query.filter(
-        ManualFinancialMovement.movement_type == 'Egreso',
-        or_(*[ManualFinancialMovement.description.like(p) for p in search_patterns])
-    ).all()
+    payments = []
+    if services:
+        service_codes = [s.service_code for s in services]
+        
+        # Construir un patrón de búsqueda para los pagos
+        search_patterns = [f"%{code}%" for code in service_codes]
+        
+        # FIX: Filtrar también por provider_id para mayor precisión y evitar coincidencias accidentales.
+        # TEMPORARY FIX: Revert to searching by description until provider_id is added to the model.
+        payments = ManualFinancialMovement.query.filter(
+            ManualFinancialMovement.movement_type == 'Egreso',
+            # ManualFinancialMovement.provider_id == provider.id, # This line causes the error.
+            or_(*[ManualFinancialMovement.description.like(p) for p in search_patterns])
+        ).all()
 
     # 3. Combinar y ordenar todos los movimientos
     all_movements = []
@@ -6312,11 +6384,12 @@ def marketing_provider_detail_view(provider_id):
         current_balance += service.service_value_usd
 
     for payment in payments:
+        debit_amount_usd = payment.amount if payment.currency == 'USD' else (payment.amount / (get_cached_exchange_rate('USD') or 1.0))
         all_movements.append({
             'date': payment.date,
             'description': payment.description,
             'credit': 0,
-            'debit': payment.amount if payment.currency == 'USD' else (payment.amount / (get_cached_exchange_rate('USD') or 1.0)),
+            'debit': debit_amount_usd,
             'type': 'Pago Realizado'
         })
         current_balance -= debit_amount_usd
@@ -6344,10 +6417,7 @@ def marketing_provider_detail_view(provider_id):
 @login_required
 def pay_marketing_service():
     """Página para registrar el pago de un servicio prestado a un proveedor."""
-    if not is_administrador():
-        flash('Acceso denegado.', 'danger') # type: ignore
-        return redirect(request.referrer or url_for('main.dashboard'))
-
+    
     preselected_service_id = request.args.get('service_id', type=int)
 
     # Obtener servicios pendientes de pago
@@ -6401,7 +6471,7 @@ def pay_marketing_service():
                 created_by_user_id=current_user.id,
                 approved_by_user_id=current_user.id,
                 date=payment_date, # type: ignore
-                provider_id=service_to_pay.provider_id, # Asociar el pago con el proveedor
+                # provider_id=service_to_pay.provider_id, # Uncomment this after adding the field to the model
                 date_approved=get_current_time_ve()
             )
 

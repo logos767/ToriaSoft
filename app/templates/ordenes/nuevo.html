@@ -466,6 +466,7 @@
 
 <script>
     const BANK_ICONS = {{ BANK_ICONS|tojson|safe }};
+    const orderToDuplicateData = {{ order_to_duplicate_data|tojson|safe }};
     document.addEventListener('DOMContentLoaded', function() {
         const clientSearchInput = document.getElementById('client_search');
         const clientSuggestions = document.getElementById('client_suggestions');
@@ -1966,6 +1967,34 @@
         // Disparar el evento change al cargar para establecer el estado inicial correcto
         paymentMethodSelect.dispatchEvent(new Event('change'));
     });
+
+    // --- NEW: Logic to handle order duplication ---
+    if (orderToDuplicateData) {
+        // 1. Populate Client Info
+        if (orderToDuplicateData.client) {
+            const client = orderToDuplicateData.client;
+            document.getElementById('client_id').value = client.id;
+            document.getElementById('client_search').value = `${client.name} - ${client.cedula_rif || ''}`;
+            
+            // Use the existing showClientInfo function
+            const clientInfoDiv = document.getElementById('client_info');
+            document.getElementById('client_name').textContent = client.name || '';
+            document.getElementById('client_cedula_rif').textContent = client.cedula_rif || '';
+            document.getElementById('client_email').textContent = client.email || '';
+            document.getElementById('client_phone').textContent = client.phone || '';
+            document.getElementById('client_address').textContent = client.address || '';
+            clientInfoDiv.classList.remove('hidden');
+        }
+
+        // 2. Populate Product Items
+        if (orderToDuplicateData.items && orderToDuplicateData.items.length > 0) {
+            const productListBody = document.querySelector('#product-list tbody');
+            productListBody.innerHTML = ''; // Clear any existing rows
+            orderToDuplicateData.items.forEach(item => {
+                addProductToTable({ id: item.product_id }, item.quantity, item.price_usd);
+            });
+        }
+    }
 
 </script>
 {% endblock %}

@@ -316,6 +316,7 @@
 </div>
 
 <script>
+    const purchaseToDuplicateData = {{ purchase_to_duplicate_data|tojson|safe }};
     document.addEventListener('DOMContentLoaded', function() {
         const productListBody = document.querySelector('#product-list tbody');
         const addProductBtn = document.getElementById('add-product-btn');
@@ -565,7 +566,7 @@
         });
 
         // --- Product Search Logic ---
-        function addProductToTable(product, isNew = false) {
+        function addProductToTable(product, quantity = 1, cost_usd = null) {
             let existingRow = Array.from(productListBody.querySelectorAll('.product-id-input')).find(input => input.value == product.id)?.closest('tr');
 
             if (existingRow) {
@@ -578,9 +579,12 @@
                 const select = newRow.querySelector('.product-select');
                 populateProductSelect(select);
                 select.value = product.id;
-                initializeProductItem(newRow);
-                newRow.querySelector('.quantity-input').value = 1;
+                newRow.querySelector('.quantity-input').value = quantity;
+                const costInput = newRow.querySelector('.cost-usd-input');
+                costInput.value = cost_usd !== null ? cost_usd : (product.cost_usd || '0.00');
+                updateCostVes(costInput);
                 updatePurchaseSummary();
+
                 productListBody.appendChild(newRow);
                 newRow.querySelector('.quantity-input').focus();
             }
@@ -838,6 +842,32 @@
 
         // Initial setup
         paymentMethodSelect.dispatchEvent(new Event('change'));
+
+        // --- NEW: Logic to handle purchase duplication ---
+        if (purchaseToDuplicateData) {
+            // 1. Populate Provider Info
+            if (purchaseToDuplicateData.provider) {
+                const provider = purchaseToDuplicateData.provider;
+                document.getElementById('provider_id').value = provider.id;
+                document.getElementById('provider_search').value = `${provider.name} - ${provider.tax_id || ''}`;
+                
+                // Use the existing showProviderInfo function
+                showProviderInfo(provider);
+            }
+
+            // 2. Populate Product Items
+            if (purchaseToDuplicateData.items && purchaseToDuplicateData.items.length > 0) {
+                const productListBody = document.querySelector('#product-list tbody');
+                productListBody.innerHTML = ''; // Clear any existing rows
+                purchaseToDuplicateData.items.forEach(item => {
+                    // Find the full product object from allProducts to pass to addProductToTable
+                    const product = allProducts.find(p => p.id == item.product_id);
+                    if (product) {
+                        addProductToTable(product, item.quantity, item.cost_usd);
+                    }
+                });
+            }
+        }
     });
 </script>
 {% endblock %}

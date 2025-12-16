@@ -97,6 +97,7 @@
 </template>
 
 <script>
+const transferToDuplicateData = {{ transfer_to_duplicate_data|tojson|safe }};
 document.addEventListener('DOMContentLoaded', function() {
     const fromWarehouseSelect = document.getElementById('from_warehouse_id');
     const toWarehouseSelect = document.getElementById('to_warehouse_id');
@@ -116,20 +117,23 @@ document.addEventListener('DOMContentLoaded', function() {
         return addedRow;
     }
 
-    fromWarehouseSelect.addEventListener('change', function() {
+    async function fetchAndUpdateStocks() {
+        const warehouseId = fromWarehouseSelect.value;
         const warehouseId = this.value;
         if (!warehouseId) {
             productStocks = {};
             updateAllRows();
             return;
         }
-        fetch(`/api/warehouse_stock/${warehouseId}`)
+        await fetch(`/api/warehouse_stock/${warehouseId}`)
             .then(res => res.json())
             .then(data => {
                 productStocks = data.stocks;
                 updateAllRows();
             });
-    });
+    }
+
+    fromWarehouseSelect.addEventListener('change', fetchAndUpdateStocks);
 
     function addProductToTable(product) {
         // Verificar si el producto ya está en la lista
@@ -280,6 +284,42 @@ document.addEventListener('DOMContentLoaded', function() {
             toastr.error('El almacén de origen y destino no pueden ser el mismo.', 'Error de Validación');
         }
     });
+
+    // --- NEW: Logic to handle transfer duplication ---
+    async function populateDuplicatedTransfer() {
+        if (!transferToDuplicateData) return;
+
+        // 1. Set warehouses and reason
+        fromWarehouseSelect.value = transferToDuplicateData.from_warehouse_id;
+        toWarehouseSelect.value = transferToDuplicateData.to_warehouse_id;
+        document.getElementById('reason').value = transferToDuplicateData.reason;
+
+        // 2. Fetch stocks for the origin warehouse
+        await fetchAndUpdateStocks.call(fromWarehouseSelect);
+
+        // 3. Populate products
+        if (transferToDuplicateData.items && transferToDuplicateData.items.length > 0) {
+            productListBody.innerHTML = ''; // Clear list
+            for (const item of transferToDuplicateData.items) {
+                // We need to fetch product details to display them
+                // FIX: Use the new endpoint that fetches by product ID, not barcode.
+                const response = await fetch(`/api/product_by_id_for_transfer/${item.product_id}?warehouse_id=${transferToDuplicateData.from_warehouse_id}`);
+                if (response.ok) {
+                    const productData = await response.json();
+                    const newRow = createProductRowElement();
+                    newRow.querySelector('.product-id-input').value = productData.id;
+                    newRow.querySelector('.product-name-display').textContent = productData.name;
+                    newRow.querySelector('.product-barcode-display').textContent = productData.barcode;
+                    newRow.querySelector('.product-code-display').textContent = productData.codigo_producto || 'N/A';
+                    newRow.querySelector('.quantity-input').value = item.quantity;
+                    newRow.querySelector('.comment-input').value = item.comment;
+                    updateRow(newRow);
+                }
+            }
+        }
+    }
+
+    populateDuplicatedTransfer();
 });
 </script>
 {% endblock %}

@@ -58,12 +58,15 @@
 
         <!-- Botones de Acción -->
         <div class="mt-8 flex justify-between items-center">
-            <a href="{{ url_for('main.warehouse_transfer') }}" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">
-                <i class="fas fa-plus mr-2"></i>Nuevo Traslado
-            </a>
-            <a href="{{ url_for('main.print_transfer_report', transfer_id=transfer.id) }}" target="_blank" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
-                <i class="fas fa-print mr-2"></i>Imprimir Reporte
-            </a>
+            <a href="{{ url_for('main.warehouse_transfer') }}" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg"><i class="fas fa-plus mr-2"></i>Nuevo Traslado</a>
+            <div class="flex space-x-2">
+                <a href="{{ url_for('main.warehouse_transfer', duplicate_id=transfer.id) }}" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors" title="Duplicar Traslado">
+                    <i class="fas fa-copy mr-2"></i>Duplicar
+                </a>
+                <a href="{{ url_for('main.print_transfer_report', transfer_id=transfer.id) }}" target="_blank" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">
+                    <i class="fas fa-print mr-2"></i>Imprimir Reporte
+                </a>
+            </div>
         </div>
     </div>
 </div>
