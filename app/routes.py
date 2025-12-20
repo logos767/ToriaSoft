@@ -1565,7 +1565,7 @@ def inventory_adjustment():
 
             if not adjustments:
                 flash('No se detectaron cambios para ajustar.', 'warning')
-                return redirect(url_for('main.inventory_adjustment'))
+                return redirect(url_for('main.inventory_adjustment', warehouse_id=warehouse_id_form))
             
             if not warehouse_id_form:
                 flash('Debe seleccionar un almacén para realizar el ajuste.', 'danger')
@@ -1707,9 +1707,9 @@ def adjustment_result(adjustment_id):
     # KPIs - NEW LOGIC: Calculate total inventory value before and after the adjustment.
     # 1. Calculate the total value of the entire inventory *after* the adjustment (current state).
     # We exclude 'Ganchos' as they are supplies, not for sale.
-    total_inventory_value_after_query = db.session.query( # type: ignore
-        func.sum(Product.stock * Product.cost_usd)
-    ).filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).first()
+    total_inventory_value_after_query = db.session.query(
+        func.sum(ProductStock.quantity * Product.cost_usd)
+    ).join(Product).filter(or_(Product.grupo != 'Ganchos', Product.grupo.is_(None))).first()
     value_after = total_inventory_value_after_query[0] or 0.0
 
     # 2. Calculate the value *before* by subtracting the adjustment's impact.

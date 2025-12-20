@@ -35,7 +35,14 @@
                         {% for product, stock in products_data %}
                         {% set theoretical_stock = stock if stock is not none else 0 %}
                         <tr class="product-row" data-product-id="{{ product.id }}">
-                            <td class="py-2 px-3">{{ product.name }}</td>
+                            <td class="py-2 px-3">
+                                <div class="font-bold text-gray-800">{{ product.name }}</div>
+                                <div class="text-xs text-gray-600">
+                                    <span>{{ product.marca or '' }}</span>
+                                    <span class="ml-2 text-gray-400">|</span>
+                                    <span class="ml-2"><i class="fas fa-barcode"></i> {{ product.barcode }}</span>
+                                </div>
+                            </td>
                             <td class="py-2 px-3 text-center font-mono theoretical-stock">{{ theoretical_stock }}</td>
                             <td class="py-2 px-3 text-center">
                                 <input type="number" class="real-stock-input w-24 text-center border rounded py-1 px-2" value="{{ theoretical_stock }}" min="0">
@@ -64,14 +71,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const warehouseSelect = document.getElementById('warehouse_id');
     warehouseSelect.addEventListener('change', function() {
         const selectedId = this.value;
-        window.location.href = `{{ url_for('main.inventory_adjustment') }}?warehouse_id=${selectedId}`;
+        window.location.href = `{{ url_for('main.inventory_adjustment') | safe }}?warehouse_id=${selectedId}`;
     });
 
     const table = document.getElementById('adjustment-table');
     const form = document.getElementById('adjustment-form');
 
     function calculateDifference(row) {
-        const theoreticalStock = parseInt(row.querySelector('.theoretical-stock').textContent, 10);
+        const theoreticalStockText = row.querySelector('.theoretical-stock').textContent.trim();
+        const theoreticalStock = parseInt(theoreticalStockText, 10) || 0;
         const realStockInput = row.querySelector('.real-stock-input');
         const realStock = parseInt(realStockInput.value, 10);
         const differenceCell = row.querySelector('.difference');
@@ -85,42 +93,70 @@ document.addEventListener('DOMContentLoaded', function() {
         const difference = realStock - theoreticalStock;
         differenceCell.textContent = difference > 0 ? `+${difference}` : difference;
 
+        differenceCell.className = 'px-3 py-2 whitespace-nowrap text-sm text-center font-bold difference';
         if (difference < 0) {
-            differenceCell.className = 'px-3 py-2 whitespace-nowrap text-sm text-center font-bold difference text-red-600';
+            differenceCell.classList.add('text-red-600');
         } else if (difference > 0) {
-            differenceCell.className = 'px-3 py-2 whitespace-nowrap text-sm text-center font-bold difference text-green-600';
+            differenceCell.classList.add('text-green-600');
         } else {
-            differenceCell.className = 'px-3 py-2 whitespace-nowrap text-sm text-center font-bold difference text-gray-500';
+            differenceCell.classList.add('text-gray-500');
         }
-    </div>
-
-    table.addEventListener('input', function(e) {
-        if (e.target.classList.contains('real-stock-input')) {
-            const row = e.target.closest('tr');
-            calculateDifference(row);
+    }
+    
+    // Usamos event delegation en el cuerpo de la tabla para los inputs de stock real
+    const tbody = table.querySelector('tbody');
+    tbody.addEventListener('input', function(e) {
+        if (e.target && e.target.classList.contains('real-stock-input')) {
+            calculateDifference(e.target.closest('tr'));
         }
     });
 
+    let isSubmitting = false; // Variable de control para evitar bucles
     form.addEventListener('submit', function(e) {
-        e.preventDefault(); // Prevenir el envío inmediato
-        const rowsWithChanges = Array.from(table.querySelectorAll('tbody .product-row')).filter(row => {
-            const difference = parseInt(row.querySelector('.difference').textContent, 10);
-            return !isNaN(difference) && difference !== 0; // Solo filas con cambios
+        // Si ya estamos en proceso de envío, simplemente dejamos que continúe.
+        if (isSubmitting) {
+            return;
+        }
+
+        // Prevenimos el envío para procesar los datos.
+        e.preventDefault();
+
+        
+        // Limpiar ajustes previos para no duplicar datos en re-intentos
+        this.querySelectorAll('input[name="adjustments"]').forEach(input => input.remove());
+        const allRows = table.querySelectorAll('tbody .product-row');
+        let hasChanges = false;
+
+        allRows.forEach(row => {
+            const theoreticalStockText = row.querySelector('.theoretical-stock').textContent.trim();
+            const theoreticalStock = parseInt(theoreticalStockText, 10) || 0;
+            const realStock = parseInt(row.querySelector('.real-stock-input').value, 10);
+
+            if (!isNaN(realStock) && realStock !== theoreticalStock) {
+                hasChanges = true;
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'adjustments';
+                input.value = JSON.stringify({
+                    comment: row.querySelector('.comment-input').value,
+                    product_id: row.dataset.productId,
+                    real_stock: realStock
+                });
+                this.appendChild(input);
+            }
         });
 
-        rowsWithChanges.forEach(row => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'adjustments';
-            input.value = JSON.stringify({
-                comment: row.querySelector('.comment-input').value,
-                product_id: row.dataset.productId,
-                real_stock: row.querySelector('.real-stock-input').value
-            });
-            this.appendChild(input);
-        });
-
-        this.submit(); // Enviar el formulario con los datos adjuntos
+        if (hasChanges) {
+            // Marcamos que estamos listos para enviar y llamamos a submit() de nuevo.
+            isSubmitting = true;
+            this.submit();
+        } else {
+            // Si no hay cambios, preguntamos al usuario.
+            if (confirm("No se detectaron cambios en el stock. ¿Desea continuar de todas formas? (Esto no generará ningún ajuste).")) {
+                isSubmitting = true;
+                this.submit(); // Permitir envío si el usuario lo confirma.
+            }
+        }
     });
 });
 </script>
