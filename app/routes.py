@@ -1949,46 +1949,40 @@ def client_detail(client_id):
         order = Order.query.get_or_404(order_id)
         
         try:
-            # Para abonos, siempre usar la tasa de cambio actual para calcular el equivalente en USD. # type: ignore
-            current_rate = get_cached_exchange_rate('USD') or 1.0
             payment_data_json = request.form.get('payments_data')
             payment_info = json.loads(payment_data_json)[0]
+
+            # --- FIX: Define payment_date and payment_rate for ALL payments ---
+            payment_date = get_current_time_ve()
+            if payment_info.get('date'):
+                try:
+                    naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
+                    payment_date = VE_TIMEZONE.localize(naive_dt)
+                except (ValueError, TypeError):
+                    current_app.logger.warning(f"Invalid payment date format for abono: '{payment_info['date']}'. Falling back to now.")
+            
+            payment_rate = get_historical_exchange_rate(payment_date.date(), 'USD')
+            if not payment_rate or payment_rate <= 0:
+                payment_rate = get_cached_exchange_rate('USD') or 1.0 # Fallback
+
+            # --- Recalculate equivalents on the backend for accuracy ---
+            amount_paid = float(payment_info['amount_paid'])
+            if payment_info['currency_paid'] == 'USD':
+                amount_ves_equivalent = amount_paid * payment_rate
+                amount_usd_equivalent = amount_paid
+            else: # VES
+                amount_ves_equivalent = amount_paid
+                amount_usd_equivalent = amount_paid / payment_rate if payment_rate > 0 else 0
 
             # --- NEW: Handle Commercial Exchange ---
             if payment_info['method'] == 'intercambio_comercial':
                 if not associated_provider:
                     raise ValueError("Este cliente no tiene un proveedor de servicios asociado.")
 
-                payment_info['amount_usd_equivalent'] = float(payment_info['amount_ves_equivalent']) / current_rate if current_rate > 0 else 0
-                exchange_amount_usd = payment_info.get('amount_usd_equivalent', 0.0)
+                exchange_amount_usd = amount_usd_equivalent
                 if exchange_amount_usd > provider_balance_usd:
                     raise ValueError(f"El saldo por intercambio (${provider_balance_usd:.2f}) es insuficiente para cubrir el monto del abono (${exchange_amount_usd:.2f}).")
 
-                # Create a negative service order to consume the provider's balance
-                today_str = get_current_time_ve().strftime('%y%m%d')
-                count_today = MarketingServiceOrder.query.filter(MarketingServiceOrder.service_code.like(f"SERV{today_str}%")).count()
-                service_code = f"SERV{today_str}-{count_today + 1}"
-
-                exchange_service = MarketingServiceOrder(
-                    service_code=service_code,
-                    provider_id=associated_provider.id,
-                    user_id=current_user.id,
-                    date=get_current_time_ve(),
-                    service_description=f"Uso de crédito para abono en Nota de Entrega #{order.id:09d}",
-                    service_value_usd=-exchange_amount_usd, # Negative value to decrease balance
-                    status='Completado'
-                )
-                db.session.add(exchange_service)
-
-                # --- FIX: Define payment_date and payment_rate BEFORE using them ---
-                payment_date = get_current_time_ve()
-                if payment_info.get('date'):
-                    try:
-                        naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
-                        payment_date = VE_TIMEZONE.localize(naive_dt)
-                    except (ValueError, TypeError):
-                        current_app.logger.warning(f"Invalid payment date format for abono: '{payment_info['date']}'. Falling back to now.")
-                payment_rate = get_historical_exchange_rate(payment_date.date(), 'USD')
                 log_user_activity(
                     action="Aplicó Intercambio Comercial",
                     details=f"Usó ${exchange_amount_usd:.2f} del saldo del proveedor '{associated_provider.name}' para abonar a la orden #{order.id:09d}",
@@ -1998,30 +1992,18 @@ def client_detail(client_id):
                 # FIX: Associate the payment with the provider for correct balance calculation.
                 payment_info['reference'] = str(associated_provider.id)
 
-            # --- END: Handle Commercial Exchange ---
-
-
-                # Calculate USD equivalent for all other payment methods
-                if payment_info['currency_paid'] == 'USD':
-                    payment_info['amount_ves_equivalent'] = float(payment_info['amount_paid']) * payment_rate
-                else:
-                    payment_info['amount_ves_equivalent'] = float(payment_info['amount_paid'])
-                
-                amount_usd_equivalent = payment_info['amount_ves_equivalent'] / payment_rate if payment_rate > 0 else 0
-
-
             payment = Payment(
                 order_id=order.id, # type: ignore
-                amount_paid=payment_info['amount_paid'],
+                amount_paid=amount_paid,
                 currency_paid=payment_info['currency_paid'],
-                amount_ves_equivalent=payment_info['amount_ves_equivalent'],
-                amount_usd_equivalent=payment_info.get('amount_usd_equivalent', 0.0),
+                amount_ves_equivalent=amount_ves_equivalent,
+                amount_usd_equivalent=amount_usd_equivalent,
                 method=payment_info['method'],
                 reference=payment_info.get('reference'),
                 issuing_bank=payment_info.get('issuing_bank'),
                 sender_id=payment_info.get('sender_id'),
-                date=payment_date, # type: ignore
-                exchange_rate_at_payment=payment_rate, # FIX: Use the correct historical rate
+                date=payment_date,
+                exchange_rate_at_payment=payment_rate,
                 bank_id=payment_info.get('bank_id'),
                 pos_id=payment_info.get('pos_id'),
                 cash_box_id=payment_info.get('cash_box_id')
@@ -3109,22 +3091,6 @@ def credit_detail(order_id):
                     if exchange_amount_usd > provider_balance_usd:
                         raise ValueError(f"El saldo por intercambio (${provider_balance_usd:.2f}) es insuficiente para cubrir el monto del abono (${exchange_amount_usd:.2f}).")
 
-                    # Create a negative service order to consume the provider's balance
-                    today_str = get_current_time_ve().strftime('%y%m%d')
-                    count_today = MarketingServiceOrder.query.filter(MarketingServiceOrder.service_code.like(f"SERV{today_str}%")).count()
-                    service_code = f"SERV{today_str}-{count_today + 1}"
-
-                    exchange_service = MarketingServiceOrder(
-                        service_code=service_code,
-                        provider_id=associated_provider.id,
-                        user_id=current_user.id,
-                        date=get_current_time_ve(),
-                        service_description=f"Uso de crédito para abono en Crédito #{order.id:09d}",
-                        service_value_usd=-exchange_amount_usd, # Negative value to decrease balance
-                        status='Completado'
-                    )
-                    db.session.add(exchange_service)
-
                     log_user_activity(
                         action="Aplicó Intercambio Comercial a Crédito",
                         details=f"Usó ${exchange_amount_usd:.2f} del saldo del proveedor '{associated_provider.name}' para abonar al crédito #{order.id:09d}",
@@ -3273,22 +3239,6 @@ def reservation_detail(order_id):
                     exchange_amount_usd = float(payment_info['amount_usd_equivalent']) / current_rate if current_rate > 0 else 0
                     if exchange_amount_usd > provider_balance_usd:
                         raise ValueError(f"El saldo por intercambio (${provider_balance_usd:.2f}) es insuficiente para cubrir el monto del abono (${exchange_amount_usd:.2f}).")
-
-                    # Create a negative service order to consume the provider's balance
-                    today_str = get_current_time_ve().strftime('%y%m%d')
-                    count_today = MarketingServiceOrder.query.filter(MarketingServiceOrder.service_code.like(f"SERV{today_str}%")).count()
-                    service_code = f"SERV{today_str}-{count_today + 1}"
-
-                    exchange_service = MarketingServiceOrder(
-                        service_code=service_code,
-                        provider_id=associated_provider.id,
-                        user_id=current_user.id,
-                        date=get_current_time_ve(),
-                        service_description=f"Uso de crédito para abono en Apartado #{order.id:09d}",
-                        service_value_usd=-exchange_amount_usd, # Negative value to decrease balance
-                        status='Completado'
-                    )
-                    db.session.add(exchange_service)
 
                     log_user_activity(
                         action="Aplicó Intercambio Comercial a Apartado",
@@ -4945,14 +4895,21 @@ def bank_movement_detail(bank_id):
     payments_query = Payment.query.filter(or_(Payment.bank_id == bank_id, Payment.pos_id.in_(pos_ids)))
     
     # Get manual movements
-    manual_movements_query = ManualFinancialMovement.query.filter_by(bank_id=bank_id)
+    manual_movements_query = ManualFinancialMovement.query.filter_by(bank_id=bank_id).options(joinedload(ManualFinancialMovement.order_return))
     
     # Combine and prepare for sorting
     combined_movements = []
     
     # Process payments (always income in VES)
     for p in payments_query.all():
-        description_parts = [f"Pago de Orden #{p.order_id:09d}"]
+        is_cancelled = False
+        if p.order and p.order.status == 'Anulada':
+            is_cancelled = True
+
+        if p.order_id is not None:
+            description_parts = [f"Pago de Orden #{p.order_id:09d}"]
+        else:
+            description_parts = ["Pago"]
         if p.method == 'transferencia':
             if p.reference:
                 description_parts.append(f"Ref: {p.reference}")
@@ -4966,18 +4923,25 @@ def bank_movement_detail(bank_id):
             'description': ". ".join(description_parts),
             'income': p.amount_ves_equivalent,
             'expense': 0,
-            'currency': 'VES'
+            'currency': 'VES',
+            'is_cancelled': is_cancelled
         })
         
     # Process manual movements
     for m in manual_movements_query.all():
         if m.currency != 'VES': continue
+        
+        # Ocultar movimientos de reverso por anulación total para no duplicar visualmente la anulación
+        if m.order_return and m.order_return.return_type == 'Anulación Total':
+            continue
+
         combined_movements.append({
             'date': m.date,
             'description': m.description,
             'income': m.amount if m.movement_type == 'Ingreso' else 0,
             'expense': m.amount if m.movement_type == 'Egreso' else 0,
-            'currency': m.currency
+            'currency': m.currency,
+            'is_cancelled': False
         })
         
     # Sort all movements by date (newest first)
@@ -6347,71 +6311,63 @@ def marketing_provider_detail_view(provider_id):
     Muestra un estado de cuenta para un proveedor de servicios, incluyendo
     servicios prestados (créditos), intercambios comerciales (débitos) y pagos.
     """
-    
     provider = Provider.query.get_or_404(provider_id)
     
-    # 1. Obtener todos los servicios (créditos y débitos por intercambio)
-    services = MarketingServiceOrder.query.filter_by(provider_id=provider.id).all()
+    # 1. Get all service orders (can be credit or debit)
+    # FIX: Filtrar solo servicios positivos para coincidir con get_balance_usd y evitar duplicados con pagos
+    services = MarketingServiceOrder.query.filter_by(
+        provider_id=provider.id, 
+        status='Completado'
+    ).filter(MarketingServiceOrder.service_value_usd > 0).all()
 
-    # 2. Obtener todos los pagos realizados a este proveedor
-    # Asumimos que los pagos se registran con una descripción que incluye el service_code
-    payments = []
-    if services:
-        service_codes = [s.service_code for s in services]
-        
-        # Construir un patrón de búsqueda para los pagos
-        search_patterns = [f"%{code}%" for code in service_codes]
-        
-        # FIX: Filtrar también por provider_id para mayor precisión y evitar coincidencias accidentales.
-        # TEMPORARY FIX: Revert to searching by description until provider_id is added to the model.
-        payments = ManualFinancialMovement.query.filter(
-            ManualFinancialMovement.movement_type == 'Egreso',
-            # ManualFinancialMovement.provider_id == provider.id, # This line causes the error.
-            or_(*[ManualFinancialMovement.description.like(p) for p in search_patterns])
-        ).all()
+    # 2. Get all debit movements from sales (commercial exchanges via Payment model)
+    exchanges = Payment.query.filter(
+        Payment.method.in_(['cruce_de_cuentas', 'intercambio_comercial']),
+        Payment.reference == str(provider.id)
+    ).options(joinedload(Payment.order)).all()
 
-    # 3. Combinar y ordenar todos los movimientos
+    # 3. Combine and sort all movements for display
     all_movements = []
-    current_balance = 0.0  # Inicializar el saldo
     for service in services:
+        # Positive values are credits, negative values are debits (adjustments)
         all_movements.append({
             'date': service.date,
             'description': service.service_description,
-            'credit': service.service_value_usd if service.service_value_usd > 0 else 0,
-            'debit': -service.service_value_usd if service.service_value_usd < 0 else 0,
-            'type': 'Servicio' if service.service_value_usd > 0 else 'Intercambio'
+            'credit': service.service_value_usd,
+            'debit': 0,
+            'type': f'Servicio Prestado ({service.service_code})'
         })
-        current_balance += service.service_value_usd
 
-    for payment in payments:
-        debit_amount_usd = payment.amount if payment.currency == 'USD' else (payment.amount / (get_cached_exchange_rate('USD') or 1.0))
+    for exchange in exchanges:
+        order_id_str = f" en N.E. #{exchange.order.id:09d}" if exchange.order else ""
         all_movements.append({
-            'date': payment.date,
-            'description': payment.description,
+            'date': exchange.date,
+            'description': f"Uso de saldo por intercambio comercial{order_id_str}",
             'credit': 0,
-            'debit': debit_amount_usd,
-            'type': 'Pago Realizado'
+            'debit': exchange.amount_usd_equivalent,
+            'type': 'Intercambio Comercial (Venta)'
         })
-        current_balance -= debit_amount_usd
 
     # Ordenar por fecha ascendente para calcular el saldo acumulado
     all_movements.sort(key=lambda x: x['date'])
 
-    # Calcular saldo acumulado
+    # Calculate running balance for display
     running_balance = 0
     for movement in all_movements:
         running_balance += movement['credit'] - movement['debit']
         movement['balance'] = running_balance
 
-
     # Invertir la lista para mostrar los más recientes primero en la plantilla
     all_movements.reverse()
+
+    # Get final balance from the single source of truth: the model method.
+    final_balance = provider.get_balance_usd()
 
     return render_template('mercadeo_publicidad/detalle_proveedor_servicios.html',
                            title=f'Estado de Cuenta: {provider.name}',
                            provider=provider,
                            movements=all_movements,
-                           final_balance=current_balance)
+                           final_balance=final_balance)
 
 @routes_blueprint.route('/mercadeo/servicios_prestados/pagar', methods=['GET', 'POST'])
 @login_required

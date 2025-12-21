@@ -208,7 +208,8 @@ class Provider(db.Model):
         """
         # Suma de todos los servicios que el proveedor ha prestado (crédito para la tienda)
         total_services_value = db.session.query(func.sum(MarketingServiceOrder.service_value_usd)) \
-            .filter_by(provider_id=self.id, status='Completado').scalar() or 0.0
+            .filter_by(provider_id=self.id, status='Completado') \
+            .filter(MarketingServiceOrder.service_value_usd > 0).scalar() or 0.0
 
         # CORRECCIÓN: Sumar todos los pagos que consumen el saldo del proveedor.
         # Esto incluye tanto 'cruce_de_cuentas' (método antiguo/otro) como 'intercambio_comercial' (usado en el modal de pagos).

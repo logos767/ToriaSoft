@@ -5,7 +5,7 @@
     <div class="flex items-center justify-between mb-6">
         <div>
             <h1 class="text-3xl font-bold text-gray-800"><i class="fas fa-university mr-2"></i>{{ title }}</h1>
-            <p class="text-gray-500">Saldo Actual: <span class="font-bold text-green-600">Bs. {{ "%.2f"|format(bank.balance) }}</span></p>
+            <p class="text-gray-500">Saldo Actual: <span class="font-bold text-green-600">Bs. {{ "%.2f"|format(bank.balance or 0) }}</span></p>
         </div>
         <div class="flex items-center space-x-2">
             <a href="{{ url_for('main.new_financial_movement', account_type='bank', account_id=bank.id) }}" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors">
@@ -30,14 +30,21 @@
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for movement in movements %}
-                    <tr>
+                    <tr {% if movement.is_cancelled %}class="bg-gray-50 opacity-75"{% endif %}>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ movement.date.strftime('%d/%m/%Y %H:%M') }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ movement.description }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <span class="{% if movement.is_cancelled %}line-through{% endif %}">{{ movement.description }}</span>
+                            {% if movement.is_cancelled %} <span class="text-red-500 font-bold">(ANULADO)</span>{% endif %}
+                        </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-green-600">
-                            {% if movement.income > 0 %}{{ "%.2f"|format(movement.income) }}{% endif %}
+                            {% if movement.is_cancelled %}
+                                <span class="line-through text-gray-400">{{ "%.2f"|format(movement.income) }}</span>
+                            {% elif movement.income and movement.income > 0 %}
+                                {{ "%.2f"|format(movement.income) }}
+                            {% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-red-600">
-                            {% if movement.expense > 0 %}{{ "%.2f"|format(movement.expense) }}{% endif %}
+                            {% if movement.expense and movement.expense > 0 %}{{ "%.2f"|format(movement.expense) }}{% endif %}
                         </td>
                     </tr>
                     {% else %}

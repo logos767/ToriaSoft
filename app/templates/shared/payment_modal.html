@@ -57,9 +57,7 @@
                                 <option value="transferencia">Transferencia / Pago Móvil</option>
                                 <option value="punto_de_venta">Punto de Venta</option>
                                 <!-- La visibilidad de esta opción es controlada por JS en la página que lo invoca -->
-                                <option value="intercambio_comercial" style="display: none;">
-                                    Intercambio Comercial
-                                </option>
+                                <option value="intercambio_comercial">Intercambio Comercial</option>
                                 <!-- La visibilidad de esta opción es controlada por JS -->
                                 <option value="credito_cliente" style="display: none;">
                                     Usar Crédito de Cliente
@@ -132,7 +130,7 @@
                         </select>
                     </div>
                     <div id="payment-cashbox-group" class="mb-4 hidden">
-                        <label for="payment-cashbox" class="block text-gray-700 font-bold mb-2">Caja</p>
+                        <label for="payment-cashbox" class="block text-gray-700 font-bold mb-2">Caja</label>
                         <select id="payment-cashbox" name="payment-cashbox" class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <option value="">Seleccione una caja</option>
                             {% for box in cash_boxes %}
@@ -143,7 +141,7 @@
 
                     <!-- NEW: Provider Info for Commercial Exchange -->
                     <div id="payment-provider-group" class="mb-4 hidden">
-                        <label class="block text-gray-700 font-bold mb-2">Proveedor de Servicio Asociado</p>
+                        <label class="block text-gray-700 font-bold mb-2">Proveedor de Servicio Asociado</label>
                         <div id="provider-info-display" class="hidden bg-green-50 p-3 rounded-md border border-green-200">
                             <p><strong>Proveedor:</strong> <span id="provider-name-display"></span></p>
                             <p><strong>Saldo Disponible:</strong> <span id="provider-balance-display" class="font-bold"></span></p>

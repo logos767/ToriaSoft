@@ -1349,7 +1349,7 @@
 
             if ((method === 'efectivo_usd') || (method === 'transferencia' && transfer_currency === 'USD')) {
                 if (paymentModalRate > 0) { // Use paymentModalRate
-                    const amountUsd = remaining / activeRate;
+                    const amountUsd = remaining / paymentModalRate;
                     paymentAmountInput.value = amountUsd.toFixed(2);
                 } else {
                     paymentAmountInput.value = '0.00'; // Avoid division by zero
@@ -1536,11 +1536,15 @@
                 currency_paid = 'USD';
             }
 
+            // Calcular el equivalente en USD explícitamente para asegurar consistencia en el backend
+            const amount_usd_equivalent = (currency_paid === 'USD') ? amount : (amount / activeRate);
+
             const payment = {
                 method: method,
                 amount_paid: amount,
                 currency_paid: currency_paid,
                 amount_ves_equivalent: amount_ves_equivalent,
+                amount_usd_equivalent: amount_usd_equivalent,
                 reference: reference,
                 issuing_bank: method === 'transferencia' ? issuing_bank : null,
                 issuing_bank_code: method === 'transferencia' ? issuing_bank_code : null, // Guardamos el código
@@ -1553,7 +1557,7 @@
             };
 
             // CORRECCIÓN: Para los intercambios, el 'reference' debe ser el ID del proveedor para que el backend pueda rastrear el saldo.
-            if (method === 'intercambio_comercial' && associatedProviderInfo) {
+            if (method === 'intercambio_comercial' && associatedProviderInfo && associatedProviderInfo.id) {
                 payment.reference = associatedProviderInfo.id.toString();
                 payment.provider_id = associatedProviderInfo.id; // Mantenemos esto por si se usa en otro lado.
             }

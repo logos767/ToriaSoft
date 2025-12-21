@@ -277,7 +277,7 @@ document.addEventListener('DOMContentLoaded', function() {
             paymentAmountInput.value = amountToPay.toFixed(2);
         } else if (method === 'efectivo_usd' && currentRate > 0) {
              paymentAmountInput.value = (remaining / currentRate).toFixed(2);
-        } else {
+        } else if (method === 'credito_cliente' && currentRate > 0) {
             const remainingUsd = remaining / currentRate;
             const amountToPay = Math.min(remainingUsd, clientCreditBalance);
             paymentAmountInput.value = amountToPay.toFixed(2);
