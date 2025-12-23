@@ -250,7 +250,8 @@ class Order(db.Model):
     exchange_rate_at_sale = db.Column(db.Float, nullable=True)
     store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=True, index=True) # Puede ser nulo para órdenes antiguas
     dispatch_reason = db.Column(db.Text, nullable=True)
-
+    due_date = db.Column(db.DateTime, nullable=True)
+    
     # Relaciones
     items = db.relationship('OrderItem', backref='order', lazy=True, cascade="all, delete-orphan")
     payments = db.relationship('Payment', backref='order', lazy=True, cascade="all, delete-orphan")

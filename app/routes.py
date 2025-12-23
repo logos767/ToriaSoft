@@ -17,7 +17,7 @@ from flask_wtf.file import FileField, FileAllowed
 from wtforms import StringField, SubmitField, SelectField, TextAreaField
 from wtforms.validators import DataRequired, Length, Email, Optional
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func, extract, or_, select, case, text
+from sqlalchemy import func, extract, or_, select, case, text, and_
 import openpyxl
 from datetime import datetime, timedelta, date
 from flask import Response
@@ -458,6 +458,41 @@ def inject_pending_withdrawals_count():
         db.session.rollback()
         return dict(pending_withdrawals_count=0)
 
+@routes_blueprint.context_processor
+def inject_overdue_debts():
+    if not current_user.is_authenticated:
+        return dict(overdue_debts_count=0)
+    
+    try:
+        today = get_current_time_ve().date()
+        
+        # Subquery for total paid per order
+        paid_sq = db.session.query(
+            Payment.order_id,
+            func.sum(Payment.amount_usd_equivalent).label('total_paid')
+        ).group_by(Payment.order_id).subquery()
+
+        # Filter for orders with debt
+        overdue_query = db.session.query(func.count(Order.id)).outerjoin(
+            paid_sq, Order.id == paid_sq.c.order_id
+        ).filter(
+            Order.status.in_(['Crédito', 'Pendiente', 'Apartado']), 
+            (Order.total_amount_usd - func.coalesce(paid_sq.c.total_paid, 0)) > 0.01,
+            or_(
+                Order.due_date < today,
+                and_(Order.due_date.is_(None), Order.date_created < today - timedelta(days=30))
+            )
+        )
+        
+        active_store_id = session.get('active_store_id')
+        if active_store_id and active_store_id != 'all':
+            overdue_query = overdue_query.filter(Order.store_id == active_store_id)
+
+        count = overdue_query.scalar() or 0
+        return dict(overdue_debts_count=count)
+    except Exception as e:
+        # current_app.logger.error(f"Error calculating overdue debts: {e}")
+        return dict(overdue_debts_count=0)
 
 @routes_blueprint.route('/set-display-currency', methods=['POST'])
 def set_display_currency():
@@ -1924,35 +1959,20 @@ def edit_client(client_id):
 @routes_blueprint.route('/clientes/detalle/<int:client_id>', methods=['GET', 'POST'])
 @login_required
 def client_detail(client_id):
-    client = Client.query.get_or_404(client_id)
+    client = Client.query.options(
+        joinedload(Client.associated_provider)
+    ).get_or_404(client_id)
     from decimal import Decimal
-    orders_query = Order.query.filter_by(client_id=client.id).options(subqueryload(Order.payments)).order_by(Order.date_created.desc())
-
-    # Calculate total due before any potential new payment
-    total_due_pre_payment = sum(order.due_amount_usd for order in orders_query.all() if order.due_amount_usd > 0)
-    
-    # NEW: Check for associated provider balance for commercial exchange
-    provider_balance_usd = 0
-    associated_provider = client.associated_provider
-    if associated_provider:
-        provider_balance_usd = associated_provider.get_balance_usd()
-
-    # NEW: Get client's credit balance
-    client_credit_balance_usd = client.credit_balance_usd or 0.0
-
-
-
 
     if request.method == 'POST':
         # This handles adding a payment to an order from the client detail page
         order_id = request.form.get('order_id')
         order = Order.query.get_or_404(order_id)
-        
+
         try:
             payment_data_json = request.form.get('payments_data')
             payment_info = json.loads(payment_data_json)[0]
 
-            # --- FIX: Define payment_date and payment_rate for ALL payments ---
             payment_date = get_current_time_ve()
             if payment_info.get('date'):
                 try:
@@ -1960,12 +1980,11 @@ def client_detail(client_id):
                     payment_date = VE_TIMEZONE.localize(naive_dt)
                 except (ValueError, TypeError):
                     current_app.logger.warning(f"Invalid payment date format for abono: '{payment_info['date']}'. Falling back to now.")
-            
+
             payment_rate = get_historical_exchange_rate(payment_date.date(), 'USD')
             if not payment_rate or payment_rate <= 0:
                 payment_rate = get_cached_exchange_rate('USD') or 1.0 # Fallback
 
-            # --- Recalculate equivalents on the backend for accuracy ---
             amount_paid = float(payment_info['amount_paid'])
             if payment_info['currency_paid'] == 'USD':
                 amount_ves_equivalent = amount_paid * payment_rate
@@ -1974,64 +1993,49 @@ def client_detail(client_id):
                 amount_ves_equivalent = amount_paid
                 amount_usd_equivalent = amount_paid / payment_rate if payment_rate > 0 else 0
 
-            # --- NEW: Handle Commercial Exchange ---
             if payment_info['method'] == 'intercambio_comercial':
-                if not associated_provider:
+                if not client.associated_provider:
                     raise ValueError("Este cliente no tiene un proveedor de servicios asociado.")
 
                 exchange_amount_usd = amount_usd_equivalent
+                provider_balance_usd = client.associated_provider.get_balance_usd()
                 if exchange_amount_usd > provider_balance_usd:
                     raise ValueError(f"El saldo por intercambio (${provider_balance_usd:.2f}) es insuficiente para cubrir el monto del abono (${exchange_amount_usd:.2f}).")
 
                 log_user_activity(
                     action="Aplicó Intercambio Comercial",
-                    details=f"Usó ${exchange_amount_usd:.2f} del saldo del proveedor '{associated_provider.name}' para abonar a la orden #{order.id:09d}",
+                    details=f"Usó ${exchange_amount_usd:.2f} del saldo del proveedor '{client.associated_provider.name}' para abonar a la orden #{order.id:09d}",
                     target_id=order.id,
                     target_type="Order"
                 )
-                # FIX: Associate the payment with the provider for correct balance calculation.
-                payment_info['reference'] = str(associated_provider.id)
+                payment_info['reference'] = str(client.associated_provider.id)
 
             payment = Payment(
-                order_id=order.id, # type: ignore
-                amount_paid=amount_paid,
-                currency_paid=payment_info['currency_paid'],
-                amount_ves_equivalent=amount_ves_equivalent,
-                amount_usd_equivalent=amount_usd_equivalent,
-                method=payment_info['method'],
-                reference=payment_info.get('reference'),
-                issuing_bank=payment_info.get('issuing_bank'),
-                sender_id=payment_info.get('sender_id'),
-                date=payment_date,
-                exchange_rate_at_payment=payment_rate,
-                bank_id=payment_info.get('bank_id'),
-                pos_id=payment_info.get('pos_id'),
-                cash_box_id=payment_info.get('cash_box_id')
+                order_id=order.id, amount_paid=amount_paid, currency_paid=payment_info['currency_paid'],
+                amount_ves_equivalent=amount_ves_equivalent, amount_usd_equivalent=amount_usd_equivalent,
+                method=payment_info['method'], reference=payment_info.get('reference'),
+                issuing_bank=payment_info.get('issuing_bank'), sender_id=payment_info.get('sender_id'),
+                date=payment_date, exchange_rate_at_payment=payment_rate, bank_id=payment_info.get('bank_id'),
+                pos_id=payment_info.get('pos_id'), cash_box_id=payment_info.get('cash_box_id')
             )
             db.session.add(payment)
 
-            # Update account balances
             if payment.bank_id:
                 bank = Bank.query.get(payment.bank_id)
-                if bank:
-                    # Payments to banks are always registered as their VES equivalent for accounting
-                    # but the balance update must respect the bank's currency.
-                    if bank.currency == 'VES': bank.balance += payment.amount_ves_equivalent
+                if bank and bank.currency == 'VES': bank.balance += payment.amount_ves_equivalent
             elif payment.pos_id:
                 pos = PointOfSale.query.get(payment.pos_id)
                 if pos and pos.bank: pos.bank.balance += payment.amount_ves_equivalent
             elif payment.cash_box_id:
                 cash_box = CashBox.query.get(payment.cash_box_id)
                 if cash_box:
-                    if payment.currency_paid == 'VES': cash_box.balance_ves += payment.amount_paid
-                    elif payment.currency_paid == 'USD': cash_box.balance_usd += payment.amount_paid
-            
-            db.session.flush() # Flush to calculate new due amount
+                    if payment.currency_paid == 'VES': cash_box.balance_ves += payment.amount_paid # type: ignore
+                    elif payment.currency_paid == 'USD': cash_box.balance_usd += payment.amount_paid # type: ignore
 
-            # Update order status if it's now fully paid
+            db.session.flush()
             if order.due_amount <= 0.01:
                 order.status = 'Pagada'
-            
+
             log_user_activity(
                 action="Registró abono",
                 details=f"Abono de {payment.amount_paid:.2f} {payment.currency_paid} a la orden #{order.id:09d} del cliente '{order.client.name}'",
@@ -2040,34 +2044,97 @@ def client_detail(client_id):
             )
             db.session.commit()
             flash(f'Abono registrado exitosamente para la orden #{order.id:09d}.', 'success')
-            # After commit, the order.due_amount is updated. We can now recalculate total_due.
-            total_due_post_payment = sum(o.due_amount_usd for o in orders_query.all() if o.due_amount_usd > 0)
-            total_due_pre_payment = total_due_post_payment # Update the variable to be passed to the template
         except (ValueError, KeyError, IndexError, TypeError) as e:
             db.session.rollback()
             current_app.logger.error(f"Error registrando abono: {e}")
             flash(f'Error al registrar el abono: {e}', 'danger')
         return redirect(url_for('main.client_detail', client_id=client.id))
 
-    orders = orders_query.all()
+    # --- GET Request Logic ---
+    all_movements = []
+    orders = Order.query.filter_by(client_id=client.id).options(subqueryload(Order.payments)).order_by(Order.date_created.asc()).all()
 
-    # For the payment modal
+    # 1. Orders (Sales, Credits, Reservations, Debit Notes)
+    for order in orders:
+        type_map = {
+            'regular': ('Venta', 'venta'),
+            'credit': ('Venta a Crédito', 'credito'),
+            'reservation': ('Apartado', 'apartado'),
+            'debit_note': ('Nota de Débito', 'debito')
+        }
+        type_display, type_class = type_map.get(order.order_type, ('Orden', 'orden'))
+        description = f"Orden #{order.id:09d}"
+        if order.order_type == 'debit_note':
+            description = order.dispatch_reason or "Nota de débito sin concepto"
+        all_movements.append({
+            'date': order.date_created, 'type_display': type_display, 'type_class': type_class,
+            'description': description, 'debit_usd': order.total_amount_usd, 'credit_usd': 0,
+            'link': url_for('main.order_detail', order_id=order.id), 'raw_obj': order
+        })
+
+    # 2. Payments (excluding those from client credit usage)
+    order_ids = [o.id for o in orders]
+    if order_ids:
+        payments = Payment.query.filter(
+            Payment.order_id.in_(order_ids),
+            Payment.method != 'credito_cliente'
+        ).options(joinedload(Payment.order)).order_by(Payment.date.asc()).all()
+        for payment in payments:
+            all_movements.append({
+                'date': payment.date, 'type_display': 'Abono', 'type_class': 'pago',
+                'description': f"Abono a Orden #{payment.order.id:09d}", 'debit_usd': 0,
+                'credit_usd': payment.amount_usd_equivalent, 'link': url_for('main.order_detail', order_id=payment.order_id),
+                'raw_obj': payment
+            })
+
+    # 3. Client Credit Movements (Credit Notes and Usage)
+    credit_movements = ClientCreditMovement.query.filter_by(client_id=client.id).order_by(ClientCreditMovement.date.asc()).all()
+    for ccm in credit_movements:
+        if ccm.movement_type == 'Ingreso':
+            all_movements.append({
+                'date': ccm.date, 'type_display': 'Nota de Crédito', 'type_class': 'credito-favor',
+                'description': ccm.description, 'debit_usd': 0, 'credit_usd': ccm.amount_usd,
+                'link': None, 'raw_obj': ccm
+            })
+        elif ccm.movement_type == 'Egreso':
+            all_movements.append({
+                'date': ccm.date, 'type_display': 'Uso de Saldo a Favor', 'type_class': 'pago-credito',
+                'description': ccm.description, 'debit_usd': 0, 'credit_usd': abs(ccm.amount_usd),
+                'link': url_for('main.order_detail', order_id=ccm.related_order_id) if ccm.related_order_id else None,
+                'raw_obj': ccm
+            })
+
+    # 4. Marketing Services (if provider is associated)
+    if client.associated_provider:
+        services = MarketingServiceOrder.query.filter_by(provider_id=client.provider_id).order_by(MarketingServiceOrder.date.asc()).all()
+        for service in services:
+            all_movements.append({
+                'date': service.date, 'type_display': 'Servicio Prestado', 'type_class': 'servicio',
+                'description': service.service_description, 'debit_usd': 0, 'credit_usd': service.service_value_usd,
+                'link': url_for('main.marketing_service_detail', service_id=service.id), 'raw_obj': service
+            })
+
+    all_movements.sort(key=lambda x: x['date'], reverse=True)
+
+    # --- Data for Widgets and Modals ---
+    total_due = sum(order.due_amount_usd for order in orders if order.due_amount_usd > 0)
+    provider_balance_usd = client.associated_provider.get_balance_usd() if client.associated_provider else 0
+    client_credit_balance_usd = client.credit_balance_usd or 0.0
     banks = Bank.query.order_by(Bank.name).all()
-    
     active_store_id = session.get('active_store_id')
     pos_query = PointOfSale.query.order_by(PointOfSale.name)
     cashbox_query = CashBox.query.order_by(CashBox.name)
     if active_store_id and active_store_id != 'all':
-        # POS no está ligado a tienda, pero CashBox sí
         cashbox_query = cashbox_query.filter(CashBox.store_id == active_store_id)
     points_of_sale = pos_query.all()
     cash_boxes = cashbox_query.all()
+
     return render_template('clientes/detalle_cliente.html',
                            title=f'Detalle de Cliente: {client.name}',
                            client=client,
-                           orders=orders, # This now contains the updated order states
-                           total_due=total_due_pre_payment, # This is now the updated total due
-                           provider_balance_usd=provider_balance_usd, # Pass the balance to the template
+                           all_movements=all_movements,
+                           total_due=total_due,
+                           provider_balance_usd=provider_balance_usd,
                            client_credit_balance_usd=client_credit_balance_usd,
                            banks=banks,
                            points_of_sale=points_of_sale,
@@ -6581,6 +6648,80 @@ def new_credit_note():
             flash(f'Error al crear la nota de crédito: {e}', 'danger')
 
     return render_template('finanzas/nueva_nota_credito.html', title='Nueva Nota de Crédito', clients=clients, banks=banks, points_of_sale=points_of_sale, cash_boxes=cash_boxes, preselected_client_id=preselected_client_id)
+
+@routes_blueprint.route('/finanzas/nota-debito/nueva', methods=['GET', 'POST'])
+@login_required
+def new_debit_note():
+    if not is_administrador():
+        flash('Acceso denegado.', 'danger')
+        return redirect(request.referrer or url_for('main.dashboard'))
+
+    clients = Client.query.order_by(Client.name).all()
+    
+    if request.method == 'POST':
+        try:
+            client_id = request.form.get('client_id', type=int)
+            amount = float(request.form.get('amount', 0))
+            concept = request.form.get('concept')
+            start_date_str = request.form.get('start_date')
+            due_date_str = request.form.get('due_date')
+
+            if not all([client_id, amount > 0, concept, start_date_str]):
+                raise ValueError("Todos los campos obligatorios deben ser completados y el monto mayor a 0.")
+
+            # Fechas - Se permite crear notas con fechas de inicio y vencimiento en el pasado.
+            # El sistema de alertas se encargará de notificar si están vencidas.
+            start_date = VE_TIMEZONE.localize(datetime.strptime(start_date_str, '%Y-%m-%d'))
+            
+            if due_date_str:
+                due_date = VE_TIMEZONE.localize(datetime.strptime(due_date_str, '%Y-%m-%d'))
+            else:
+                # Default 30 days
+                due_date = start_date + timedelta(days=30)
+
+            # Tasa
+            rate = get_historical_exchange_rate(start_date.date(), 'USD') or 1.0
+
+            # Sequence (Reusing credit order sequence)
+            next_id = db.session.execute(text("SELECT nextval('order_credito_seq')")).scalar()
+
+            active_store_id = session.get('active_store_id')
+            if not active_store_id or active_store_id == 'all':
+                 active_store_id = current_user.stores[0].id if current_user.stores else 1
+
+            # Create Order as Debit Note
+            debit_note = Order(
+                id=next_id,
+                client_id=client_id,
+                status='Crédito', # Treated as credit/debt
+                total_amount_usd=amount,
+                total_amount=amount * rate,
+                exchange_rate_at_sale=rate,
+                date_created=start_date,
+                due_date=due_date, 
+                order_type='debit_note', 
+                dispatch_reason=concept, # Using this for Concept/Description
+                store_id=int(active_store_id)
+            )
+            
+            db.session.add(debit_note)
+            db.session.commit()
+            
+            log_user_activity(
+                action="Creó Nota de Débito", 
+                details=f"Nota de Débito #{debit_note.id} para cliente ID {client_id}. Monto: ${amount}", 
+                target_id=debit_note.id, 
+                target_type="Order"
+            )
+
+            flash('Nota de débito creada exitosamente.', 'success')
+            return redirect(url_for('main.client_detail', client_id=client_id))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error al crear nota de débito: {e}', 'danger')
+
+    return render_template('finanzas/nueva_nota_debito.html', title='Nueva Nota de Débito', clients=clients)
 
 @routes_blueprint.route('/configuracion/usuarios', methods=['GET'])
 @login_required
