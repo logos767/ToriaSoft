@@ -7,6 +7,10 @@ import calendar
 import secrets
 from pathlib import Path
 import requests
+try:
+    import eventlet
+except ImportError:
+    eventlet = None
 from pywebpush import webpush, WebPushException
 import firebase_admin
 import re
@@ -1577,7 +1581,10 @@ def inventory_stock_report_pdf():
                                   generation_date=generation_date,
                                   group_filter=group_filter)
 
-    pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
+    if eventlet:
+        pdf_file = eventlet.tpool.execute(HTML(string=html_string, base_url=request.base_url).write_pdf)
+    else:
+        pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
 
     response = Response(pdf_file, mimetype='application/pdf', headers={'Content-Disposition': 'inline; filename=reporte_existencias.pdf'})
     return response
@@ -3849,7 +3856,10 @@ def generar_reporte_mensual_pdf():
         html_string = render_template('pdf/reporte_mensual_pdf.html', **context)
 
     # --- 5. Creación del PDF y Envío de Respuesta ---
-    pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
+    if eventlet:
+        pdf_file = eventlet.tpool.execute(HTML(string=html_string, base_url=request.base_url).write_pdf)
+    else:
+        pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
 
     response = make_response(pdf_file)
     response.headers['Content-Type'] = 'application/pdf'
@@ -5847,7 +5857,10 @@ def print_daily_closing_report_pdf():
     }
     html_string = render_template('pdf/reporte_diario_pdf.html', **context)
 
-    pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
+    if eventlet:
+        pdf_file = eventlet.tpool.execute(HTML(string=html_string, base_url=request.base_url).write_pdf)
+    else:
+        pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
 
     response = make_response(pdf_file)
     response.headers['Content-Type'] = 'application/pdf'
@@ -6079,7 +6092,10 @@ def print_transfer_report(transfer_id):
                                   total_cost_usd=total_cost_usd,
                                   logo_path=logo_path)
     
-    pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
+    if eventlet:
+        pdf_file = eventlet.tpool.execute(HTML(string=html_string, base_url=request.base_url).write_pdf)
+    else:
+        pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
     return Response(pdf_file, mimetype='application/pdf', headers={'Content-Disposition': f'inline; filename=reporte_traslado_{transfer.id}.pdf'})
 
 @routes_blueprint.route('/almacenes/traslados/historial')
