@@ -6,16 +6,16 @@
     <style>
         @page {
             size: A4;
-            margin: 1.5cm;
+            margin: 0.5cm;
             @bottom-center {
                 content: "Página " counter(page) " de " counter(pages);
-                font-size: 9pt;
+                font-size: 8pt;
                 color: #888;
             }
         }
         body {
             font-family: 'Helvetica', 'Arial', sans-serif;
-            font-size: 10pt;
+            font-size: 9pt;
             color: #333;
         }
         h1, h2, h3 {
@@ -23,38 +23,38 @@
             color: #000;
         }
         h1 {
-            font-size: 22pt;
+            font-size: 14pt;
             text-align: center;
             margin-bottom: 0;
             border-bottom: 2px solid #3B82F6;
-            padding-bottom: 10px;
+            padding-bottom: 4px;
         }
         .report-subtitle {
             text-align: center;
-            font-size: 14pt;
+            font-size: 10pt;
             color: #555;
             margin-top: 5px;
             margin-bottom: 20px;
         }
         .section {
-            margin-top: 25px;
+            margin-top: 15px;
             page-break-inside: avoid;
         }
         .section-title {
-            font-size: 16pt;
+            font-size: 12pt;
             color: #3B82F6;
             border-bottom: 1px solid #ccc;
             padding-bottom: 5px;
-            margin-bottom: 15px;
+            margin-bottom: 7px;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
+            margin-top: 5px;
         }
         th, td {
             border: 1px solid #ddd;
-            padding: 6px;
+            padding: 3px;
             text-align: left;
             vertical-align: top;
         }
@@ -72,7 +72,7 @@
         }
         .summary-box {
             border: 1px solid #ddd;
-            padding: 15px;
+            padding: 7px;
             border-radius: 5px;
         }
         .summary-box h3 { margin-top: 0; font-size: 12pt; color: #555; }
@@ -87,7 +87,7 @@
             left: 0;
             right: 0;
             text-align: left;
-            font-size: 8pt;
+            font-size: 6pt;
             color: #888;
         }
     </style>
@@ -98,8 +98,31 @@
         Reporte generado el {{ generation_date }}
     </div>
 
-    <h1>Reporte de Cierre Mensual</h1>
-    <p class="report-subtitle">{{ report_period }}</p>
+    <h1>Reporte de Cierre Mensual {{ report_period }}</h1>
+
+    <!-- Sección 3: Resumen de Resultados (P&L) -->
+    <div class="section" style="page-break-before: auto;">
+        <h2 class="section-title">3. Estado de Resultados del Mes</h2>
+        <div class="summary-grid">
+            <div class="summary-box"><h3>Ventas Totales</h3><p class="positive"><span class="currency">{{ "{:,.2f}".format(pnl_summary.sales) }}</span></p></div>
+            <div class="summary-box"><h3>Costo de Mercancía (CMV)</h3><p class="negative"><span class="currency">({{ "{:,.2f}".format(pnl_summary.cogs) }})</span></p></div>
+            <div class="summary-box"><h3>Utilidad Bruta</h3><p class="{{ 'positive' if pnl_summary.gross_profit >= 0 else 'negative' }}"><span class="currency">{{ "{:,.2f}".format(pnl_summary.gross_profit) }}</span></p></div>
+            <div class="summary-box"><h3>Gastos Operativos</h3><p class="negative"><span class="currency">({{ "{:,.2f}".format(pnl_summary.variable_expenses + pnl_summary.fixed_expenses) }})</span></p></div>
+        </div>
+        <div class="summary-box" style="margin-top: 15px; background-color: #f9fafb;">
+            <h3>Utilidad / Pérdida Neta del Mes</h3>
+            <p class="{{ 'positive' if pnl_summary.net_profit >= 0 else 'negative' }}"><span class="currency">{{ "{:,.2f}".format(pnl_summary.net_profit) }}</span></p>
+        </div>
+        <div class="chart-container">
+            <img src="data:image/png;base64,{{ pnl_chart_base64 }}" alt="Gráfico de Resultados">
+        </div>
+        {% if sales_type_chart_base64 %}
+        <div class="chart-container" style="margin-top: 20px; page-break-inside: avoid;">
+            <h3 style="font-size: 12pt; margin-bottom: 10px;">Resumen por Tipo de Orden</h3>
+            <img src="data:image/png;base64,{{ sales_type_chart_base64 }}" alt="Gráfico de Ventas por Tipo" style="max-width: 60%; height: auto;">
+        </div>
+        {% endif %}
+    </div>
 
     <!-- Sección 1: Detalle de Ventas del Mes -->
     <div class="section" style="page-break-before: auto;">
@@ -107,76 +130,63 @@
         <table>
             <thead>
                 <tr>
-                    <th style="width: 20%;">Orden / Cliente</th>
-                    <th style="width: 60%;">Detalle de Productos</th>
-                    <th style="width: 20%;" class="text-right">Montos ({{ currency_symbol }})</th>
+                    <th style="width: 10%;">Fecha</th>
+                    <th style="width: 10%;">Número</th>
+                    <th style="width: 10%;">Tipo</th>
+                    <th style="width: 40%;">Cliente</th>
+                    <th style="width: 10%;" class="text-right">Monto ({{ currency_symbol }})</th>
+                    <th style="width: 15%;">Forma de Pago</th>
+                    <th style="width: 15%;">Banco / Caja</th>
                 </tr>
             </thead>
             <tbody>
-                {% for order in orders_in_month %}
+                {% for row in orders_table_data %}
                 <tr>
-                    <td>
-                        <strong>#{{ order.id|order_id_format }}</strong><br>
-                        <span style="font-size: 9pt;">{{ order.client.name }}</span><br>
-                        <span style="font-size: 8pt; color: #555;">Tipo: {{ order.status }}</span>
-                    </td>
-                    <td>
-                        <div style="font-size: 9pt;">
-                        {% for item in order.items %}
-                            {% set price_usd = (item.price / order.exchange_rate_at_sale) if order.exchange_rate_at_sale else 0 %}
-                                <div style="align-items: center; display: inline-flex;">
-                                    <p style="width: 85%; margin: 0; padding: 1px 0;">
-                                        <strong>{{ item.product.barcode }}</strong> - {{ item.quantity }} x {{ item.product.name }} | 
-                                    </p>
-                                    <p class="currency">{{ "{:,.2f}".format(item.quantity*price_usd) }}</p>
-                                </div>
-                        {% endfor %}
-                        </div>
-                    </td>
-                    
-                    <td class="text-right">
-                        <strong>Total:</strong> <span class="currency">{{ "{:,.2f}".format(order.total_amount_usd) }}</span><br>
-                        <strong class="positive">Pagado:</strong> <span class="currency positive">{{ "{:,.2f}".format(order.paid_amount_usd) }}</span><br>
-                        <strong class="negative">Deuda:</strong> <span class="currency negative">{{ "{:,.2f}".format(order.due_amount_usd) }}</span>
-                    </td>
+                    <td>{{ row.date.strftime('%d/%m/%Y') }}</td>
+                    <td>#{{ row.number }}</td>
+                    <td>{{ row.type }}</td>
+                    <td>{{ row.client }}</td>
+                    <td class="text-right">{{ "{:,.2f}".format(row.amount) }}</td>
+                    <td style="font-size: 8pt;">{{ row.payment_methods }}</td>
+                    <td style="font-size: 8pt;">{{ row.accounts }}</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="3" class="text-center">No se registraron ventas en este mes.</td></tr>
-                {% endfor %}
-            </tbody>
-            <tfoot>
-                {% set sales_by_type = {'Contado': {'total_ventas': 0.0}, 'Crédito': {'total_ventas': 0.0}, 'Apartado': {'total_ventas': 0.0}} %}
-                {% for order in orders_in_month %}
-                    {% if order.order_type == 'regular' %}{% set _ = sales_by_type['Contado'].update({'total_ventas': sales_by_type['Contado']['total_ventas'] + order.total_amount_usd}) %}{% endif %}
-                    {% if order.order_type == 'credit' %}{% set _ = sales_by_type['Crédito'].update({'total_ventas': sales_by_type['Crédito']['total_ventas'] + order.total_amount_usd}) %}{% endif %}
-                    {% if order.order_type == 'reservation' %}{% set _ = sales_by_type['Apartado'].update({'total_ventas': sales_by_type['Apartado']['total_ventas'] + order.total_amount_usd}) %}{% endif %}
+                <tr><td colspan="7" class="text-center">No se registraron ventas en este mes.</td></tr>
                 {% endfor %}
                 <tr style="font-weight: bold; background-color: #f2f2f2;">
-                    <td colspan="2" class="text-right">Total Ventas Regulares (Contado):</td>
+                    <td colspan="4" class="text-right">Total Ventas Contado:</td>
                     <td class="text-right"><span class="currency">{{ "{:,.2f}".format(sales_by_type['Contado'].total_ventas) }}</span></td>
+                    <td colspan="2"></td>
                 </tr>
                 <tr style="font-weight: bold; background-color: #f2f2f2;">
-                    <td colspan="2" class="text-right">Total Ventas a Crédito:</td>
+                    <td colspan="4" class="text-right">Total Ventas a Crédito:</td>
                     <td class="text-right"><span class="currency">{{ "{:,.2f}".format(sales_by_type['Crédito'].total_ventas) }}</span></td>
+                    <td colspan="2"></td>
                 </tr>
                 <tr style="font-weight: bold; background-color: #f2f2f2;">
-                    <td colspan="2" class="text-right">Total Apartados:</td>
+                    <td colspan="4" class="text-right">Total Apartados:</td>
                     <td class="text-right"><span class="currency">{{ "{:,.2f}".format(sales_by_type['Apartado'].total_ventas) }}</span></td>
+                    <td colspan="2"></td>
                 </tr>
                 <tr style="font-weight: bold; background-color: #e0e0e0; border-top: 2px solid #333;">
-                    <td colspan="2" class="text-right">GRAN TOTAL VENTAS DEL MES:</td>
+                    <td colspan="4" class="text-right">GRAN TOTAL VENTAS DEL MES:</td>
                     <td class="text-right"><span class="currency">{{ "{:,.2f}".format(pnl_summary.sales) }}</span></td>
+                    <td colspan="2"></td>
                 </tr>
                 <tr style="font-weight: bold; background-color: #e8f5e9;">
-                    <td colspan="2" class="text-right positive">Total Ingresos (Pagado):</td>
+                    <td colspan="4" class="text-right positive">Total Ingresos (Pagado):</td>
                     <td class="text-right positive"><span class="currency">{{ "{:,.2f}".format(orders_in_month|sum(attribute='paid_amount_usd')) }}</span></td>
+                    <td colspan="2"></td>
                 </tr>
                 <tr style="font-weight: bold; background-color: #ffebee;">
-                    <td colspan="2" class="text-right negative">Total Cuentas por Cobrar (Deuda):</td>
+                    <td colspan="4" class="text-right negative">Total Cuentas por Cobrar (Deuda):</td>
                     <td class="text-right negative"><span class="currency">{{ "{:,.2f}".format(orders_in_month|sum(attribute='due_amount_usd')) }}</span></td>
+                    <td colspan="2"></td>
                 </tr>
-            </tfoot>
+            </tbody>
         </table>
+        
+        
     </div>
 
     <!-- Sección 1.B: Cobranzas del Mes -->
@@ -186,14 +196,16 @@
         <table>
             <thead>
                 <tr>
-                    <th style="width: 25%;">Orden / Cliente</th>
-                    <th style="width: 55%;">Productos de la Orden Original</th>
+                    <th style="width: 12%;">Fecha Cobro</th>
+                    <th style="width: 23%;">Orden / Cliente</th>
+                    <th style="width: 45%;">Productos de la Orden Original</th>
                     <th style="width: 20%;" class="text-right">Abono Realizado</th>
                 </tr>
             </thead>
             <tbody>
                 {% for payment in collections_in_month %}
                 <tr>
+                    <td>{{ payment.date.strftime('%d/%m/%Y') }}</td>
                     <td>
                         <strong>#{{ payment.order.id|order_id_format }}</strong><br>
                         <span style="font-size: 9pt;">Fecha Orden: {{ payment.order.date_created.strftime('%d/%m/%Y') }}</span><br>
@@ -215,7 +227,7 @@
             </tbody>
             <tfoot>
                 <tr style="font-weight: bold; background-color: #e8f5e9;">
-                    <td colspan="2" class="text-right positive">Total Cobranzas del Mes:</td>
+                    <td colspan="3" class="text-right positive">Total Cobranzas del Mes:</td>
                     <td class="text-right positive"><span class="currency">{{ "{:,.2f}".format(collections_in_month|sum(attribute='amount_usd_equivalent')) }}</span></td>
                 </tr>
             </tfoot>
@@ -300,23 +312,7 @@
         </table>
     </div>
     
-    <!-- Sección 3: Resumen de Resultados (P&L) -->
-    <div class="section" style="page-break-before: auto;">
-        <h2 class="section-title">3. Estado de Resultados del Mes</h2>
-        <div class="summary-grid">
-            <div class="summary-box"><h3>Ventas Totales</h3><p class="positive"><span class="currency">{{ "{:,.2f}".format(pnl_summary.sales) }}</span></p></div>
-            <div class="summary-box"><h3>Costo de Mercancía (CMV)</h3><p class="negative"><span class="currency">({{ "{:,.2f}".format(pnl_summary.cogs) }})</span></p></div>
-            <div class="summary-box"><h3>Utilidad Bruta</h3><p class="{{ 'positive' if pnl_summary.gross_profit >= 0 else 'negative' }}"><span class="currency">{{ "{:,.2f}".format(pnl_summary.gross_profit) }}</span></p></div>
-            <div class="summary-box"><h3>Gastos Operativos</h3><p class="negative"><span class="currency">({{ "{:,.2f}".format(pnl_summary.variable_expenses + pnl_summary.fixed_expenses) }})</span></p></div>
-        </div>
-        <div class="summary-box" style="margin-top: 15px; background-color: #f9fafb;">
-            <h3>Utilidad / Pérdida Neta del Mes</h3>
-            <p class="{{ 'positive' if pnl_summary.net_profit >= 0 else 'negative' }}"><span class="currency">{{ "{:,.2f}".format(pnl_summary.net_profit) }}</span></p>
-        </div>
-        <div class="chart-container">
-            <img src="data:image/png;base64,{{ pnl_chart_base64 }}" alt="Gráfico de Resultados">
-        </div>
-    </div>
+    
 
 </body>
 </html>

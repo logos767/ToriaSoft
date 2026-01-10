@@ -9,6 +9,7 @@ from pathlib import Path
 import requests
 try:
     import eventlet
+    import eventlet.tpool
 except ImportError:
     eventlet = None
 from pywebpush import webpush, WebPushException
@@ -3637,6 +3638,40 @@ def generate_pnl_chart_base64(pnl_data, currency_symbol):
     image_base64 = base64.b64encode(buf.read()).decode('utf-8')
     return image_base64
 
+def generate_sales_type_chart_base64(sales_by_type):
+    """
+    Genera un gráfico de anillo para las ventas por tipo.
+    """
+    labels = []
+    values = []
+    
+    for type_name, data in sales_by_type.items():
+        if data['total_ventas'] > 0:
+            labels.append(f"{type_name}: ${data['total_ventas']:,.2f}")
+            values.append(data['total_ventas'])
+            
+    if not values:
+        return None
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    colors = ['#4BC0C0', '#FF6384', '#FFCE56', '#36A2EB']
+    
+    wedges, texts, autotexts = ax.pie(values, labels=None, autopct='%1.1f%%', 
+                                      startangle=90, colors=colors[:len(labels)], 
+                                      pctdistance=0.85, wedgeprops=dict(width=0.5, edgecolor='w'))
+    
+    ax.legend(wedges, labels, title="Detalle", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+
+    ax.set_title('Ventas por Tipo de Orden')
+    ax.axis('equal')
+
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=100)
+    plt.close(fig)
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode('utf-8')
 
 @routes_blueprint.route('/reporte-mensual-pdf')
 @login_required
@@ -3676,9 +3711,25 @@ def generar_reporte_mensual_pdf():
     if active_store_id and active_store_id != 'all':
         orders_query = orders_query.filter(Order.store_id == active_store_id)
 
-    orders_in_month = orders_query.options(joinedload(Order.items).joinedload(OrderItem.product)).all()
+    orders_in_month = orders_query.options(
+        joinedload(Order.items).joinedload(OrderItem.product),
+        joinedload(Order.payments).joinedload(Payment.bank),
+        joinedload(Order.payments).joinedload(Payment.pos).joinedload(PointOfSale.bank),
+        joinedload(Order.payments).joinedload(Payment.cash_box),
+        joinedload(Order.client)
+    ).order_by(Order.date_created.asc()).all()
 
     cost_structure = CostStructure.query.first() or CostStructure()
+
+    # --- 4. Preparar Datos de la Tabla de Órdenes Resumida (Integrado en el bucle principal) ---
+    orders_table_data = []
+    type_map = {
+        'regular': 'Contado', 
+        'credit': 'Crédito', 
+        'reservation': 'Apartado', 
+        'special_dispatch': 'Entrega Esp.',
+        'debit_note': 'Nota Débito'
+    }
 
     for order in orders_in_month:
         pnl_summary['sales'] += order.total_amount_usd
@@ -3695,6 +3746,28 @@ def generar_reporte_mensual_pdf():
                 var_sales_exp_pct = item.product.variable_selling_expense_percent if item.product and item.product.variable_selling_expense_percent > 0 else (cost_structure.default_sales_commission_percent or 0)
                 var_marketing_pct = item.product.variable_marketing_percent if item.product and item.product.variable_marketing_percent > 0 else (cost_structure.default_marketing_percent or 0)
                 pnl_summary['variable_expenses'] += item_revenue_usd * (var_sales_exp_pct + var_marketing_pct)
+
+        # Lógica para la tabla resumida
+        payment_methods = set()
+        accounts = set()
+        for p in order.payments:
+            method_display = p.method.replace('_', ' ').title()
+            if p.method == 'efectivo_usd': method_display = 'Efectivo USD'
+            elif p.method == 'efectivo_ves': method_display = 'Efectivo VES'
+            payment_methods.add(method_display)
+            if p.bank: accounts.add(p.bank.name)
+            elif p.pos and p.pos.bank: accounts.add(p.pos.bank.name)
+            elif p.cash_box: accounts.add(p.cash_box.name)
+            
+        orders_table_data.append({
+            'date': order.date_created,
+            'number': f"{order.id:09d}",
+            'type': type_map.get(order.order_type, order.order_type.title()),
+            'client': order.client.name if order.client else "Cliente General",
+            'amount': order.total_amount_usd,
+            'payment_methods': ", ".join(payment_methods) if payment_methods else "-",
+            'accounts': ", ".join(accounts) if accounts else "-"
+        })
 
     pnl_summary['fixed_expenses'] = (cost_structure.monthly_rent or 0) + (cost_structure.monthly_utilities or 0) + (cost_structure.monthly_fixed_taxes or 0)
     pnl_summary['gross_profit'] = pnl_summary['sales'] - pnl_summary['cogs']
@@ -3722,12 +3795,20 @@ def generar_reporte_mensual_pdf():
         sales_by_type_query = sales_by_type_query.filter(Order.store_id == active_store_id)
     sales_by_type_raw = sales_by_type_query.group_by(Order.order_type).all()
 
-    sales_by_type = {'Contado': {'num_ventas': 0, 'total_ventas': 0.0}, 'Crédito': {'num_ventas': 0, 'total_ventas': 0.0}, 'Apartado': {'num_ventas': 0, 'total_ventas': 0.0}}
+    sales_by_type = {
+        'Contado': {'num_ventas': 0, 'total_ventas': 0.0}, 
+        'Crédito': {'num_ventas': 0, 'total_ventas': 0.0}, 
+        'Apartado': {'num_ventas': 0, 'total_ventas': 0.0}
+    }
     for order_type, num, total in sales_by_type_raw:
         total = float(total or 0.0)
-        if order_type == 'regular': sales_by_type['Contado']['num_ventas'] += num; sales_by_type['Contado']['total_ventas'] += total
-        elif order_type == 'credit': sales_by_type['Crédito']['num_ventas'] += num; sales_by_type['Crédito']['total_ventas'] += total
-        elif order_type == 'reservation': sales_by_type['Apartado']['num_ventas'] += num; sales_by_type['Apartado']['total_ventas'] += total
+        display_type = type_map.get(order_type, order_type.title())
+        
+        if display_type not in sales_by_type:
+            sales_by_type[display_type] = {'num_ventas': 0, 'total_ventas': 0.0}
+            
+        sales_by_type[display_type]['num_ventas'] += num
+        sales_by_type[display_type]['total_ventas'] += total
 
     # D. Cobranzas realizadas en el mes (de ventas anteriores)
     collections_in_month_query = Payment.query.options(
@@ -3815,8 +3896,9 @@ def generar_reporte_mensual_pdf():
 
     # --- 3. Generación de Gráfico ---
     pnl_chart_base64 = generate_pnl_chart_base64(pnl_summary, currency_symbol)
+    sales_type_chart_base64 = generate_sales_type_chart_base64(sales_by_type)
 
-    # --- 4. Verificación de Datos y Renderizado del Template ---
+    # --- 5. Verificación de Datos y Renderizado del Template ---
     is_data_available = (
         pnl_summary['sales'] > 0 or
         pnl_summary['cogs'] > 0 or
@@ -3841,8 +3923,10 @@ def generar_reporte_mensual_pdf():
             'currency_symbol': currency_symbol,
             'pnl_summary': pnl_summary,
             'pnl_chart_base64': pnl_chart_base64,
+            'sales_type_chart_base64': sales_type_chart_base64,
             'top_products': top_products,
             'orders_in_month': orders_in_month, # Pasar las órdenes para el detalle
+            'orders_table_data': orders_table_data, # Nueva tabla resumida
             'sales_by_type': sales_by_type,
             'pending_accounts_receivable': pending_accounts_receivable,
             'collections_in_month': collections_in_month,
@@ -3855,7 +3939,7 @@ def generar_reporte_mensual_pdf():
         }
         html_string = render_template('pdf/reporte_mensual_pdf.html', **context)
 
-    # --- 5. Creación del PDF y Envío de Respuesta ---
+    # --- 6. Creación del PDF y Envío de Respuesta ---
     if eventlet:
         pdf_file = eventlet.tpool.execute(HTML(string=html_string, base_url=request.base_url).write_pdf)
     else:
