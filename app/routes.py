@@ -6752,9 +6752,7 @@ def new_credit_note():
 @routes_blueprint.route('/finanzas/nota-debito/nueva', methods=['GET', 'POST'])
 @login_required
 def new_debit_note():
-    if not is_administrador():
-        flash('Acceso denegado.', 'danger')
-        return redirect(request.referrer or url_for('main.dashboard'))
+    
 
     clients = Client.query.order_by(Client.name).all()
     
@@ -7014,9 +7012,7 @@ def toggle_user_status(user_id):
 @login_required
 def return_list():
     """Displays a history of all returns and cancellations."""
-    if not is_administrador():
-        flash('Acceso denegado.', 'danger') # type: ignore
-        return redirect(request.referrer or url_for('main.dashboard'))
+    
 
     active_store_id = session.get('active_store_id')
     returns_query = OrderReturn.query.options(
@@ -7033,9 +7029,7 @@ def return_list():
 @login_required
 def return_detail(return_id):
     """Shows the details of a specific return."""
-    if not is_administrador():
-        flash('Acceso denegado.', 'danger') # type: ignore
-        return redirect(request.referrer or url_for('main.dashboard'))
+    
 
     # Usamos subqueryload para cargar los items y sus productos relacionados de forma eficiente.
     # Es una alternativa a joinedload que puede ser más performante para colecciones.
@@ -7053,9 +7047,7 @@ def return_order():
     """
     Handles the cancellation (anulación) or return (devolución) of products from a sales order.
     """
-    if not is_administrador():
-        flash('Acceso denegado. Solo los administradores pueden realizar esta acción.', 'danger') # type: ignore
-        return redirect(request.referrer or url_for('main.dashboard'))
+    
 
     order = None
     active_store_id = session.get('active_store_id')
