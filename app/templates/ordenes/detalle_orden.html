@@ -65,7 +65,7 @@
                         <p><strong>Tasa de Cambio:</strong> <span class="font-semibold">Bs. {{ "%.2f"|format(order.exchange_rate_at_sale) }}</span></p>
                     </div>
                 </div>
-                {% if order.status not in ['Anulada', 'Devolución Parcial'] and is_administrador() %}
+                {% if order.status not in ['Anulada', 'Devolución Parcial'] %}
                 <div class="text-right">
                     <a href="{{ url_for('main.return_order', order_id=order.id) }}" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
                         <i class="fas fa-undo-alt mr-2"></i>Anular / Devolver
