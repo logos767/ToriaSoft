@@ -3810,14 +3810,13 @@ def generar_reporte_mensual_pdf():
         sales_by_type[display_type]['num_ventas'] += num
         sales_by_type[display_type]['total_ventas'] += total
 
-    # D. Cobranzas realizadas en el mes (de ventas anteriores)
+    # D. Cobranzas realizadas en el mes (incluye abonos a créditos del mismo mes)
     collections_in_month_query = Payment.query.options(
         joinedload(Payment.order).joinedload(Order.client),
         joinedload(Payment.order).joinedload(Order.items).joinedload(OrderItem.product)
     ).join(Order).filter(
         Payment.date.between(start_dt, end_dt),
-        Order.date_created < start_dt,
-        Order.order_type.in_(['credit', 'reservation'])
+        Order.order_type.in_(['credit', 'reservation', 'debit_note'])
     )
     if active_store_id and active_store_id != 'all':
         collections_in_month_query = collections_in_month_query.filter(Order.store_id == active_store_id)
