@@ -1770,6 +1770,33 @@ def adjustment_result(adjustment_id):
                            adjustment=adjustment, value_before=value_before, value_after=value_after, value_diff=value_diff,
                            most_impactful_items=most_impactful_items, previous_adjustments=previous_adjustments)
 
+@routes_blueprint.route('/inventario/ajuste/imprimir/<int:adjustment_id>')
+@login_required
+def print_adjustment_report(adjustment_id):
+    if not is_administrador():
+        flash('Acceso denegado.', 'danger')
+        return redirect(request.referrer or url_for('main.dashboard'))
+
+    adjustment = InventoryAdjustment.query.options(
+        joinedload(InventoryAdjustment.items).joinedload(InventoryAdjustmentItem.product),
+        joinedload(InventoryAdjustment.user)
+    ).get_or_404(adjustment_id)
+
+    company_info = CompanyInfo.query.first()
+    generation_date = get_current_time_ve().strftime('%d/%m/%Y %H:%M:%S')
+    
+    html_string = render_template('pdf/adjustment_report.html',
+                                  adjustment=adjustment,
+                                  company_info=company_info,
+                                  generation_date=generation_date)
+
+    if eventlet:
+        pdf_file = eventlet.tpool.execute(HTML(string=html_string, base_url=request.base_url).write_pdf)
+    else:
+        pdf_file = HTML(string=html_string, base_url=request.base_url).write_pdf()
+
+    return Response(pdf_file, mimetype='application/pdf', headers={'Content-Disposition': f'inline; filename=ajuste_{adjustment.id}.pdf'})
+
 @routes_blueprint.route('/inventario/producto/<int:product_id>')
 @login_required
 def product_detail(product_id):

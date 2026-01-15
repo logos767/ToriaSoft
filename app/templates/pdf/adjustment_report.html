@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de Ajuste de Inventario #{{ adjustment.id }}</title>
+    <style>
+        @page { size: A4; margin: 1cm; }
+        body { font-family: sans-serif; font-size: 10pt; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h1 { margin: 0; font-size: 16pt; }
+        .header p { margin: 2px 0; font-size: 9pt; color: #555; }
+        .info-section { margin-bottom: 20px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 9pt; }
+        th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .footer { position: fixed; bottom: 0; width: 100%; text-align: center; font-size: 8pt; color: #777; }
+        .positive { color: green; }
+        .negative { color: red; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ company_info.name if company_info else 'Reporte de Inventario' }}</h1>
+        <p>{{ company_info.rif if company_info else '' }}</p>
+        <h2>Reporte de Ajuste de Inventario #{{ adjustment.adjustment_code or adjustment.id }}</h2>
+    </div>
+
+    <div class="info-section">
+        <div class="info-grid">
+            <div><strong>Fecha:</strong> {{ adjustment.date.strftime('%d/%m/%Y %H:%M') }}</div>
+            <div><strong>Usuario:</strong> {{ adjustment.user.username }}</div>
+            <div><strong>Motivo:</strong> {{ adjustment.reason or 'N/A' }}</div>
+            <div><strong>Impacto Total:</strong> ${{ "%.2f"|format(adjustment.value_difference_usd) }}</div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Producto</th>
+                <th>Código</th>
+                <th>Marca/Detalles</th>
+                <th class="text-center">Teórico</th>
+                <th class="text-center">Real</th>
+                <th class="text-center">Dif.</th>
+                <th class="text-right">Costo Unit. ($)</th>
+                <th class="text-right">Impacto ($)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in adjustment.items %}
+            {% set difference = item.real_stock - item.theoretical_stock %}
+            {% set impact = difference * item.cost_at_adjustment_usd %}
+            <tr>
+                <td>{{ item.product.name }}</td>
+                <td>{{ item.product.barcode }}</td>
+                <td>{{ item.product.marca or '' }} {{ item.product.size or '' }} {{ item.product.color or '' }}</td>
+                <td class="text-center">{{ item.theoretical_stock }}</td>
+                <td class="text-center">{{ item.real_stock }}</td>
+                <td class="text-center {% if difference > 0 %}positive{% elif difference < 0 %}negative{% endif %}">
+                    {{ '%+d'|format(difference) }}
+                </td>
+                <td class="text-right">{{ "%.2f"|format(item.cost_at_adjustment_usd) }}</td>
+                <td class="text-right {% if impact > 0 %}positive{% elif impact < 0 %}negative{% endif %}">
+                    {{ "%.2f"|format(impact) }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="footer">
+        Generado el {{ generation_date }}
+    </div>
+</body>
+</html>
