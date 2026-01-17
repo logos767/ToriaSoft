@@ -2095,12 +2095,15 @@ def client_detail(client_id):
             'regular': ('Venta', 'venta'),
             'credit': ('Venta a Crédito', 'credito'),
             'reservation': ('Apartado', 'apartado'),
-            'debit_note': ('Nota de Débito', 'debito')
+            'debit_note': ('Nota de Débito', 'debito'),
+            'special_dispatch': ('Entrega Especial', 'entrega_especial')
         }
         type_display, type_class = type_map.get(order.order_type, ('Orden', 'orden'))
         description = f"Orden #{order.id:09d}"
         if order.order_type == 'debit_note':
             description = order.dispatch_reason or "Nota de débito sin concepto"
+        elif order.order_type == 'special_dispatch':
+            description = f"Entrega Especial: {order.dispatch_reason or 'Sin motivo'}"
         all_movements.append({
             'date': order.date_created, 'type_display': type_display, 'type_class': type_class,
             'description': description, 'debit_usd': order.total_amount_usd, 'credit_usd': 0,

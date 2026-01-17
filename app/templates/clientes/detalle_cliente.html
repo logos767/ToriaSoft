@@ -98,6 +98,7 @@
                                 {% elif movement.type_class == 'credito-favor' %} bg-purple-100 text-purple-800
                                 {% elif movement.type_class == 'pago-credito' %} bg-teal-100 text-teal-800
                                 {% elif movement.type_class == 'servicio' %} bg-cyan-100 text-cyan-800
+                                {% elif movement.type_class == 'entrega_especial' %} bg-indigo-100 text-indigo-800
                                 {% else %} bg-gray-100 text-gray-800 {% endif %}">
                                 {{ movement.type_display }}
                             </span>
