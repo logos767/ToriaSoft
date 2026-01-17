@@ -347,6 +347,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         let amount_ves_equivalent = amount;
+        let amount_usd_equivalent = 0;
         let currency_paid = 'VES';
         const transfer_currency = paymentCurrencySelect ? paymentCurrencySelect.value : 'VES';
         
@@ -361,7 +362,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (['efectivo_usd', 'intercambio_comercial', 'credito_cliente'].includes(method) || (method === 'transferencia' && transfer_currency === 'USD')) {
             amount_ves_equivalent = amount * currentRate;
+            amount_usd_equivalent = amount;
             currency_paid = 'USD';
+        } else {
+            amount_usd_equivalent = amount / currentRate;
         }
 
         const payment = {
@@ -369,6 +373,7 @@ document.addEventListener('DOMContentLoaded', function() {
             amount_paid: amount,
             currency_paid: currency_paid,
             amount_ves_equivalent: amount_ves_equivalent,
+            amount_usd_equivalent: amount_usd_equivalent,
             reference: document.getElementById('payment-reference').value,
             date: paymentDate,
             issuing_bank: issuingBank,

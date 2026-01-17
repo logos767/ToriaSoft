@@ -330,16 +330,21 @@ document.addEventListener('DOMContentLoaded', function() {
         const senderId = senderIdInput ? senderIdInput.value : '';
 
         let amount_ves_equivalent = amount;
+        let amount_usd_equivalent = 0;
         let currency_paid = 'VES';
         if (method === 'efectivo_usd' || method === 'intercambio_comercial' || (method === 'transferencia' && transfer_currency === 'USD')) {
             amount_ves_equivalent = amount * currentRate;
+            amount_usd_equivalent = amount;
             currency_paid = 'USD';
+        } else {
+            amount_usd_equivalent = amount / currentRate;
         }
 
 
         const payment = {
             method: method, amount_paid: amount, currency_paid: currency_paid,
             amount_ves_equivalent: amount_ves_equivalent,
+            amount_usd_equivalent: amount_usd_equivalent,
             reference: paymentReferenceInput.value,
             date: paymentDate,
             issuing_bank: method === 'transferencia' ? issuingBank : null,

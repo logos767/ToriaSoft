@@ -3181,9 +3181,19 @@ def credit_detail(order_id):
         if payment_data_json:
             try:
                 payment_info = json.loads(payment_data_json)[0]
-                current_rate = get_cached_exchange_rate('USD') or 1.0
-                amount_usd_equivalent = float(payment_info['amount_ves_equivalent']) / current_rate if current_rate > 0 else 0
-
+                
+                # 1. Parsear la fecha primero para obtener la tasa correcta
+                payment_date = get_current_time_ve()
+                if payment_info.get('date'):
+                    try:
+                        naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
+                        payment_date = VE_TIMEZONE.localize(naive_dt)
+                    except (ValueError, TypeError):
+                        current_app.logger.warning(f"Invalid payment date format for credit abono: '{payment_info['date']}'. Falling back to now.")
+                
+                payment_rate = get_historical_exchange_rate(payment_date.date(), 'USD') or get_cached_exchange_rate('USD') or 1.0
+                amount_usd_equivalent = float(payment_info['amount_ves_equivalent']) / payment_rate if payment_rate > 0 else 0
+                
                 # --- NEW: Handle Commercial Exchange ---
                 if payment_info['method'] == 'intercambio_comercial':
                     if not associated_provider:
@@ -3201,24 +3211,6 @@ def credit_detail(order_id):
                     payment_info['reference'] = str(associated_provider.id)
 
                 # --- END: Handle Commercial Exchange ---
-
-                # --- FIX: Define payment_date and payment_rate BEFORE using them ---
-                payment_date = get_current_time_ve()
-                if payment_info.get('date'):
-                    try:
-                        naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
-                        payment_date = VE_TIMEZONE.localize(naive_dt)
-                    except (ValueError, TypeError):
-                        current_app.logger.warning(f"Invalid payment date format for credit abono: '{payment_info['date']}'. Falling back to now.")
-                payment_rate = get_historical_exchange_rate(payment_date.date(), 'USD')
-
-                payment_date = get_current_time_ve()
-                if payment_info.get('date'):
-                    try:
-                        naive_dt = datetime.strptime(payment_info['date'], '%Y-%m-%dT%H:%M')
-                        payment_date = VE_TIMEZONE.localize(naive_dt)
-                    except (ValueError, TypeError):
-                        current_app.logger.warning(f"Invalid payment date format for credit abono: '{payment_info['date']}'. Falling back to now.")
 
                 payment = Payment(
                     order_id=order.id, amount_paid=payment_info['amount_paid'], currency_paid=payment_info['currency_paid'],
