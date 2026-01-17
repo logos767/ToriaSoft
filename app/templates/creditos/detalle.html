@@ -21,6 +21,7 @@
                     <button type="button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg add-payment-button"
                             data-order-id="{{ order.id }}"
                             data-due-amount="{{ order.due_amount }}"
+                            data-due-amount-usd="{{ order.due_amount_usd }}"
                             title="Registrar Abono">
                         <i class="fas fa-hand-holding-usd mr-2"></i>Registrar Abono
                     </button>
@@ -164,6 +165,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let payments = [];
     let orderTotal = 0;
+    let orderTotalUsd = 0;
     let currentRate = parseFloat("{{ current_rate }}");
     let previousTransferCurrency;
     let previousPaymentMethod;
@@ -177,7 +179,28 @@ document.addEventListener('DOMContentLoaded', function() {
     {% endif %}
     const associatedProviderInfo = {{ provider_info_dict | tojson | safe if provider_info_dict else 'null' }};
 
-    function openPaymentModalForAbono(orderId, dueAmount) {
+    async function fetchAndUpdateRate(targetDateString) {
+        if (!targetDateString) return;
+        const dateOnly = targetDateString.split('T')[0];
+        try {
+            const response = await fetch(`/api/historical_exchange_rate?date=${dateOnly}&currency=USD`);
+            const data = await response.json();
+            if (data.rate) {
+                currentRate = data.rate;
+                toastr.success(`Tasa para el pago en ${dateOnly}: ${currentRate.toFixed(2)} Bs.`, 'Tasa Histórica');
+            } else {
+                currentRate = parseFloat("{{ current_rate }}");
+                toastr.warning(`No se encontró tasa histórica para ${dateOnly}. Usando tasa actual.`, 'Aviso');
+            }
+            updatePaymentSummary();
+            const paymentMethodSelect = document.getElementById('payment-method');
+            if (paymentMethodSelect) paymentMethodSelect.dispatchEvent(new Event('change'));
+        } catch (error) {
+            console.error('Error fetching rate:', error);
+        }
+    }
+
+    function openPaymentModalForAbono(orderId, dueAmount, dueAmountUsd) {
         // Define elements here, when the modal is about to be opened
         const paymentModal = document.getElementById('payment-modal');
         const paymentMethodSelect = document.getElementById('payment-method');
@@ -200,6 +223,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Reset state for new modal opening
         orderTotal = parseFloat(dueAmount);
+        orderTotalUsd = parseFloat(dueAmountUsd);
         payments = []; // Reset payments for each new modal opening
         
         document.getElementById('payment-modal-title').textContent = `Registrar Abono para Crédito #${String(orderId).padStart(9, '0')}`;
@@ -214,11 +238,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Set current date for the payment
         paymentDateInput.value = new Date().toISOString().slice(0, 16);
-
-        modalTotalAmount.textContent = orderTotal.toFixed(2) + ' Bs';
-        if (currentRate > 0) {
-            modalTotalAmountUsd.textContent = (orderTotal / currentRate).toFixed(2) + ' ' + currencySymbol;
-        }
+        
         updatePaymentSummary();
         paymentModal.classList.remove('hidden');
     }
@@ -235,6 +255,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function updatePaymentSummary() {
         const modalPaidAmount = document.getElementById('modal-paid-amount');
+        const modalTotalAmount = document.getElementById('modal-total-amount');
+        const modalTotalAmountUsd = document.getElementById('modal-total-amount-usd');
         const modalRemainingAmount = document.getElementById('modal-remaining-amount');
         const modalPaidAmountUsd = document.getElementById('modal-paid-amount-usd');
         const modalRemainingAmountUsd = document.getElementById('modal-remaining-amount-usd');
@@ -242,6 +264,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const paymentMethodSelect = document.getElementById('payment-method');
         if (!paymentMethodSelect) return;
         const paymentAmountInput = document.getElementById('payment-amount');
+
+        // Recalculate orderTotal in VES based on currentRate and orderTotalUsd
+        if (orderTotalUsd > 0) {
+            orderTotal = orderTotalUsd * currentRate;
+        }
 
         const totalPaid = payments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
         const remaining = orderTotal - totalPaid;
@@ -252,6 +279,11 @@ document.addEventListener('DOMContentLoaded', function() {
         modalRemainingAmount.textContent = Math.max(0, remaining).toFixed(2) + ' Bs';
         if (currentRate > 0) {
             modalRemainingAmountUsd.textContent = (Math.max(0, remaining) / currentRate).toFixed(2) + ' ' + currencySymbol;
+        }
+
+        modalTotalAmount.textContent = orderTotal.toFixed(2) + ' Bs';
+        if (currentRate > 0) {
+            modalTotalAmountUsd.textContent = (orderTotal / currentRate).toFixed(2) + ' ' + currencySymbol;
         }
 
         finalizeOrderBtn.disabled = totalPaid <= 0;
@@ -328,7 +360,8 @@ document.addEventListener('DOMContentLoaded', function() {
         button.addEventListener('click', function() {
             const orderId = this.dataset.orderId;
             const dueAmount = this.dataset.dueAmount;
-            openPaymentModalForAbono(orderId, dueAmount);
+            const dueAmountUsd = this.dataset.dueAmountUsd;
+            openPaymentModalForAbono(orderId, dueAmount, dueAmountUsd);
         });
     });
 
@@ -338,10 +371,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const closeModalBtn = document.getElementById('close-modal-btn');
         const addPaymentBtnModal = document.getElementById('add-payment-btn-modal');
         const paymentMethodSelect = document.getElementById('payment-method');
+        const paymentDateInput = document.getElementById('payment-date');
         const paymentCurrencySelect = document.getElementById('payment-currency');
         const finalizeOrderBtn = document.getElementById('finalize-order-btn');
 
         if (!closeModalBtn || !addPaymentBtnModal || !paymentMethodSelect || !paymentCurrencySelect || !finalizeOrderBtn) return;
+
+        paymentDateInput.addEventListener('input', function() {
+            fetchAndUpdateRate(this.value);
+        });
 
         closeModalBtn.addEventListener('click', closePaymentModal);
         addPaymentBtnModal.addEventListener('click', addPayment);
