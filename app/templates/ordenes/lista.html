@@ -28,10 +28,12 @@
             <!-- Status -->
             <div class="flex justify-space-between">
                 <select name="status" id="status" class="block rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                    <option value="" {% if not filters.status %}selected{% endif %}>Estado: Todos</option>
-                    <option value="contado" {% if filters.status == 'contado' %}selected{% endif %}>De Contado (Pagada)</option>
-                    <option value="credito" {% if filters.status == 'credito' %}selected{% endif %}>Crédito</option>
-                    <option value="apartado" {% if filters.status == 'apartado' %}selected{% endif %}>Apartado</option>
+                    <option value="" {% if not filters.status %}selected{% endif %}>Tipo: Todos</option>
+                    <option value="regular" {% if filters.status == 'regular' %}selected{% endif %}>Venta Regular</option>
+                    <option value="credit" {% if filters.status == 'credit' %}selected{% endif %}>Venta a Crédito</option>
+                    <option value="reservation" {% if filters.status == 'reservation' %}selected{% endif %}>Apartado</option>
+                    <option value="special_dispatch" {% if filters.status == 'special_dispatch' %}selected{% endif %}>Entrega Especial</option>
+                    <option value="debit_note" {% if filters.status == 'debit_note' %}selected{% endif %}>Nota de Débito</option>
                     <option value="con_deuda" {% if filters.status == 'con_deuda' %}selected{% endif %}>Con Deuda</option>
                 </select>
                 <!-- Buttons -->
@@ -47,9 +49,10 @@
             <table class="min-w-full divide-y divide-gray-200 md:table-auto">
                 <thead class="bg-gray-50">                    
                     <tr class="hidden md:table-row">
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID de Orden</th> {# Visible on larger screens #}
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th> {# Visible on larger screens #}
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th> {# Visible on larger screens #}
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID de Orden</th> {# Visible on larger screens #}
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th> {# Visible on larger screens #}
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Monto Total</th> {# Visible on larger screens #}
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Deuda Pendiente</th>
                         <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
@@ -65,7 +68,15 @@
                                 <span class="text-gray-500 truncate">                                    
                                     <a href="{{ url_for('main.client_detail', client_id=order.client.id) }}" class="text-blue-600 hover:underline">{{ order.client.name }}</a>
                                 </span>
-                                <span class="text-gray-500">{{ order.date_created|ve_datetime }}
+                                <span class="text-xs text-gray-500">
+                                    {% if order.order_type == 'regular' %}Venta Regular
+                                    {% elif order.order_type == 'credit' %}Venta a Crédito
+                                    {% elif order.order_type == 'reservation' %}Apartado
+                                    {% elif order.order_type == 'special_dispatch' %}Entrega Especial
+                                    {% elif order.order_type == 'debit_note' %}Nota de Débito
+                                    {% else %}{{ order.order_type }}{% endif %}
+                                </span>
+                                <span class="text-gray-500">{{ order.date_created|ve_datetime }}</span>
                             </div>
                         </td>
 
@@ -92,18 +103,27 @@
 
 
                         {# --- Desktop View --- #}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{{ order.date_created|ve_datetime }}</td> {# Visible on larger screens #}
+
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 hidden md:table-cell">
                             <a href="{{ url_for('main.order_detail', order_id=order.id) }}" class="hover:text-indigo-600">
                                 #{{ order.id|order_id_format }}
                             </a>
                         </td>
 
-
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                            {% if order.order_type == 'regular' %}Venta Regular
+                            {% elif order.order_type == 'credit' %}Venta a Crédito
+                            {% elif order.order_type == 'reservation' %}Apartado
+                            {% elif order.order_type == 'special_dispatch' %}Entrega Especial
+                            {% elif order.order_type == 'debit_note' %}Nota de Débito
+                            {% else %}{{ order.order_type }}{% endif %}
+                        </td>
 
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
                             <a href="{{ url_for('main.client_detail', client_id=order.client.id) }}" class="text-blue-600 hover:underline">{{ order.client.name }}</a>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{{ order.date_created|ve_datetime }}</td> {# Visible on larger screens #}
+                        
 
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-800 hidden md:table-cell">
                             <div>Bs. {{ "%.2f"|format(order.total_amount) }}</div>

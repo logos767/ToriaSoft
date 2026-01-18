@@ -2727,16 +2727,19 @@ def order_list():
 
     # Apply status filter
     if status_filter:
-        if status_filter == 'credito':
-            query = query.filter(Order.status == 'Crédito')
-        elif status_filter == 'apartado':
-            query = query.filter(Order.status == 'Apartado')
-        elif status_filter == 'contado':
-            query = query.filter(Order.status.in_(['Pagada', 'Completada']))
-        elif status_filter == 'con_deuda':
+        if status_filter == 'con_deuda':
             # Use a subquery to calculate paid amount and filter where due amount > 0
             paid_subquery = select(func.sum(Payment.amount_ves_equivalent)).where(Payment.order_id == Order.id).correlate(Order).as_scalar()
             query = query.filter(Order.total_amount - func.coalesce(paid_subquery, 0) > 0.01)
+        elif status_filter in ['regular', 'credit', 'reservation', 'special_dispatch', 'debit_note']:
+            query = query.filter(Order.order_type == status_filter)
+        # Legacy support
+        elif status_filter == 'contado':
+            query = query.filter(Order.order_type == 'regular')
+        elif status_filter == 'credito':
+            query = query.filter(Order.order_type == 'credit')
+        elif status_filter == 'apartado':
+            query = query.filter(Order.order_type == 'reservation')
 
     # Apply date range filter
     try:
