@@ -6,101 +6,169 @@
     <style>
         @page {
             size: A4;
-            margin: 1.5cm;
+            margin: 0.5cm;
             @bottom-center {
                 content: "Página " counter(page) " de " counter(pages);
-                font-size: 9pt;
-                color: #888;
+                font-size: 8pt;
+                color: #6b7280;
             }
         }
         body {
             font-family: 'Helvetica', 'Arial', sans-serif;
-            font-size: 10pt;
-            color: #333;
+            font-size: 9pt;
+            color: #1f2937;
+            line-height: 1;
         }
-        h1, h2, h3 {
-            font-weight: bold;
-            color: #000;
+        /* Header Styles */
+        .header-table {
+            width: 100%;
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
         }
-        h1 {
-            font-size: 22pt;
-            text-align: center;
+        .header-logo img {
+            max-height: 60px;
+            max-width: 180px;
+        }
+        .header-title {
+            text-align: right;
+            vertical-align: middle;
+        }
+        .header-title h1 {
             margin-bottom: 0;
-            border-bottom: 2px solid #3B82F6;
-            padding-bottom: 10px;
-        }
-        .report-subtitle {
-            text-align: center;
             font-size: 14pt;
-            color: #555;
-            margin-top: 5px;
-            margin-bottom: 20px;
+            color: #111827;
+            text-transform: uppercase;
         }
+        .header-title p {
+            margin: 2px 0 0 0;
+            font-size: 9pt;
+            color: #6b7280;
+        }
+        
+        /* Section Styles */
         .section {
-            margin-top: 25px;
+            margin-top: 10px;
             page-break-inside: avoid;
         }
         .section-title {
-            font-size: 16pt;
-            color: #3B82F6;
-            border-bottom: 1px solid #ccc;
+            font-size: 13pt;
+            font-weight: bold;
+            color: #2563eb;
+            border-bottom: 1px solid #e5e7eb;
             padding-bottom: 5px;
-            margin-bottom: 15px;
+            margin-bottom: 7px;
+            text-transform: uppercase;
         }
+        
+        /* Table Styles */
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
         }
         th, td {
-            border: 1px solid #ddd;
-            padding: 6px;
+            padding: 3px 4px;
             text-align: left;
             vertical-align: top;
+            border-bottom: 1px solid #e5e7eb;
         }
         th {
-            background-color: #f2f2f2;
+            background-color: #f3f4f6;
             font-weight: bold;
+            color: #374151;
+            font-size: 9pt;
+            text-transform: uppercase;
         }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        
+        /* Utility Classes */
         .text-right { text-align: right; }
         .text-center { text-align: center; }
         .currency:before { content: '{{ currency_symbol }} '; }
-        .summary-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
+        .positive { color: #059669; font-weight: bold; }
+        .negative { color: #dc2626; font-weight: bold; }
+        
+        /* Summary Boxes (P&L) */
+        .summary-table {
+            width: 100%;
+            border-spacing: 10px;
+            border-collapse: separate;
+            margin-bottom: 10px;
         }
         .summary-box {
-            border: 1px solid #ddd;
-            padding: 15px;
-            border-radius: 5px;
+            background-color: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
-        .summary-box h3 { margin-top: 0; font-size: 12pt; color: #555; }
-        .summary-box p { margin-bottom: 0; font-size: 16pt; font-weight: bold; text-align: right; }
-        .positive { color: #16A34A; }
-        .negative { color: #DC2626; }
-        .chart-container { text-align: center; margin-top: 20px; }
-        .chart-container img { max-width: 95%; height: auto; }
+        .summary-box h3 { 
+            margin: 0 0 5px 0; 
+            font-size: 9pt; 
+            color: #6b7280; 
+            text-transform: uppercase; 
+        }
+        .summary-box p { 
+            margin: 0; 
+            font-size: 12pt; 
+            font-weight: bold; 
+            color: #111827; 
+        }
+        
+        /* Charts */
+        .chart-container { 
+            text-align: center; 
+            margin-top: 12px; 
+            padding: 5px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background-color: #fff;
+        }
+        .chart-container img { 
+            max-width: 100%; 
+            height: auto; 
+        }
+        
         .footer {
             position: fixed;
             bottom: -1.2cm;
             left: 0;
             right: 0;
-            width: 100%;
             text-align: left;
-            font-size: 8pt;
-            color: #888;
+            font-size: 7pt;
+            color: #9ca3af;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 5px;
         }
     </style>
 </head>
 <body>
 
     <div class="footer">
-        Reporte generado el {{ generation_date }}
+        Generado el {{ generation_date }} | ToriaSoft - Sistema de Gestión
     </div>
 
-    <h1>Reporte de Cierre Diario</h1>
-    <p class="report-subtitle">{{ report_period }}</p>
+    <table class="header-table">
+        <tr>
+            <td style="border: none; width: 50%;" class="header-logo">
+                {% if logo_path %}
+                    <img src="{{ logo_path }}" alt="Logo">
+                {% else %}
+                    <h2 style="margin:0; color: #2563eb;">{{ company_info.name if company_info else 'ToriaSoft' }}</h2>
+                {% endif %}
+            </td>
+            <td style="border: none; width: 50%;" class="header-title">
+                <h1>Reporte de Cierre Diario</h1>
+                <p>{{ report_period }}</p>
+                {% if company_info %}
+                    <p style="font-size: 8pt;">{{ company_info.name }} | {{ company_info.rif }}</p>
+                {% endif %}
+            </td>
+        </tr>
+    </table>
 
     <!-- Sección 1 (antes 3): Detalle de Ventas -->
     <div class="section" style="page-break-before: auto;">
@@ -108,9 +176,9 @@
         <table>
             <thead>
                 <tr>
-                    <th style="width: 20%;">Orden / Cliente</th>
-                    <th style="width: 60%;">Detalle de Productos</th>
-                    <th style="width: 20%;" class="text-right">Montos ({{ currency_symbol }})</th>
+                    <th style="width: 15%;">Orden / Cliente</th>
+                    <th style="width: 70%;">Detalle de Productos</th>
+                    <th style="width: 15%;" class="text-right">Montos ({{ currency_symbol }})</th>
                 </tr>
             </thead>
             <tbody>
@@ -146,27 +214,27 @@
                 {% endfor %}
             </tbody>
             <tfoot>
-                <tr style="font-weight: bold; background-color: #f2f2f2;">
+                <tr style="font-weight: bold; background-color: #f9fafb;">
                     <td colspan="2" class="text-right">Total Ventas Regulares (Contado):</td>
                     <td class="text-right"><span class="currency">{{ "{:,.2f}".format(sales_summary.contado.amount_usd) }}</span></td>
                 </tr>
-                <tr style="font-weight: bold; background-color: #f2f2f2;">
+                <tr style="font-weight: bold; background-color: #f9fafb;">
                     <td colspan="2" class="text-right">Total Ventas a Crédito:</td>
                     <td class="text-right"><span class="currency">{{ "{:,.2f}".format(sales_summary.credito.amount_usd) }}</span></td>
                 </tr>
-                <tr style="font-weight: bold; background-color: #f2f2f2;">
+                <tr style="font-weight: bold; background-color: #f9fafb;">
                     <td colspan="2" class="text-right">Total Apartados:</td>
                     <td class="text-right"><span class="currency">{{ "{:,.2f}".format(sales_summary.apartado.amount_usd) }}</span></td>
                 </tr>
-                <tr style="font-weight: bold; background-color: #e0e0e0; border-top: 2px solid #333;">
+                <tr style="font-weight: bold; background-color: #e5e7eb; border-top: 2px solid #374151;">
                     <td colspan="2" class="text-right">GRAN TOTAL VENTAS DEL DÍA:</td>
-                    <td class="text-right"><span class="currency">{{ "{:,.2f}".format(pnl_summary.sales) }}</span></td>
+                    <td class="text-right"><span class="currency">{{ "{:,.2f}".format(sales_summary.total.amount_usd) }}</span></td>
                 </tr>
-                <tr style="font-weight: bold; background-color: #e8f5e9;">
+                <tr style="font-weight: bold; background-color: #ecfdf5;">
                     <td colspan="2" class="text-right positive">Total Ingresos (Pagado):</td>
                     <td class="text-right positive"><span class="currency">{{ "{:,.2f}".format(orders_today|sum(attribute='paid_amount_usd')) }}</span></td>
                 </tr>
-                <tr style="font-weight: bold; background-color: #ffebee;">
+                <tr style="font-weight: bold; background-color: #fef2f2;">
                     <td colspan="2" class="text-right negative">Total Cuentas por Cobrar (Deuda):</td>
                     <td class="text-right negative"><span class="currency">{{ "{:,.2f}".format(orders_today|sum(attribute='due_amount_usd')) }}</span></td>
                 </tr>
@@ -209,7 +277,7 @@
                 {% endfor %}
             </tbody>
             <tfoot>
-                <tr style="font-weight: bold; background-color: #e8f5e9;">
+                <tr style="font-weight: bold; background-color: #ecfdf5;">
                     <td colspan="2" class="text-right positive">Total Cobranzas del Día:</td>
                     <td class="text-right positive"><span class="currency">{{ "{:,.2f}".format(collections_today|sum(attribute='amount_usd_equivalent')) }}</span></td>
                 </tr>
@@ -223,7 +291,7 @@
         <h2 class="section-title">2. Resumen de Flujo de Fondos</h2>
 
         {% for account in bank_balances %}
-        <h3 style="margin-top: 20px; font-size: 12pt;">Cuenta Bancaria: {{ account.name }}</h3>
+        <h3 style="margin-top: 20px; font-size: 11pt; color: #4b5563; border-bottom: 1px solid #e5e7eb; padding-bottom: 2px;">Cuenta Bancaria: {{ account.name }}</h3>
         <table>
             <thead>
                 <tr>
@@ -239,7 +307,7 @@
         {% endfor %}
 
         {% for account in cash_box_balances %}
-        <h3 style="margin-top: 20px; font-size: 12pt;">Caja: {{ account.name }}</h3>
+        <h3 style="margin-top: 20px; font-size: 11pt; color: #4b5563; border-bottom: 1px solid #e5e7eb; padding-bottom: 2px;">Caja: {{ account.name }}</h3>
         <table>
             <thead>
                 <tr>
@@ -249,7 +317,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr>
+                <tr style="font-weight: bold; background-color: #f9fafb;">
                     <td>Saldo Inicial del Día</td>
                     <td class="text-right">Bs. {{ "{:,.2f}".format(account.initial_balance_ves) }}</td>
                     <td class="text-right"><span class="currency">{{ "{:,.2f}".format(account.initial_balance_usd) }}</span></td>
@@ -264,7 +332,7 @@
                     <td class="text-right negative">(Bs. {{ "{:,.2f}".format(account.outflows_ves) }})</td>
                     <td class="text-right negative">(<span class="currency">{{ "{:,.2f}".format(account.outflows_usd) }}</span>)</td>
                 </tr>
-                <tr style="font-weight: bold; background-color: #f2f2f2;">
+                <tr style="font-weight: bold; background-color: #e5e7eb;">
                     <td>Saldo Final del Día</td>
                     <td class="text-right">Bs. {{ "{:,.2f}".format(account.final_balance_ves) }}</td>
                     <td class="text-right"><span class="currency">{{ "{:,.2f}".format(account.final_balance_usd) }}</span></td>
@@ -274,23 +342,48 @@
         {% endfor %}
     </div>
     
-    <!-- Sección 3: Resumen de Resultados (P&L) -->
+    <!-- Sección 3: Resumen de Operaciones (Ventas y Cobranzas) -->
+    
     <div class="section" style="page-break-before: auto;">
-        <h2 class="section-title">3. Estado de Resultados del Día</h2>
-        <div class="summary-grid">
-            <div class="summary-box"><h3>Ventas Totales</h3><p class="positive"><span class="currency">{{ "{:,.2f}".format(pnl_summary.sales) }}</span></p></div>
-            <div class="summary-box"><h3>Costo de Mercancía (CMV)</h3><p class="negative"><span class="currency">({{ "{:,.2f}".format(pnl_summary.cogs) }})</span></p></div>
-            <div class="summary-box"><h3>Utilidad Bruta</h3><p class="{{ 'positive' if pnl_summary.gross_profit >= 0 else 'negative' }}"><span class="currency">{{ "{:,.2f}".format(pnl_summary.gross_profit) }}</span></p></div>
-            <div class="summary-box"><h3>Gastos Operativos</h3><p class="negative"><span class="currency">({{ "{:,.2f}".format(pnl_summary.variable_expenses + pnl_summary.fixed_expenses) }})</span></p></div>
-        </div>
-        <div class="summary-box" style="margin-top: 15px; background-color: #f9fafb;">
-            <h3>Utilidad / Pérdida Neta del Día</h3>
-            <p class="{{ 'positive' if pnl_summary.net_profit >= 0 else 'negative' }}"><span class="currency">{{ "{:,.2f}".format(pnl_summary.net_profit) }}</span></p>
-        </div>
-        <div class="chart-container">
-            <img src="data:image/png;base64,{{ pnl_chart_base64 }}" alt="Gráfico de Resultados">
-        </div>
-    </div>
+        <h2 class="section-title">3. Resumen de Operaciones del Día</h2>
+        
+        <table class="summary-table">
+            <tr>
+                <td class="summary-box" style="border: 1px solid #e5e7eb;">
+                    <h3>Ventas Contado</h3>
+                    <p class="positive"><span class="currency">{{ "{:,.2f}".format(daily_breakdown['Ventas Contado']) }}</span></p>
+                </td>
+                <td class="summary-box" style="border: 1px solid #e5e7eb;">
+                    <h3>Ventas Crédito</h3>
+                    <p class="positive"><span class="currency">{{ "{:,.2f}".format(daily_breakdown['Ventas Crédito']) }}</span></p>
+                </td>
+                <td class="summary-box" style="border: 1px solid #e5e7eb;">
+                    <h3>Apartados</h3>
+                    <p class="positive"><span class="currency">{{ "{:,.2f}".format(daily_breakdown['Apartados']) }}</span></p>
+                </td>
+            </tr>
+            <tr>
+                <td class="summary-box" style="border: 1px solid #e5e7eb;">
+                    <h3>Entregas Esp.</h3>
+                    <p class="positive"><span class="currency">{{ "{:,.2f}".format(daily_breakdown['Entregas Especiales']) }}</span></p>
+                </td>
+                <td class="summary-box" style="border: 1px solid #e5e7eb;">
+                    <h3>Cobranzas</h3>
+                    <p class="positive"><span class="currency">{{ "{:,.2f}".format(daily_breakdown['Cobranzas']) }}</span></p>
+                </td>
+                <td class="summary-box" style="border: 1px solid #e5e7eb; background-color: #f3f4f6;">
+                    <h3>Total Operaciones</h3>
+                    <p class="positive"><span class="currency">{{ "{:,.2f}".format(daily_breakdown.values() | sum) }}</span></p>
+                </td>
+            </tr>
+        </table>
 
+        {% if breakdown_chart_base64 %}
+        <div class="chart-container">
+            <img src="data:image/png;base64,{{ breakdown_chart_base64 }}" alt="Gráfico de Operaciones">
+        </div>
+        {% endif %}
+    </div>
+    
 </body>
 </html>

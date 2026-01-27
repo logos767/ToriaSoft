@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte Mensual de Ventas y Finanzas</title>
+    <style>
+        /* Same styles as the management report */
+        @page {
+            size: A4;
+            margin: 1cm;
+            @bottom-center {
+                content: "Página " counter(page) " de " counter(pages);
+                font-size: 8pt;
+                color: #6b7280;
+            }
+        }
+        body { 
+            font-family: 'Helvetica', 'Arial', sans-serif; 
+            font-size: 9.5pt;
+            color: #1f2937;
+            line-height: 1.3; }
+
+        /* Header Styles */
+        .header-table {
+            width: 100%;
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .header-logo img {
+            max-height: 60px;
+            max-width: 180px;
+        }
+        .header-title {
+            text-align: right;
+            vertical-align: middle;
+        }
+        .header-title h1 {
+            margin: 0;
+            font-size: 18pt;
+            color: #111827;
+            text-transform: uppercase;
+        }
+        .header-title p {
+            margin: 2px 0 0 0;
+            font-size: 10pt;
+            color: #6b7280;
+        }
+        
+        /* Section & Table Styles */
+        .section { margin-top: 25px; page-break-inside: avoid; }
+        .section-title { 
+            font-size: 13pt; 
+            color: #2563eb; 
+            border-bottom: 1px solid #e5e7eb; 
+            padding-bottom: 5px; 
+            margin-bottom: 15px; 
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        table { width: 100%; border-collapse: collapse; margin-top: 5px; }
+        th, td { border-bottom: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; vertical-align: top; }
+        th { background-color: #f3f4f6; font-weight: bold; color: #374151; font-size: 9pt; text-transform: uppercase; }
+        tr:last-child td { border-bottom: none; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .currency:before { content: '{{ currency_symbol }} '; }
+        .positive { color: #059669; font-weight: bold; }
+        .negative { color: #dc2626; font-weight: bold; }
+        .footer { position: fixed; bottom: -1.2cm; left: 0; right: 0; text-align: left; font-size: 7pt; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="footer">
+        Generado el {{ generation_date }} | ToriaSoft - Sistema de Gestión
+    </div>
+
+    <table class="header-table">
+        <tr>
+            <td style="border: none; width: 50%;" class="header-logo">
+                {% if logo_path %}
+                    <img src="{{ logo_path }}" alt="Logo">
+                {% else %}
+                    <h2 style="margin:0; color: #2563eb;">{{ company_info.name if company_info else 'ToriaSoft' }}</h2>
+                {% endif %}
+            </td>
+            <td style="border: none; width: 50%;" class="header-title">
+                <h1>Reporte de Ventas</h1>
+                <p>{{ report_period }}</p>
+                {% if company_info %}
+                    <p style="font-size: 8pt;">{{ company_info.name }} | {{ company_info.rif }}</p>
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+    
+    <!-- Sección 1: Detalle de Ventas del Mes -->
+    <div class="section">
+        <h2 class="section-title">1. Detalle de Ventas del Mes</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 10%;">Fecha</th>
+                    <th style="width: 10%;">Número</th>
+                    <th style="width: 10%;">Tipo</th>
+                    <th style="width: 40%;">Cliente</th>
+                    <th style="width: 10%;" class="text-right">Monto ({{ currency_symbol }})</th>
+                    <th style="width: 15%;">Forma de Pago</th>
+                    <th style="width: 15%;">Banco / Caja</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in orders_table_data %}
+                <tr>
+                    <td>{{ row.date.strftime('%d/%m/%Y') }}</td>
+                    <td>#{{ row.number }}</td>
+                    <td>{{ row.type }}</td>
+                    <td>{{ row.client }}</td>
+                    <td class="text-right">{{ "{:,.2f}".format(row.amount) }}</td>
+                    <td style="font-size: 8pt;">{{ row.payment_methods }}</td>
+                    <td style="font-size: 8pt;">{{ row.accounts }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center">No se registraron ventas en este mes.</td></tr>
+                {% endfor %}
+                <tr style="font-weight: bold; background-color: #e5e7eb; border-top: 2px solid #374151;">
+                    <td colspan="4" class="text-right">GRAN TOTAL VENTAS DEL MES:</td>
+                    <td class="text-right"><span class="currency">{{ "{:,.2f}".format(orders_in_month|sum(attribute='total_amount_usd')) }}</span></td>
+                    <td colspan="2"></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Sección 1.B: Cobranzas del Mes -->
+    {% if collections_in_month %}
+    <div class="section">
+        <h2 class="section-title">1.B. Cobranzas del Mes</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 12%;">Fecha Cobro</th>
+                    <th style="width: 23%;">Orden / Cliente</th>
+                    <th style="width: 45%;">Productos de la Orden Original</th>
+                    <th style="width: 20%;" class="text-right">Abono Realizado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for payment in collections_in_month %}
+                <tr>
+                    <td>{{ payment.date.strftime('%d/%m/%Y') }}</td>
+                    <td>
+                        <strong>#{{ payment.order.id|order_id_format }}</strong><br>
+                        <span style="font-size: 9pt;">Fecha Orden: {{ payment.order.date_created.strftime('%d/%m/%Y') }}</span><br>
+                        <span style="font-size: 9pt;">{{ payment.order.client.name }}</span>
+                    </td>
+                    <td>
+                        <div style="font-size: 9pt;">
+                        {% for item in payment.order.items %}
+                            <p style="margin: 0; padding: 1px 0;">- {{ item.quantity }} x {{ item.product.name }}</p>
+                        {% endfor %}
+                        </div>
+                    </td>
+                    <td class="text-right">
+                        <strong class="positive"><span class="currency">{{ "{:,.2f}".format(payment.amount_usd_equivalent) }}</span></strong><br>
+                        <span style="font-size: 8pt; color: #555;">({{ payment.method|replace('_', ' ')|title }})</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="font-weight: bold; background-color: #ecfdf5;">
+                    <td colspan="3" class="text-right positive">Total Cobranzas del Mes:</td>
+                    <td class="text-right positive"><span class="currency">{{ "{:,.2f}".format(collections_in_month|sum(attribute='amount_usd_equivalent')) }}</span></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Sección 2: Flujo de Fondos -->
+    <div class="section">
+        <h2 class="section-title">2. Resumen de Flujo de Fondos por Cuenta</h2>
+        {% for account in bank_balances %}
+        <h3 style="margin-top: 20px; font-size: 11pt; color: #4b5563; border-bottom: 1px solid #e5e7eb; padding-bottom: 2px;">Cuenta Bancaria: {{ account.name }}</h3>
+        <table>
+            <thead>
+                <tr><th>Concepto</th><th class="text-right">Monto (VES)</th></tr>
+            </thead>
+            <tbody>
+                <tr><td style="padding-left: 25px;">(+) Entradas</td><td class="text-right positive">Bs. {{ "{:,.2f}".format(account.inflows_ves) }}</td></tr>
+                <tr><td style="padding-left: 25px;">(-) Salidas</td><td class="text-right negative">(Bs. {{ "{:,.2f}".format(account.outflows_ves) }})</td></tr>
+            </tbody>
+        </table>
+        {% endfor %}
+
+        {% for account in cash_box_balances %}
+        <h3 style="margin-top: 20px; font-size: 11pt; color: #4b5563; border-bottom: 1px solid #e5e7eb; padding-bottom: 2px;">Caja: {{ account.name }}</h3>
+        <table>
+            <thead>
+                <tr><th>Concepto</th><th class="text-right">Monto (VES)</th><th class="text-right">Monto (USD)</th></tr>
+            </thead>
+            <tbody>
+                <tr style="font-weight: bold; background-color: #f9fafb;">
+                    <td>Saldo Inicial del Mes</td>
+                    <td class="text-right">Bs. {{ "{:,.2f}".format(account.initial_balance_ves) }}</td>
+                    <td class="text-right"><span class="currency">{{ "{:,.2f}".format(account.initial_balance_usd) }}</span></td>
+                </tr>
+                <tr>
+                    <td style="padding-left: 25px;">(+) Entradas</td>
+                    <td class="text-right positive">Bs. {{ "{:,.2f}".format(account.inflows_ves) }}</td>
+                    <td class="text-right positive"><span class="currency">{{ "{:,.2f}".format(account.inflows_usd) }}</span></td>
+                </tr>
+                <tr>
+                    <td style="padding-left: 25px;">(-) Salidas</td>
+                    <td class="text-right negative">(Bs. {{ "{:,.2f}".format(account.outflows_ves) }})</td>
+                    <td class="text-right negative">(<span class="currency">{{ "{:,.2f}".format(account.outflows_usd) }}</span>)</td>
+                </tr>
+                <tr style="font-weight: bold; background-color: #e5e7eb;">
+                    <td>Saldo Final del Mes</td>
+                    <td class="text-right">Bs. {{ "{:,.2f}".format(account.final_balance_ves) }}</td>
+                    <td class="text-right"><span class="currency">{{ "{:,.2f}".format(account.final_balance_usd) }}</span></td>
+                </tr>
+            </tbody>
+        </table>
+        {% endfor %}
+    </div>
+
+    <!-- Sección 2.B: Resumen de Ingresos por Método de Pago -->
+    <div class="section">
+        <h2 class="section-title">2.B. Resumen de Ingresos por Método de Pago</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Método de Pago</th>
+                    <th class="text-right">Monto Recibido</th>
+                    <th class="text-right">Equivalente USD</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>Efectivo (Bs)</td><td class="text-right">Bs. {{ "{:,.2f}".format(payments_summary.efectivo_ves.amount) }}</td><td class="text-right"><span class="currency">{{ "{:,.2f}".format(payments_summary.efectivo_ves.amount_usd) }}</span></td></tr>
+                <tr><td>Efectivo ({{ currency_symbol }})</td><td class="text-right"><span class="currency">{{ "{:,.2f}".format(payments_summary.efectivo_usd.amount) }}</span></td><td class="text-right"><span class="currency">{{ "{:,.2f}".format(payments_summary.efectivo_usd.amount_usd) }}</span></td></tr>
+                <tr><td>Transferencia / Pago Móvil (Bs)</td><td class="text-right">Bs. {{ "{:,.2f}".format(payments_summary.transferencia_ves.amount) }}</td><td class="text-right"><span class="currency">{{ "{:,.2f}".format(payments_summary.transferencia_ves.amount_usd) }}</span></td></tr>
+                <tr><td>Transferencia ({{ currency_symbol }})</td><td class="text-right"><span class="currency">{{ "{:,.2f}".format(payments_summary.transferencia_usd.amount) }}</span></td><td class="text-right"><span class="currency">{{ "{:,.2f}".format(payments_summary.transferencia_usd.amount_usd) }}</span></td></tr>
+                <tr><td>Punto de Venta (Bs)</td><td class="text-right">Bs. {{ "{:,.2f}".format(payments_summary.punto_de_venta.amount) }}</td><td class="text-right"><span class="currency">{{ "{:,.2f}".format(payments_summary.punto_de_venta.amount_usd) }}</span></td></tr>
+                <tr><td>Intercambio Comercial ({{ currency_symbol }})</td><td class="text-right"><span class="currency">{{ "{:,.2f}".format(payments_summary.intercambio_comercial.amount) }}</span></td><td class="text-right"><span class="currency">{{ "{:,.2f}".format(payments_summary.intercambio_comercial.amount_usd) }}</span></td></tr>
+            </tbody>
+            <tfoot>
+                <tr style="font-weight: bold; background-color: #ecfdf5;">
+                    <td colspan="2" class="text-right positive">Total Ingresos del Mes (Equivalente en {{ currency_symbol }}):</td>
+                    <td class="text-right positive"><span class="currency">{{ "{:,.2f}".format(total_income_usd) }}</span></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+</body>
+</html>

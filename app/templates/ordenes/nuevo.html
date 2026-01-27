@@ -1696,6 +1696,19 @@
                 }
                 // When transfer is selected, filter banks based on the current currency selection
                 filterBankOptions();
+
+                // --- NEW: Set default banks for transfers ---
+                // Set default issuing bank to "Banco de Venezuela"
+                paymentIssuingBankInput.value = 'BANCO DE VENEZUELA';
+
+                // Set default destination bank to "Bancamiga"
+                const bankOptions = paymentBankSelect.options;
+                for (let i = 0; i < bankOptions.length; i++) {
+                    if (bankOptions[i].text.toLowerCase().includes('bancamiga')) {
+                        paymentBankSelect.value = bankOptions[i].value;
+                        break; // Stop after finding it
+                    }
+                }
             } else {
                 paymentBankSelect.value = ''; // Reset bank selection if not a transfer
             }

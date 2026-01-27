@@ -3,29 +3,70 @@
 {% block content %}
 <div class="container mx-auto p-2 max-w-7xl">
     
-    
+    <div class="bg-white p-4 rounded-lg shadow-md mt-4">
+        <!-- Search Form -->
+        {% if not order %}
+        <form method="GET" action="{{ url_for('main.return_order') }}">
+            <label for="order_id_search" class="block text-gray-700 text-sm font-bold mb-2">Buscar Orden por ID:</label>
+            <div class="flex items-center">
+                <input type="number" id="order_id_search" name="order_id_search" placeholder="Ingrese el número de la orden"
+                    class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value="{{ request.args.get('order_id_search', '') }}">
+                <button type="submit" class="ml-4 bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
+                    <i class="fas fa-search mr-2"></i>Buscar
+                </button>
+            </div>
+        </form>
+        {% endif %}
 
-    
-        <div class="bg-white p-4 rounded-lg shadow-md mt-4">
-            <!-- Search Form -->
-            
-                <form method="GET" action="{{ url_for('main.return_order') }}">
-                    <label for="order_id_search" class="block text-gray-700 text-sm font-bold mb-2">Buscar Orden por ID:</label>
-                    <div class="flex items-center">
-                        <input type="number" id="order_id_search" name="order_id_search" placeholder="Ingrese el número de la orden"
-                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            value="{{ request.args.get('order_id_search', '') }}">
-                        <button type="submit" class="ml-4 bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">
-                            <i class="fas fa-search mr-2"></i>Buscar
-                        </button>
-                    </div>
-                </form>
+        {% if not order %}
+        <div class="mt-8 border-t pt-6">
+            <h3 class="text-lg font-semibold text-gray-700 mb-4">Seleccionar Orden para Devolución</h3>
+            <div class="overflow-x-auto border rounded-lg">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% if orders %}
+                        {% for o in orders %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{{ o.id }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ o.date_created|ve_datetime }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ o.client.name }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-800">Bs. {{ "%.2f"|format(o.total_amount) }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">{{ o.status }}</span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                                <a href="{{ url_for('main.return_order', order_id_search=o.id) }}" class="text-blue-600 hover:text-blue-900 font-bold"><i class="fas fa-hand-pointer mr-1"></i>Seleccionar</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="px-6 py-4 text-center text-gray-500">No hay órdenes recientes para mostrar.</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
         {% if order %}
             <form method="POST" action="{{ url_for('main.return_order') }}" id="return-form">
                 <input type="hidden" name="order_id" value="{{ order.id }}">
 
                 <!-- Main two-column layout -->
-                <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-4">
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-4 mt-6">
                     <!-- LEFT COLUMN: Client and Order Info -->
                     <div class="space-y-4 lg:col-span-1">
                         <!-- Client Info -->
@@ -35,7 +76,6 @@
                                 <p><strong>Nombre: </strong>{{ order.client.name }}</p>
                                 {% if order.client.cedula_rif %}<p><strong>Cédula/RIF: </strong>{{ order.client.cedula_rif }}</p>{% endif %}
                                 {% if order.client.phone %}<p><strong>Teléfono: </strong>{{ order.client.phone }}</p>{% endif %}
-                                {% if order.client.address %}<p><strong>Dirección: </strong>{{ order.client.address }}</p>{% endif %}
                             </div>
                         </div>
                         <!-- Order Info -->
@@ -59,63 +99,147 @@
                         </div>
                         {% else %}
                         
+                        <!-- Actions: Product Exchange / Return -->
+                        <div class="mb-6 border-t pt-6">
+                            <h3 class="text-lg font-semibold text-gray-700 mb-2">1. Devolución o Intercambio</h3>
+                            <p class="text-sm text-gray-600 mb-4">
+                                Seleccione los productos a devolver (Entrada). <br>
+                                Si desea realizar un cambio, busque y agregue los nuevos productos (Salida). <br>
+                                Si no agrega productos nuevos, se procesará como una <strong>Devolución</strong>.
+                            </p>
 
-                        <!-- Actions: Partial Return -->
-                        <div>
-                            <h3 class="text-lg font-semibold text-gray-700 mb-2">1. Devolución Parcial</h3>
-                            <p class="text-sm text-gray-600 mb-4">Seleccione los productos y cantidades a devolver. El stock se repondrá y podrá procesar un reembolso por el valor correspondiente.</p>
-
-                            <div class="overflow-x-auto mb-4 border rounded-lg">
-                                <table class="min-w-full bg-white text-sm">
-                                    <thead class="bg-gray-100">
-                                        <tr>
-                                            <th class="py-2 px-4 text-left font-semibold text-gray-600">Códigos</th>
-                                            <th class="py-2 px-4 text-left font-semibold text-gray-600">Producto</th>
-                                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Cant. Vendida</th>
-                                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Precio Unit. (Bs)</th>
-                                            <th class="py-2 px-4 text-center font-semibold text-gray-600" style="width: 150px;">Cantidad a Devolver</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="text-gray-700 divide-y divide-gray-200">
-                                        {% for item in order.items %}
-                                        <tr class="return-item-row">
-                                            <td class="py-2 px-4">
-                                                <div class="text-xs"><strong>COD:</strong> {{ item.product.codigo_producto or 'N/A' }}</div>
-                                                <div class="text-xs"><i class="fas fa-barcode w-4 inline-block text-left"></i> {{ item.product.barcode }}</div>
-                                            </td>
-                                            <td class="py-2 px-4">
-                                                {{ item.product.name }}
-                                                <input type="hidden" name="return_item_id" value="{{ item.id }}">
-                                            </td>
-                                            <td class="py-2 px-4 text-center">{{ item.quantity }} (Devueltos: {{ item.returned_quantity or 0 }})</td>
-                                            <td class="py-2 px-4 text-center" data-price="{{ item.price }}">{{ "%.2f"|format(item.price) }}</td>
-                                            <td class="py-2 px-4 text-center">
-                                                {% set available_to_return = item.quantity - (item.returned_quantity or 0) %}
-                                                <input type="number" name="return_quantity" class="shadow-sm appearance-none border rounded w-24 py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 text-center return-quantity-input"
-                                                       min="0" max="{{ available_to_return }}" value="0" data-item-id="{{ item.id }}">
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label for="return_reason" class="block text-gray-700 text-sm font-bold mb-2">Motivo (Obligatorio):</label>
+                                    <input type="text" id="return_reason" name="return_reason" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ej: Defecto, Cambio de talla, Devolución simple...">
+                                </div>
+                                <div>
+                                    <label for="return_date" class="block text-gray-700 text-sm font-bold mb-2">Fecha de la Devolución:</label>
+                                    <input type="datetime-local" id="return_date" name="return_date" value="{{ get_current_time_ve().strftime('%Y-%m-%dT%H:%M') }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
                             </div>
 
-                            <div class="mb-4">
-                                <label for="return_reason" class="block text-gray-700 text-sm font-bold mb-2">Motivo de la Devolución (Obligatorio):</label>
-                                <input type="text" id="return_reason" name="return_reason" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <!-- Return Side (In) -->
+                                <div class="border rounded p-3 bg-red-50">
+                                    <h4 class="font-bold text-red-700 mb-2 text-sm border-b border-red-200 pb-1">Productos a Devolver (Entrada)</h4>
+                                    <div class="overflow-y-auto max-h-60">
+                                        <table class="w-full text-sm">
+                                            <thead class="text-xs text-gray-500 text-left">
+                                                <tr>
+                                                    <th>Producto</th>
+                                                    <th class="text-right">Precio Unit.</th>
+                                                    <th class="text-center">Cant.</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for item in order.items %}
+                                                {% set available = item.quantity - (item.returned_quantity or 0) %}
+                                                {% if available > 0 %}
+                                                {# Fallback rate to 1 if missing to avoid division by zero #}
+                                                {% set rate = order.exchange_rate_at_sale or current_rate or 1 %}
+                                                {% set item_price_usd = item.price / rate %}
+                                                <tr class="border-b last:border-0 border-red-100">
+                                                    <td class="py-2 pr-2">
+                                                        <div class="font-bold">{{ item.product.name }}</div>
+                                                        <div class="text-xs text-gray-500">
+                                                            <span class="mr-2"><i class="fas fa-barcode"></i> {{ item.product.barcode }}</span>
+                                                            {% if item.product.codigo_producto %}<span><i class="fas fa-tag"></i> {{ item.product.codigo_producto }}</span>{% endif %}
+                                                        </div>
+                                                    </td>
+                                                    <td class="py-2 text-right text-xs whitespace-nowrap">{{ "%.2f"|format(item_price_usd) }} $</td>
+                                                    <td class="py-2 pl-2 text-center">
+                                                        <input type="number" name="exchange_return_qty_{{ item.id }}" 
+                                                               class="exchange-return-qty border border-red-300 rounded w-16 text-center text-sm p-1 focus:ring-red-500 focus:border-red-500" 
+                                                               min="0" max="{{ available }}" value="0" 
+                                                               data-id="{{ item.id }}" 
+                                                               data-price="{{ item_price_usd }}" 
+                                                               data-name="{{ item.product.name }}">
+                                                        <div class="text-xs text-gray-400 mt-1">Max: {{ available }}</div>
+                                                    </td>
+                                                </tr>
+                                                {% endif %}
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="text-right mt-3 pt-2 border-t border-red-200 text-sm font-bold text-red-700">
+                                        Total Devolución: <span id="ex-return-total">0.00</span> $
+                                    </div>
+                                </div>
+
+                                <!-- New Product Side (Out) -->
+                                <div class="border rounded p-3 bg-green-50">
+                                    <h4 class="font-bold text-green-700 mb-2 text-sm border-b border-green-200 pb-1">Nuevos Productos (Salida)</h4>
+                                    <div class="relative mb-2">
+                                        <input type="text" id="ex-search-input" placeholder="Buscar producto para agregar..." autocomplete="off" class="w-full border border-green-300 rounded p-1 text-sm focus:ring-green-500 focus:border-green-500">
+                                        <div id="ex-search-results" class="absolute z-50 w-full bg-white border shadow-lg max-h-40 overflow-y-auto hidden mt-1 rounded"></div>
+                                    </div>
+                                    <div class="overflow-y-auto max-h-48 mb-2 min-h-[100px]">
+                                        <table class="w-full text-sm" id="ex-new-items-table">
+                                            <thead class="text-xs text-gray-500 text-left">
+                                                <tr>
+                                                    <th>Producto</th>
+                                                    <th class="text-right">Precio</th>
+                                                    <th class="text-center">Cant.</th>
+                                                    <th></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="ex-new-items-body">
+                                                <!-- Items added via JS -->
+                                            </tbody>
+                                        </table>
+                                        <div id="empty-new-items-msg" class="text-center text-gray-400 text-xs py-4 italic">
+                                            No hay productos nuevos agregados.
+                                        </div>
+                                    </div>
+                                    <div class="text-right mt-3 pt-2 border-t border-green-200 text-sm font-bold text-green-700">
+                                        Total Nuevos: <span id="ex-new-total">0.00</span> $
+                                    </div>
+                                </div>
                             </div>
 
-                            <div class="flex justify-end mt-6">
-                                <input type="hidden" name="refund_payments_data" id="refund-payments-data-input">
-                                <input type="hidden" name="action" value="devolucion_parcial">
-                                <button type="button" id="open-refund-modal-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">
-                                    <i class="fas fa-check-circle mr-2"></i>Procesar Devolución Parcial
-                                </button>
+                            <!-- Balance Summary & Actions -->
+                            <div class="bg-blue-50 p-4 rounded-lg border border-blue-200 flex flex-col gap-4">
+                                <div class="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-blue-200 pb-4">
+                                    <div>
+                                        <div class="text-sm text-gray-600 uppercase tracking-wide font-semibold">Balance Final</div>
+                                        <div class="text-2xl font-bold" id="ex-balance-display">0.00 $</div>
+                                        <div id="ex-action-msg" class="text-sm font-medium text-gray-500">Sin movimientos</div>
+                                    </div>
+                                    
+                                    <div class="flex items-center gap-2 bg-white p-2 rounded border" id="no-refund-container">
+                                        <input type="checkbox" id="no_refund" name="no_refund" class="h-5 w-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                                        <label for="no_refund" class="text-sm text-gray-700 font-medium cursor-pointer select-none">Devolver sin reembolso financiero</label>
+                                    </div>
+                                </div>
+
+                                <!-- Dynamic Payment/Refund Inputs -->
+                                <div id="ex-payment-section" class="hidden bg-white p-3 rounded border border-gray-200">
+                                    <div class="flex flex-col md:flex-row gap-3 items-center justify-end">
+                                        <label class="text-sm font-bold text-gray-700 whitespace-nowrap" id="ex-payment-label">Método:</label>
+                                        <select name="exchange_payment_method" class="border rounded p-2 text-sm w-full md:w-auto focus:ring-blue-500 focus:border-blue-500">
+                                            <option value="efectivo_ves">Efectivo (Bs)</option>
+                                            <option value="efectivo_usd">Efectivo (USD)</option>
+                                            <option value="pago_movil">Pago Móvil</option>
+                                            <option value="punto">Punto de Venta</option>
+                                            <option value="transferencia">Transferencia</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="flex justify-end">
+                                    <button type="submit" name="action" value="intercambio" id="btn-process-exchange" class="bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-indigo-700 transition-colors text-base shadow-md disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto">
+                                        Procesar Devolución
+                                    </button>
+                                </div>
                             </div>
+                            <input type="hidden" name="exchange_new_items_data" id="ex-new-items-data">
                         </div>
+
                         <!-- Actions: Total Annulment -->
-                        <div class="mb-6 border-b pb-6">
-                            <h3 class="text-lg font-semibold text-gray-700 mb-2">2. Anulación Total</h3>
+                        <div class="mb-6 border-t pt-6">
+                            <h3 class="text-lg font-semibold text-gray-700 mb-2">2. Anulación Total (Emergencia)</h3>
                             <p class="text-sm text-gray-600 mb-3">Esta acción devolverá TODOS los productos al inventario y revertirá TODOS los pagos asociados a la orden. La orden quedará marcada como "Anulada".</p>
                             <button type="submit" name="action" value="anulacion_total" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
                                     onclick="return confirm('¿Está seguro de que desea anular COMPLETAMENTE esta orden? Esta acción no se puede deshacer.')">
@@ -126,253 +250,217 @@
                     </div>
                 </div>
             </form>
-        </div>
-    </div>
-    {% endif %}
-</div>
-<!-- Refund Modal -->
-<div id="refund-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-10 mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-md bg-white">
-        <div class="mt-3">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl leading-6 font-medium text-gray-900" id="refund-modal-title">Confirmar Devolución</h3>
-                <button id="close-refund-modal-btn" class="text-gray-400 hover:text-gray-600">
-                    <i class="fas fa-times text-xl"></i>
-                </button>
-            </div>
-
-            <div id="refund-modal-content">
-                <!-- Content will be injected by JS -->
-            </div>
-
-            <div class="mt-6 flex justify-end space-x-4">
-                <button type="button" id="cancel-refund-btn" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300">
-                    Cancelar
-                </button>
-                <button type="button" id="confirm-refund-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">
-                    <i class="fas fa-check-circle mr-2"></i>Confirmar Devolución
-                </button>
-            </div>
-        </div>
+        {% endif %}
     </div>
 </div>
-
-<!-- Template for Refund Section (to be injected into modal) -->
-<template id="refund-section-template">
-    <div class="mt-6 border-t pt-4">
-        <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-gray-700">Procesar Reembolso</h3>
-            <div class="text-right">
-                <p class="text-sm text-gray-600">Valor a Reembolsar:</p>
-                <p id="total-refund-value" class="text-xl font-bold text-red-600">0.00 Bs</p>
-            </div>
-        </div>
-
-        <!-- Refund Form -->
-        <div id="add-refund-form" class="border p-3 rounded-lg bg-gray-50">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-                <div>
-                    <label for="refund-method" class="block text-sm font-medium text-gray-700">Método de Reembolso</label>
-                    <select id="refund-method" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                        <option value="efectivo_ves">Efectivo (Bs)</option>
-                        <option value="efectivo_usd">Efectivo (USD)</option>
-                        <option value="transferencia">Transferencia</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="refund-amount" class="block text-sm font-medium text-gray-700">Monto a Reembolsar</label>
-                    <input type="number" id="refund-amount" step="0.01" min="0.01" class="mt-1 block w-full py-1 px-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                </div>
-                <div class="md:col-span-1">
-                    <button type="button" id="add-refund-btn" class="w-full bg-blue-500 text-white font-bold py-1 px-3 rounded-lg hover:bg-blue-600">
-                        <i class="fas fa-plus mr-1"></i>Agregar Reembolso
-                    </button>
-                </div>
-            </div>
-            <!-- Conditional fields for refund -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                <div id="refund-bank-group" class="hidden">
-                    <label for="refund-bank" class="block text-sm font-medium text-gray-700">Desde Banco</label>
-                    <select id="refund-bank" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                        <option value="">Seleccione un banco</option>
-                        {% for bank in banks %}<option value="{{ bank.id }}">{{ bank.name }}</option>{% endfor %}
-                    </select>
-                </div>
-                <div id="refund-cashbox-group">
-                    <label for="refund-cashbox" class="block text-sm font-medium text-gray-700">Desde Caja</label>
-                    <select id="refund-cashbox" class="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                        <option value="">Seleccione una caja</option>
-                        {% for box in cash_boxes %}<option value="{{ box.id }}">{{ box.name }}</option>{% endfor %}
-                    </select>
-                </div>
-            </div>
-        </div>
-
-        <!-- Refund list -->
-        <div class="mt-3">
-            <h4 class="text-base font-medium text-gray-800 mb-1">Reembolsos a Realizar</h4>
-            <div id="refunds-list" class="space-y-1 max-h-40 overflow-y-auto"></div>
-        </div>
-    </div>
-</template>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const returnQuantityInputs = document.querySelectorAll('.return-quantity-input');
-    const currentRate = {{ current_rate or 1.0 }};
-    let refundPayments = [];
+    // --- Exchange / Return Logic ---
+    const exReturnInputs = document.querySelectorAll('.exchange-return-qty');
+    const exSearchInput = document.getElementById('ex-search-input');
+    const exSearchResults = document.getElementById('ex-search-results');
+    const exNewItemsBody = document.getElementById('ex-new-items-body');
+    const exNewItemsData = document.getElementById('ex-new-items-data');
+    const noRefundCheckbox = document.getElementById('no_refund');
+    const emptyMsg = document.getElementById('empty-new-items-msg');
+    const processBtn = document.getElementById('btn-process-exchange');
+    
+    let exNewItems = [];
 
-    function calculateTotalRefund() {
-        let totalValue = 0;
-        returnQuantityInputs.forEach(input => {
-            const quantity = parseInt(input.value) || 0;
-            if (quantity > 0) {
-                const row = input.closest('.return-item-row');
-                const price = parseFloat(row.querySelector('[data-price]').dataset.price) || 0;
-                totalValue += quantity * price;
-            }
+    function updateExchangeCalc() {
+        // 1. Calculate Return Total
+        let returnTotal = 0;
+        let hasReturnItems = false;
+        exReturnInputs.forEach(inp => {
+            const qty = parseFloat(inp.value) || 0;
+            const price = parseFloat(inp.dataset.price) || 0;
+            if (qty > 0) hasReturnItems = true;
+            returnTotal += qty * price;
         });
-        return totalValue;
-    }
+        document.getElementById('ex-return-total').textContent = returnTotal.toFixed(2);
 
-    returnQuantityInputs.forEach(input => {
-        input.addEventListener('input', calculateTotalRefund);
-    });
+        // 2. Calculate New Items Total
+        let newTotal = exNewItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+        document.getElementById('ex-new-total').textContent = newTotal.toFixed(2);
 
-    // --- Modal and Refund Logic ---
-    const refundModal = document.getElementById('refund-modal');
-    const openRefundModalBtn = document.getElementById('open-refund-modal-btn');
-    const closeRefundModalBtn = document.getElementById('close-refund-modal-btn');
-    const cancelRefundBtn = document.getElementById('cancel-refund-btn');
-    const confirmRefundBtn = document.getElementById('confirm-refund-btn');
-    const refundModalContent = document.getElementById('refund-modal-content');
-    const refundPaymentsDataInput = document.getElementById('refund-payments-data-input');
-    const returnForm = document.getElementById('return-form');
+        // 3. Calculate Balance
+        // Positive Balance = Refund needed (Client gets money back)
+        // Negative Balance = Payment needed (Client pays more)
+        let balance = returnTotal - newTotal; 
+        
+        const balanceDisplay = document.getElementById('ex-balance-display');
+        const msgEl = document.getElementById('ex-action-msg');
+        const paySec = document.getElementById('ex-payment-section');
+        const payLabel = document.getElementById('ex-payment-label');
+        const noRefundContainer = document.getElementById('no-refund-container');
 
-    function setupRefundEventListeners() {
-        const refundMethodSelect = document.getElementById('refund-method');
-        const refundBankGroup = document.getElementById('refund-bank-group');
-        const refundCashboxGroup = document.getElementById('refund-cashbox-group');
-        const addRefundBtn = document.getElementById('add-refund-btn');
-        const refundsListDiv = document.getElementById('refunds-list');
-
-        if (!refundMethodSelect) return;
-
-        refundMethodSelect.addEventListener('change', function() {
-            refundBankGroup.classList.toggle('hidden', this.value !== 'transferencia');
-            refundCashboxGroup.classList.toggle('hidden', !this.value.startsWith('efectivo'));
-        });
-        refundMethodSelect.dispatchEvent(new Event('change'));
-
-        addRefundBtn.addEventListener('click', function() {
-            const method = refundMethodSelect.value;
-            const amount = parseFloat(document.getElementById('refund-amount').value);
-            const bankId = document.getElementById('refund-bank').value;
-            const cashboxId = document.getElementById('refund-cashbox').value;
-
-            if (!amount || amount <= 0) {
-                alert('Ingrese un monto de reembolso válido.');
-                return;
-            }
-
-            let currency = 'VES';
-            let amountVesEquivalent = amount;
-            if (method === 'efectivo_usd') {
-                currency = 'USD';
-                amountVesEquivalent = amount * currentRate;
-            }
-
-            const refund = {
-                amount: amount,
-                currency: currency,
-                amount_ves_equivalent: amountVesEquivalent,
-                bank_id: method === 'transferencia' ? bankId : null,
-                cash_box_id: method.startsWith('efectivo') ? cashboxId : null,
-                method_name: refundMethodSelect.options[refundMethodSelect.selectedIndex].text
-            };
-            refundPayments.push(refund);
-            renderRefunds();
-        });
-
-        refundsListDiv.addEventListener('click', function(e) {
-            if (e.target.closest('.remove-refund-btn')) {
-                const index = e.target.closest('.remove-refund-btn').dataset.index;
-                refundPayments.splice(index, 1);
-                renderRefunds();
-            }
-        });
-    }
-
-    function renderRefunds() {
-        const refundsListDiv = document.getElementById('refunds-list');
-        if (!refundsListDiv) return;
-        refundsListDiv.innerHTML = '';
-        refundPayments.forEach((p, index) => {
-            const div = document.createElement('div');
-            div.className = 'flex justify-between items-center bg-gray-100 p-2 rounded';
-            let details = `${p.method_name}: ${p.amount.toFixed(2)} ${p.currency}`;
-            div.innerHTML = `<span>${details}</span><button type="button" data-index="${index}" class="remove-refund-btn text-red-500 hover:text-red-700"><i class="fas fa-times"></i></button>`;
-            refundsListDiv.appendChild(div);
-        });
-        refundPaymentsDataInput.value = JSON.stringify(refundPayments);
-    }
-
-    openRefundModalBtn.addEventListener('click', function() {
-        const reason = document.getElementById('return_reason').value.trim();
-        const totalRefundValue = calculateTotalRefund();
-
-        if (totalRefundValue <= 0) {
-            alert('Debe seleccionar al menos un producto para devolver.');
-            return;
-        }
-        if (!reason) {
-            alert('El motivo de la devolución es obligatorio.');
-            return;
-        }
-
-        const hasPayments = {{ 'true' if order.payments else 'false' }};
-
-        if (hasPayments) {
-            const refundTemplate = document.getElementById('refund-section-template').content.cloneNode(true);
-            refundModalContent.innerHTML = '';
-            refundModalContent.appendChild(refundTemplate);
-            document.getElementById('total-refund-value').textContent = totalRefundValue.toFixed(2) + ' Bs';
-            setupRefundEventListeners();
+        // Update Button Text
+        if (exNewItems.length > 0) {
+            processBtn.textContent = "Procesar Intercambio";
         } else {
-            refundModalContent.innerHTML = `
-                <div class="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4" role="alert">
-                    <p class="font-bold">Confirmación de Devolución sin Reembolso</p>
-                    <p>Esta orden no tiene pagos registrados. Al confirmar, solo se devolverán los productos al inventario.</p>
-                    <p class="mt-2"><strong>Valor de la devolución:</strong> ${totalRefundValue.toFixed(2)} Bs (se registrará como una nota de crédito para el cliente).</p>
-                </div>
-            `;
+            processBtn.textContent = "Procesar Devolución";
         }
 
-        refundModal.classList.remove('hidden');
-    });
-
-    function closeModal() {
-        refundModal.classList.add('hidden');
-        refundPayments = []; // Reset payments when modal is closed
-        refundPaymentsDataInput.value = '';
-    }
-
-    closeRefundModalBtn.addEventListener('click', closeModal);
-    cancelRefundBtn.addEventListener('click', closeModal);
-
-    confirmRefundBtn.addEventListener('click', function() {
-        const totalRefundValue = calculateTotalRefund();
-        const totalRefundedAmount = refundPayments.reduce((sum, p) => sum + p.amount_ves_equivalent, 0);
-        const hasPayments = {{ 'true' if order.payments else 'false' }};
-
-        if (hasPayments && Math.abs(totalRefundValue - totalRefundedAmount) > 0.01) {
-            alert(`El monto total reembolsado (Bs ${totalRefundedAmount.toFixed(2)}) no coincide con el valor de los productos a devolver (Bs ${totalRefundValue.toFixed(2)}). Por favor, ajuste los montos del reembolso.`);
+        // Disable button if nothing is happening
+        if (!hasReturnItems && exNewItems.length === 0) {
+            processBtn.disabled = true;
+            msgEl.textContent = "Seleccione productos para continuar.";
+            balanceDisplay.textContent = "0.00 $";
+            balanceDisplay.className = "text-2xl font-bold text-gray-400";
+            paySec.classList.add('hidden');
+            noRefundContainer.classList.add('hidden');
             return;
         }
+        processBtn.disabled = false;
 
-        // If validation passes, submit the form
-        returnForm.submit();
+        balanceDisplay.textContent = Math.abs(balance).toFixed(2) + " $";
+        
+        if (Math.abs(balance) < 0.01) {
+            msgEl.textContent = "Cambio parejo. Sin diferencia monetaria.";
+            balanceDisplay.className = "text-2xl font-bold text-gray-800";
+            paySec.classList.add('hidden');
+            noRefundContainer.classList.add('hidden');
+        } else if (balance > 0) {
+            // Refund
+            msgEl.textContent = "Saldo a favor del cliente (Reembolso).";
+            balanceDisplay.className = "text-2xl font-bold text-red-600";
+            payLabel.textContent = "Método de Reembolso:";
+            noRefundContainer.classList.remove('hidden');
+            
+            if (noRefundCheckbox && noRefundCheckbox.checked) {
+                paySec.classList.add('hidden');
+            } else {
+                paySec.classList.remove('hidden');
+            }
+        } else {
+            // Payment
+            msgEl.textContent = "Saldo a favor de la tienda (Pago Adicional).";
+            balanceDisplay.className = "text-2xl font-bold text-green-600";
+            payLabel.textContent = "Método de Pago:";
+            paySec.classList.remove('hidden');
+            noRefundContainer.classList.add('hidden');
+            if (noRefundCheckbox) noRefundCheckbox.checked = false; 
+        }
+        
+        // Update hidden input
+        exNewItemsData.value = JSON.stringify(exNewItems);
+    }
+
+    // Event Listeners
+    exReturnInputs.forEach(inp => inp.addEventListener('input', updateExchangeCalc));
+    if (noRefundCheckbox) {
+        noRefundCheckbox.addEventListener('change', updateExchangeCalc);
+    }
+
+    // Prevent form submission on Enter in search input
+    if (exSearchInput) {
+        exSearchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+            }
+        });
+
+        exSearchInput.addEventListener('input', function() {
+            const q = this.value.trim();
+            if(q.length < 2) { 
+                exSearchResults.classList.add('hidden'); 
+                return; 
+            }
+            
+            fetch(`/api/products/search?q=${encodeURIComponent(q)}`) 
+                .then(r => r.json())
+                .then(data => {
+                    exSearchResults.innerHTML = '';
+                    if(data && data.length) {
+                        exSearchResults.classList.remove('hidden');
+                        data.forEach(p => {
+                            const div = document.createElement('div');
+                            div.className = "p-2 hover:bg-green-100 cursor-pointer border-b text-sm flex justify-between";
+                            const price = parseFloat(p.price) || 0;
+                            div.innerHTML = `<span><strong>${p.name}</strong> <small class="text-gray-500">(${p.barcode})</small></span> <span class="font-mono">${price.toFixed(2)} $</span>`;
+                            div.onclick = () => {
+                                addItemToExchange({...p, price: price});
+                                exSearchResults.classList.add('hidden');
+                                exSearchInput.value = '';
+                            };
+                            exSearchResults.appendChild(div);
+                        });
+                    } else {
+                        exSearchResults.classList.add('hidden');
+                    }
+                })
+                .catch(e => console.error("Search error:", e));
+        });
+    }
+
+    // Hide search results when clicking outside
+    document.addEventListener('click', function(e) {
+        if (exSearchInput && !exSearchInput.contains(e.target) && !exSearchResults.contains(e.target)) {
+            exSearchResults.classList.add('hidden');
+        }
     });
+
+    function addItemToExchange(product) {
+        const existing = exNewItems.find(i => i.id === product.id);
+        if(existing) {
+            existing.quantity++;
+        } else {
+            exNewItems.push({ id: product.id, name: product.name, price: product.price, quantity: 1, barcode: product.barcode, codigo_producto: product.codigo_producto });
+        }
+        renderNewItems();
+        updateExchangeCalc();
+    }
+
+    function renderNewItems() {
+        exNewItemsBody.innerHTML = '';
+        if (exNewItems.length === 0) {
+            emptyMsg.classList.remove('hidden');
+        } else {
+            emptyMsg.classList.add('hidden');
+            exNewItems.forEach((item, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b last:border-0";
+                tr.innerHTML = `
+                    <td class="py-1 pr-2">
+                        <div class="font-bold">${item.name}</div>
+                        <div class="text-xs text-gray-500">
+                            <span class="mr-2"><i class="fas fa-barcode"></i> ${item.barcode || ''}</span>
+                            ${item.codigo_producto ? `<span><i class="fas fa-tag"></i> ${item.codigo_producto}</span>` : ''}
+                        </div>
+                    </td>
+                    <td class="py-1 text-right font-mono">${item.price.toFixed(2)}</td>
+                    <td class="py-1 text-center">
+                        <input type="number" class="border rounded w-12 text-center text-xs p-1" 
+                               value="${item.quantity}" min="1" onchange="updateNewItemQty(, this.value)">
+                    </td>
+                    <td class="py-1 text-right pl-2">
+                        <button type="button" class="text-red-500 hover:text-red-700" onclick="removeNewItem()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </td>
+                `;
+                exNewItemsBody.appendChild(tr);
+            });
+        }
+    }
+
+    window.updateNewItemQty = function(idx, val) {
+        const qty = parseInt(val);
+        if (qty > 0) {
+            exNewItems[idx].quantity = qty;
+            updateExchangeCalc();
+        }
+    };
+
+    window.removeNewItem = function(idx) {
+        exNewItems.splice(idx, 1);
+        renderNewItems();
+        updateExchangeCalc();
+    };
+
+    // Initial calculation
+    updateExchangeCalc();
 });
 </script>
 {% endblock %}

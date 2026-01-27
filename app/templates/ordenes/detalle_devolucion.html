@@ -35,18 +35,25 @@
             <div class="text-right">
                 <h2 class="text-lg font-semibold text-gray-700 mb-2">Valor Total Devuelto</h2>
                 <p class="text-3xl font-bold text-red-600">{{ "%.2f Bs"|format(return_record.total_refund_value_ves) }}</p>
+                <p class="text-xs text-gray-500 mt-1">(Valor histórico de los productos recibidos)</p>
             </div>
         </div>
 
-        <!-- Returned Items -->
+        <!-- Returned Items (Entrada) -->
         <div class="mb-8">
-            <h3 class="text-xl font-semibold text-gray-800 mb-4">Productos Devueltos</h3>
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">
+                {% if return_record.return_type == 'Intercambio' %}
+                    Productos Recibidos (Entrada)
+                {% else %}
+                    Productos Devueltos
+                {% endif %}
+            </h3>
             <div class="overflow-x-auto">
                 <table class="min-w-full bg-white text-sm">
-                    <thead class="bg-gray-50">
+                    <thead class="bg-red-50">
                         <tr>
                             <th class="py-2 px-4 text-left font-semibold text-gray-600">Producto</th>
-                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Cantidad Devuelta</th>
+                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Cantidad</th>
                             <th class="py-2 px-4 text-right font-semibold text-gray-600">Precio Unit. (Bs)</th>
                             <th class="py-2 px-4 text-right font-semibold text-gray-600">Subtotal (Bs)</th>
                         </tr>
@@ -65,15 +72,50 @@
             </div>
         </div>
 
-        <!-- Refund Details -->
+        <!-- Exchanged Items (Salida) - Only for Exchanges -->
+        {% if exchanged_items %}
+        <div class="mb-8">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Productos Entregados (Salida - Intercambio)</h3>
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white text-sm">
+                    <thead class="bg-green-50">
+                        <tr>
+                            <th class="py-2 px-4 text-left font-semibold text-gray-600">Producto</th>
+                            <th class="py-2 px-4 text-center font-semibold text-gray-600">Cantidad</th>
+                            <th class="py-2 px-4 text-left font-semibold text-gray-600">Códigos</th>
+                            <th class="py-2 px-4 text-right font-semibold text-gray-600">Precio (USD)</th>
+                            <th class="py-2 px-4 text-right font-semibold text-gray-600">Total (USD)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-gray-700 divide-y divide-gray-200">
+                        {% for item in exchanged_items %}
+                        <tr>
+                            <td class="py-2 px-4">{{ item.product.name }}</td>
+                            <td class="py-2 px-4 text-center font-bold">{{ item.quantity }}</td>
+                            <td class="py-2 px-4 text-sm text-gray-500">
+                                <div><i class="fas fa-barcode mr-1"></i> {{ item.product.barcode }}</div>
+                                {% if item.product.codigo_producto %}<div><i class="fas fa-tag mr-1"></i> {{ item.product.codigo_producto }}</div>{% endif %}
+                            </td>
+                            <td class="py-2 px-4 text-right">{{ "%.2f"|format(item.price_at_exchange_usd) }} $</td>
+                            <td class="py-2 px-4 text-right font-semibold">{{ "%.2f"|format(item.quantity * item.price_at_exchange_usd) }} $</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Refund/Payment Details -->
         <div>
-            <h3 class="text-xl font-semibold text-gray-800 mb-4">Reembolsos Financieros Realizados</h3>
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Movimientos Financieros (Diferencia)</h3>
             {% if return_record.refund_movements.all() %}
                 <div class="overflow-x-auto">
                     <table class="min-w-full bg-white text-sm">
-                        <thead class="bg-gray-50">
+                        <thead class="bg-blue-50">
                             <tr>
                                 <th class="py-2 px-4 text-left font-semibold text-gray-600">Fecha</th>
+                                <th class="py-2 px-4 text-left font-semibold text-gray-600">Tipo</th>
                                 <th class="py-2 px-4 text-left font-semibold text-gray-600">Cuenta Afectada</th>
                                 <th class="py-2 px-4 text-right font-semibold text-gray-600">Monto</th>
                             </tr>
@@ -82,6 +124,13 @@
                             {% for refund in return_record.refund_movements %}
                             <tr>
                                 <td class="py-2 px-4">{{ refund.date|ve_datetime }}</td>
+                                <td class="py-2 px-4">
+                                    {% if refund.movement_type == 'Egreso' %}
+                                        <span class="text-red-600 font-bold">Reembolso (Salida)</span>
+                                    {% else %}
+                                        <span class="text-green-600 font-bold">Pago Adicional (Entrada)</span>
+                                    {% endif %}
+                                </td>
                                 <td class="py-2 px-4">{{ refund.cash_box.name if refund.cash_box else refund.bank.name }}</td>
                                 <td class="py-2 px-4 text-right font-semibold">{{ "%.2f %s"|format(refund.amount, refund.currency) }}</td>
                             </tr>
@@ -90,7 +139,7 @@
                     </table>
                 </div>
             {% else %}
-                <p class="text-gray-500">No se registraron reembolsos financieros para esta devolución (p. ej., se generó una nota de crédito).</p>
+                <p class="text-gray-500 italic">No se registraron movimientos financieros (Cambio parejo o sin reembolso).</p>
             {% endif %}
         </div>
     </div>

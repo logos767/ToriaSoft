@@ -338,6 +338,17 @@ class OrderReturnItem(db.Model):
     # Relationship to Product
     product = db.relationship('Product')
 
+class OrderExchangeItem(db.Model):
+    __tablename__ = 'order_exchange_items'
+    id = db.Column(db.Integer, primary_key=True)
+    order_return_id = db.Column(db.Integer, db.ForeignKey('order_returns.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    price_at_exchange_usd = db.Column(db.Float, nullable=False)
+
+    product = db.relationship('Product')
+    order_return = db.relationship('OrderReturn', backref=db.backref('exchanged_items', lazy=True, cascade="all, delete-orphan"))
+
 class Bank(db.Model):
     __tablename__ = 'banks'
     id = db.Column(db.Integer, primary_key=True)
@@ -490,6 +501,11 @@ class Movement(db.Model):
     related_party_type = db.Column(db.String(50), nullable=True) # 'Cliente', 'Proveedor'
     
     warehouse = db.relationship('Warehouse', backref='movements')
+
+    @property
+    def price_at_exchange_usd(self):
+        """Propiedad de compatibilidad para mostrar precio en vistas de intercambio (usa precio actual)."""
+        return self.product.price_usd if self.product else 0.0
 
     def __repr__(self):
         return f"Movement('{self.type}', '{self.product_id}', '{self.quantity}')"
