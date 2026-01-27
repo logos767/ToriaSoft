@@ -378,11 +378,27 @@
             </tr>
         </table>
 
-        {% if breakdown_chart_base64 %}
-        <div class="chart-container">
-            <img src="data:image/png;base64,{{ breakdown_chart_base64 }}" alt="Gráfico de Operaciones">
-        </div>
-        {% endif %}
+        <table style="width: 100%; border: none; margin-top: 10px;">
+            <tr>
+                {% if breakdown_chart_base64 %}
+                <td style="width: 50%; padding-right: 5px; border: none;">
+                    <div class="chart-container">
+                        <img src="data:image/png;base64,{{ breakdown_chart_base64 }}" alt="Gráfico de Operaciones">
+                    </div>
+                </td>
+                {% endif %}
+                
+            </tr>
+            <tr>
+                {% if payment_methods_chart_base64 %}
+                <td style="width: 50%; padding-left: 5px; border: none;">
+                    <div class="chart-container">
+                        <img src="data:image/png;base64,{{ payment_methods_chart_base64 }}" alt="Gráfico de Formas de Pago">
+                    </div>
+                </td>
+                {% endif %}
+            </tr>
+        </table>
     </div>
     
 </body>

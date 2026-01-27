@@ -3713,7 +3713,7 @@ def generate_sales_type_chart_base64(sales_by_type):
     buf.seek(0)
     return base64.b64encode(buf.read()).decode('utf-8')
 
-def generate_daily_breakdown_chart_base64(data, currency_symbol):
+def generate_daily_breakdown_chart_base64(data, currency_symbol, title='Distribución de Operaciones'):
     """
     Genera un gráfico de anillo para el desglose de operaciones diarias.
     """
@@ -3736,7 +3736,7 @@ def generate_daily_breakdown_chart_base64(data, currency_symbol):
                                       pctdistance=0.85, wedgeprops=dict(width=0.5, edgecolor='w'))
     
     ax.legend(wedges, labels, title="Detalle", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
-    ax.set_title('Distribución de Operaciones')
+    ax.set_title(title)
     ax.axis('equal')
 
     plt.tight_layout()
@@ -6005,7 +6005,31 @@ def print_daily_closing_report_pdf():
         cash_box_balances.append({'name': box.name, 'initial_balance_ves': initial_balance_ves, 'inflows_ves': inflows_ves, 'outflows_ves': outflows_ves, 'final_balance_ves': final_balance_ves, 'initial_balance_usd': initial_balance_usd, 'inflows_usd': inflows_usd, 'outflows_usd': outflows_usd, 'final_balance_usd': final_balance_usd})
 
     # --- Generate Chart ---
-    breakdown_chart_base64 = generate_daily_breakdown_chart_base64(daily_breakdown, currency_symbol)
+    # 1. Gráfico de Operaciones (Ventas/Cobranzas)
+    breakdown_chart_base64 = generate_daily_breakdown_chart_base64(daily_breakdown, currency_symbol, title='Distribución de Operaciones')
+
+    # 2. Gráfico de Formas de Pago
+    payment_methods_breakdown = {
+        'Efectivo USD': 0.0,
+        'Efectivo VES': 0.0,
+        'Punto de Venta': 0.0,
+        'Transferencia': 0.0,
+        'Otros': 0.0
+    }
+    
+    payments_chart_query = Payment.query.filter(Payment.date.between(start_dt, end_dt))
+    if active_store_id and active_store_id != 'all':
+        payments_chart_query = payments_chart_query.join(Order).filter(Order.store_id == active_store_id)
+    
+    for payment in payments_chart_query.all():
+        amt = payment.amount_usd_equivalent
+        if payment.method == 'efectivo_usd': payment_methods_breakdown['Efectivo USD'] += amt
+        elif payment.method == 'efectivo_ves': payment_methods_breakdown['Efectivo VES'] += amt
+        elif payment.method == 'punto_de_venta': payment_methods_breakdown['Punto de Venta'] += amt
+        elif payment.method == 'transferencia': payment_methods_breakdown['Transferencia'] += amt
+        else: payment_methods_breakdown['Otros'] += amt
+
+    payment_methods_chart_base64 = generate_daily_breakdown_chart_base64(payment_methods_breakdown, currency_symbol, title='Distribución por Forma de Pago')
 
     generation_date_str = get_current_time_ve().strftime("%d/%m/%Y %H:%M:%S")
 
@@ -6015,6 +6039,7 @@ def print_daily_closing_report_pdf():
         'currency_symbol': currency_symbol,
         'daily_breakdown': daily_breakdown,
         'breakdown_chart_base64': breakdown_chart_base64,
+        'payment_methods_chart_base64': payment_methods_chart_base64,
         'bank_balances': bank_balances,
         'cash_box_balances': cash_box_balances,
         'orders_today': orders_today,
