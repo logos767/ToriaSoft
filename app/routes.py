@@ -206,6 +206,72 @@ def obtener_tasas_exchangerate_api():
         current_app.logger.error(f"Error procesando la respuesta de la API de exchangerate-api: {e}")
         return None
 
+def obtener_tasas_dolarapi():
+    """
+    Obtiene tasas desde ve.dolarapi.com (Enfocada en Venezuela).
+    """
+    current_app.logger.info("Intentando obtener tasas desde ve.dolarapi.com...")
+    try:
+        # USD
+        resp_usd = requests.get("https://ve.dolarapi.com/v1/dolares/oficial", timeout=5)
+        resp_usd.raise_for_status()
+        data_usd = resp_usd.json()
+        usd_ves = data_usd.get('promedio')
+
+        # EUR
+        resp_eur = requests.get("https://ve.dolarapi.com/v1/euros/oficial", timeout=5)
+        resp_eur.raise_for_status()
+        data_eur = resp_eur.json()
+        eur_ves = data_eur.get('promedio')
+
+        if usd_ves and eur_ves:
+             current_app.logger.info(f"API ve.dolarapi.com exitosa. USD: {usd_ves}, EUR: {eur_ves}")
+             return {'USD': float(usd_ves), 'EUR': float(eur_ves)}
+    except Exception as e:
+        current_app.logger.warning(f"Fallo ve.dolarapi.com: {e}")
+    return None
+
+def obtener_tasas_open_er_api():
+    """
+    Obtiene tasas desde open.er-api.com (Alternativa gratuita a ExchangeRate Host).
+    """
+    current_app.logger.info("Intentando obtener tasas desde open.er-api.com...")
+    try:
+        resp = requests.get("https://open.er-api.com/v6/latest/USD", timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+        rates = data.get('rates', {})
+        usd_ves = rates.get('VES')
+        usd_eur = rates.get('EUR')
+        
+        if usd_ves and usd_eur:
+            eur_ves = usd_ves / usd_eur
+            current_app.logger.info(f"API open.er-api.com exitosa. USD: {usd_ves}, EUR: {eur_ves}")
+            return {'USD': float(usd_ves), 'EUR': float(eur_ves)}
+    except Exception as e:
+        current_app.logger.warning(f"Fallo open.er-api.com: {e}")
+    return None
+
+def obtener_tasas_monitor_bcv():
+    """
+    Obtiene tasas desde pydolarvenezuela-api (BCV).
+    """
+    current_app.logger.info("Intentando obtener tasas desde pydolarvenezuela-api (BCV)...")
+    try:
+        resp = requests.get("https://pydolarvenezuela-api.vercel.app/api/v1/dollar?page=bcv", timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+        monitors = data.get('monitors', {})
+        usd_data = monitors.get('usd', {})
+        usd_ves = usd_data.get('price')
+        
+        if usd_ves:
+             current_app.logger.info(f"API pydolarvenezuela-api (BCV) exitosa. USD: {usd_ves}")
+             return {'USD': float(usd_ves)}
+    except Exception as e:
+        current_app.logger.warning(f"Fallo pydolarvenezuela-api: {e}")
+    return None
+
 # --- NUEVAS FUNCIONES AUXILIARES ---
 def get_cached_exchange_rate(currency='USD'):
     """
@@ -252,9 +318,21 @@ def get_historical_exchange_rate(target_date, currency='USD'):
 
 def fetch_and_update_exchange_rate():
     """
-    Obtiene las tasas de cambio actuales VES/USD y VES/EUR de exchangerate-api.com y las guarda en la BD.
+    Obtiene las tasas de cambio actuales VES/USD y VES/EUR de múltiples fuentes y las guarda en la BD.
     """
-    rates = obtener_tasas_exchangerate_api()
+    # Lista de funciones de obtención de tasas en orden de prioridad
+    fetchers = [
+        obtener_tasas_exchangerate_api,
+        obtener_tasas_dolarapi,
+        obtener_tasas_open_er_api,
+        obtener_tasas_monitor_bcv
+    ]
+
+    rates = None
+    for fetcher in fetchers:
+        rates = fetcher()
+        if rates and 'USD' in rates:
+            break
 
     current_ve_date = get_current_time_ve().date()
     if rates:

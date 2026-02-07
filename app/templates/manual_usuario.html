@@ -75,6 +75,7 @@
                 <li><a href="#finanzas" class="block hover:bg-gray-700 p-2 rounded">Módulo de Finanzas</a></li>
                 <li><a href="#clientes" class="block hover:bg-gray-700 p-2 rounded">Módulo de Clientes</a></li>
                 <li><a href="#proveedores" class="block hover:bg-gray-700 p-2 rounded">Módulo de Proveedores</a></li>
+                <li><a href="#mercadeo" class="block hover:bg-gray-700 p-2 rounded">Módulo de Mercadeo y Publicidad</a></li>
                 <li><a href="#reportes" class="block hover:bg-gray-700 p-2 rounded">Reportes</a></li>
                 <li><a href="#configuracion" class="block hover:bg-gray-700 p-2 rounded">Configuración</a></li>
                 <li><a href="#perfil" class="block hover:bg-gray-700 p-2 rounded">Perfil de Usuario</a></li>
@@ -176,6 +177,14 @@
                 <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
                     <img src="{{ url_for('static', filename='img/manual_usuario/modal_pagos.png') }}" alt="Captura de pantalla del Modal de Pagos" class="w-full">
                 </div>
+                
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Tipos de Venta Especiales</h3>
+                <h4 class="text-lg font-semibold text-gray-700 mt-4 mb-2">Entrega Especial</h4>
+                <p class="text-gray-600">Las entregas especiales se utilizan para salidas de mercancía que no corresponden a una venta tradicional, como donaciones, uso interno o muestras. Estas órdenes requieren un motivo obligatorio y, si son creadas por un vendedor, quedan en estado "Pendiente de Aprobación" hasta que un Gerente las autorice. El stock solo se descuenta una vez aprobada la entrega.</p>
+                <div class="screenshot-placeholder">
+                    <i class="fas fa-image text-4xl mb-2"></i>
+                    <p>Captura de pantalla: Selección de tipo de venta "Entrega Especial" y campo de motivo</p>
+                </div>
 
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Lista de Órdenes</h3>
                 <p class="mb-4"><span class="role-badge role-todos">Todos los roles</span></p>
@@ -211,10 +220,10 @@
             </section>
 
             <section id="devoluciones" class="mb-12 bg-white p-6 rounded-lg shadow-md">
-                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-undo-alt mr-2"></i>Devoluciones y Anulaciones</h2>
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-undo-alt mr-2"></i>Devoluciones, Anulaciones e Intercambios</h2>
                 <p class="mb-4"><span class="role-badge role-administrador">Administrador</span> <span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
                 <p class="text-gray-600">
-                    Esta funcionalidad permite gestionar la anulación completa de una venta o la devolución parcial de productos. Se accede a través del menú "Ventas" > "Devoluciones" o directamente desde el detalle de una orden.
+                    Esta funcionalidad permite gestionar la anulación completa de una venta, la devolución parcial de productos o el intercambio de mercancía. Se accede a través del menú "Ventas" > "Devoluciones" o directamente desde el detalle de una orden.
                 </p>
 
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Anulación Total</h3>
@@ -242,6 +251,27 @@
                 </ol>
                 <div class="my-4 border rounded-lg overflow-hidden shadow-lg">
                     <img src="{{ url_for('static', filename='img/manual_usuario/devolucion.png') }}" alt="Captura de pantalla de la página de Devoluciones" class="w-full">
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Intercambio de Productos</h3>
+                <p class="text-gray-600">
+                    Permite al cliente devolver uno o varios productos y llevarse otros en la misma transacción. El sistema calcula la diferencia de valor automáticamente.
+                </p>
+                <ol class="list-decimal list-inside text-gray-600 space-y-2 mt-2">
+                    <li>En la pantalla de devolución, seleccione la opción <strong>"Intercambio"</strong>.</li>
+                    <li>Indique los productos y cantidades que el cliente está devolviendo (Entrada al inventario).</li>
+                    <li>Busque y agregue los nuevos productos que el cliente se llevará (Salida del inventario).</li>
+                    <li>El sistema mostrará el balance:
+                        <ul class="list-disc list-inside ml-6">
+                            <li><strong>A favor del cliente:</strong> Se debe procesar un reembolso por la diferencia.</li>
+                            <li><strong>A favor de la tienda:</strong> El cliente debe pagar la diferencia.</li>
+                        </ul>
+                    </li>
+                    <li>Confirme la operación para actualizar el inventario y registrar los movimientos financieros correspondientes.</li>
+                </ol>
+                <div class="screenshot-placeholder">
+                    <i class="fas fa-image text-4xl mb-2"></i>
+                    <p>Captura de pantalla: Interfaz de Intercambio de Productos</p>
                 </div>
 
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Historial de Devoluciones</h3>
@@ -287,6 +317,19 @@
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Gestión de Almacenes y Traslados</h3>
                 <p class="mb-4"><span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
                 <p class="text-gray-600">Desde "Gestión de Almacenes" puede crear y editar los almacenes de su empresa. La función "Traslado entre Almacenes" le permite mover stock de un almacén a otro, generando los registros de movimiento correspondientes y un reporte imprimible de la operación.</p>
+                <h4 class="text-lg font-semibold text-gray-700 mt-4 mb-2">Pasos para realizar un traslado:</h4>
+                <ol class="list-decimal list-inside text-gray-600 space-y-2 mt-2">
+                    <li>Vaya a "Inventario" > "Traslados".</li>
+                    <li>Seleccione el <strong>Almacén de Origen</strong> (desde donde sale la mercancía) y el <strong>Almacén de Destino</strong> (hacia donde va).</li>
+                    <li>Ingrese un motivo para el traslado (ej. "Reabastecimiento", "Mercancía dañada").</li>
+                    <li>Busque los productos a trasladar por nombre o escaneando el código de barras.</li>
+                    <li>Indique la cantidad a mover para cada producto. El sistema validará que exista stock suficiente en el origen.</li>
+                    <li>Haga clic en "Confirmar Traslado". Se generará un comprobante PDF con los detalles de la operación.</li>
+                </ol>
+                <div class="screenshot-placeholder">
+                    <i class="fas fa-image text-4xl mb-2"></i>
+                    <p>Captura de pantalla: Formulario de Traslado entre Almacenes</p>
+                </div>
             </section>
 
             <section id="compras" class="mb-12 bg-white p-6 rounded-lg shadow-md">
@@ -315,6 +358,18 @@
                 <p class="text-gray-600">Permite registrar ingresos o egresos que no están directamente ligados a una venta o compra, como el pago de servicios, sueldos, etc. Estos movimientos afectarán los saldos de las cuentas correspondientes.</p>
                 <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Retiros de Efectivo</h3>
                 <p class="text-gray-600">Cualquier usuario puede solicitar un retiro de efectivo desde una de las cajas. La solicitud quedará en estado "Pendiente". Los roles administrativos pueden ver y aprobar/rechazar estas solicitudes desde "Retiros Pendientes". Al aprobar un retiro, el saldo de la caja se descuenta y se puede imprimir un recibo.</p>
+                <h4 class="text-lg font-semibold text-gray-700 mt-4 mb-2">Proceso de Solicitud de Retiro:</h4>
+                <ol class="list-decimal list-inside text-gray-600 space-y-2 mt-2">
+                    <li>Vaya a "Finanzas" > "Retiro de Efectivo".</li>
+                    <li>Seleccione la caja de origen.</li>
+                    <li>Ingrese el monto, la moneda (Bs o USD) y una descripción del motivo.</li>
+                    <li>Indique el nombre de la persona que recibe el dinero.</li>
+                    <li>Haga clic en "Solicitar Retiro". Si es Gerente, se aprueba automáticamente. Si es Vendedor, debe esperar aprobación.</li>
+                </ol>
+                <div class="screenshot-placeholder">
+                    <i class="fas fa-image text-4xl mb-2"></i>
+                    <p>Captura de pantalla: Formulario de Solicitud de Retiro</p>
+                </div>
             </section>
 
             <section id="clientes" class="mb-12 bg-white p-6 rounded-lg shadow-md">
@@ -351,6 +406,37 @@
                     <li>Información bancaria para pagos.</li>
                     <li>Términos de pago y envío acordados.</li>
                 </ul>
+            </section>
+
+            <section id="mercadeo" class="mb-12 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4"><i class="fas fa-bullhorn mr-2"></i>Módulo de Mercadeo y Publicidad</h2>
+                <p class="mb-4"><span class="role-badge role-administrador">Administrador</span> <span class="role-badge role-gerente">Gerente</span> <span class="role-badge role-superusuario">Superusuario</span></p>
+                <p class="text-gray-600">Este módulo permite gestionar las relaciones con proveedores de servicios (como agencias de publicidad, influencers, servicios técnicos) y controlar los pagos mediante intercambio comercial.</p>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Registro de Servicios Prestados</h3>
+                <p class="text-gray-600">Cuando un proveedor realiza un servicio para la empresa, debe registrarlo para generar una cuenta por pagar (o saldo a favor del proveedor).</p>
+                <ol class="list-decimal list-inside text-gray-600 space-y-2 mt-2">
+                    <li>Vaya a "Marketing" > "Proveedores de Servicios" y seleccione el proveedor, o vaya directamente a registrar un nuevo servicio.</li>
+                    <li>Ingrese la descripción del servicio y el valor acordado en USD.</li>
+                    <li>Al guardar, este monto se suma al saldo a favor del proveedor.</li>
+                </ol>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-6 mb-2">Pagos e Intercambio Comercial</h3>
+                <p class="text-gray-600">Existen dos formas de saldar la deuda con un proveedor de servicios:</p>
+                <ul class="list-disc list-inside text-gray-600 space-y-2 mt-2">
+                    <li><strong>Pago Directo:</strong> Puede registrar un pago en efectivo o transferencia desde el módulo de Mercadeo para cancelar un servicio específico.</li>
+                    <li><strong>Intercambio Comercial (En Ventas):</strong> Si el proveedor desea adquirir productos de la tienda como forma de pago:
+                        <ol class="list-decimal list-inside ml-6 mt-1">
+                            <li>Cree una nueva orden de venta a nombre del proveedor (o su cliente asociado).</li>
+                            <li>En el momento del pago, seleccione el método <strong>"Intercambio Comercial"</strong>.</li>
+                            <li>El sistema verificará si el proveedor tiene saldo suficiente y descontará el monto de la compra de su saldo a favor.</li>
+                        </ol>
+                    </li>
+                </ul>
+                <div class="screenshot-placeholder">
+                    <i class="fas fa-image text-4xl mb-2"></i>
+                    <p>Captura de pantalla: Estado de cuenta del proveedor de servicios</p>
+                </div>
             </section>
 
             <section id="reportes" class="mb-12 bg-white p-6 rounded-lg shadow-md">
